@@ -1,0 +1,52 @@
+# Database configuration files (may contain sensitive data)
+config/db.php
+
+# Uploaded files and user-generated content
+public/uploads/
+uploads/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# PHP specific
+composer.phar
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Cache files
+cache/
+*.cache
+
+# Backup files
+*.bak
+*.backup
+
+# Test files (optional - uncomment if you don't want to include test files)
+# test_*.php
+# debug_*.php

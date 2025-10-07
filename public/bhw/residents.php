@@ -1,0 +1,425 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../../config/db.php';
+require_auth(['bhw']);
+$user = current_user();
+
+// Fetch residents with their family members
+$rows = db()->prepare('
+    SELECT r.id, r.first_name, r.last_name, r.phone, r.address,
+           COUNT(fm.id) as family_count
+    FROM residents r 
+    LEFT JOIN family_members fm ON r.id = fm.resident_id 
+    WHERE r.purok_id = (SELECT purok_id FROM users WHERE id=?) 
+    GROUP BY r.id 
+    ORDER BY r.last_name
+');
+$rows->execute([$user['id']]);
+$residents = $rows->fetchAll();
+
+// Fetch family members for each resident
+$family_rows = db()->prepare('
+    SELECT fm.resident_id, fm.full_name, fm.relationship
+    FROM family_members fm 
+    JOIN residents r ON r.id = fm.resident_id 
+    WHERE r.purok_id = (SELECT purok_id FROM users WHERE id=?) 
+    ORDER BY r.last_name, fm.full_name
+');
+$family_rows->execute([$user['id']]);
+$family_members = $family_rows->fetchAll();
+
+// Group family members by resident_id
+$families_by_resident = [];
+foreach ($family_members as $family) {
+    $families_by_resident[$family['resident_id']][] = $family;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Residents · BHW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    'sans': ['Inter', 'system-ui', 'sans-serif'],
+                }
+            }
+        }
+    }
+</script>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-blue-50">
+<div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
+                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
+            <?php else: ?>
+                <div class="h-8 w-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                    </svg>
+                </div>
+            <?php endif; ?>
+            <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"/></svg>
+                Dashboard
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/requests.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Medicine Requests
+            </a>
+            <a class="active" href="#">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"/></svg>
+                Residents
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/allocations.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                Allocations
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Pending Registrations
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Statistics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                Logout
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <div class="content-header">
+            <div class="flex items-center justify-between">
+                <div class="animate-fade-in-up">
+                    <div class="flex items-center space-x-3 mb-2">
+                        <h1 class="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+                            Residents & Family
+                        </h1>
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    </div>
+                    <p class="text-gray-600 text-lg">List of residents and their family members in your assigned area</p>
+                    <div class="flex items-center space-x-2 mt-2">
+                        <div class="w-1 h-1 bg-blue-400 rounded-full"></div>
+                        <div class="w-1 h-1 bg-purple-400 rounded-full"></div>
+                        <div class="w-1 h-1 bg-cyan-400 rounded-full"></div>
+                        <span class="text-sm text-gray-500 ml-2">Live directory</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4 animate-slide-in-right">
+                    <div class="text-right glass-effect px-4 py-2 rounded-xl">
+                        <div class="text-xs text-gray-500 uppercase tracking-wide">Total residents</div>
+                        <div class="text-sm font-semibold text-gray-900" id="resident-count"><?php echo count($residents); ?></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-body">
+            <?php if (!empty($residents)): ?>
+                <!-- Search -->
+                <div class="mb-6">
+                    <div class="relative max-w-md">
+                        <input type="text" id="searchInput" placeholder="Search residents..." 
+                               class="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
+                        <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Residents Grid -->
+        <div id="residentsGrid" class="space-y-6 mb-8">
+            <?php foreach ($residents as $index => $r): ?>
+                <div class="resident-card hover-lift animate-fade-in-up bg-white rounded-2xl shadow-lg overflow-hidden" 
+                     data-name="<?php echo strtolower(htmlspecialchars($r['last_name'] . ' ' . $r['first_name'])); ?>"
+                     style="animation-delay: <?php echo $index * 0.1; ?>s">
+                    
+                    <!-- Resident Header -->
+                    <div class="p-6 border-b border-gray-100">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900"><?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?></h3>
+                                    <div class="flex items-center space-x-4 mt-1">
+                                        <span class="text-sm text-gray-500">ID: <?php echo (int)$r['id']; ?></span>
+                                        <?php if ($r['phone']): ?>
+                                            <span class="text-sm text-gray-500"><?php echo htmlspecialchars($r['phone']); ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if ($r['address']): ?>
+                                        <p class="text-sm text-gray-600 mt-1"><?php echo htmlspecialchars($r['address']); ?></p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="text-right">
+                                    <div class="text-sm text-gray-500">Family Members</div>
+                                    <div class="text-2xl font-bold text-blue-600"><?php echo (int)$r['family_count']; ?></div>
+                                </div>
+                                <button onclick="toggleFamily(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-medium rounded-xl hover:from-purple-700 hover:to-purple-800 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                    <span id="toggle-text-<?php echo (int)$r['id']; ?>">View Family</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Family Members Section -->
+                    <div id="family-<?php echo (int)$r['id']; ?>" class="hidden p-6 bg-gray-50">
+                        <?php if (isset($families_by_resident[$r['id']]) && !empty($families_by_resident[$r['id']])): ?>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <?php foreach ($families_by_resident[$r['id']] as $family): ?>
+                                    <div class="family-member-card p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="flex-1">
+                                                <h4 class="font-semibold text-gray-900"><?php echo htmlspecialchars($family['full_name']); ?></h4>
+                                                <div class="flex items-center space-x-2 mt-1">
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                        <?php echo htmlspecialchars($family['relationship']); ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="text-center py-8">
+                                <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                </div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-2">No Family Members</h4>
+                                <p class="text-gray-500">This resident hasn't registered any family members yet.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+                <!-- No Results Message -->
+                <div id="noResults" class="hidden text-center py-12">
+                    <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">No residents found</h3>
+                    <p class="text-gray-600 mb-4">Try adjusting your search criteria.</p>
+                    <button onclick="clearSearch()" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                        Clear Search
+                    </button>
+                </div>
+            <?php else: ?>
+                <!-- Empty State -->
+                <div class="empty-state-card hover-lift animate-fade-in-up p-12 text-center rounded-2xl shadow-lg">
+                    <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">No Residents Found</h3>
+                    <p class="text-gray-600 mb-6 text-lg">No residents have been registered in your assigned area yet.</p>
+                    
+                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-6 max-w-2xl mx-auto">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-2">What you can do:</h4>
+                        <div class="space-y-2 text-left">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span class="text-sm text-gray-700">Check pending resident registrations</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span class="text-sm text-gray-700">Verify your assigned area coverage</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                <span class="text-sm text-gray-700">Contact super admin for area assignment</span>
+                    </div>
+                </div>
+            </div>
+
+                    <!-- Quick Actions -->
+                    <div class="mt-6 flex flex-col sm:flex-row gap-4 justify-center">
+                        <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Check Pending Registrations
+                        </a>
+                        <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>" class="inline-flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all duration-300 shadow-lg hover:shadow-xl">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                            </svg>
+                            Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </main>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('searchInput');
+        const residentCards = document.querySelectorAll('.resident-card');
+        const residentsGrid = document.getElementById('residentsGrid');
+        const noResults = document.getElementById('noResults');
+        const residentCount = document.getElementById('resident-count');
+
+        let currentSearch = '';
+
+        // Search functionality
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                currentSearch = this.value.toLowerCase();
+                filterResidents();
+            });
+        }
+
+        function filterResidents() {
+            let visibleCount = 0;
+            
+            residentCards.forEach(card => {
+                const name = card.dataset.name;
+                
+                let matchesSearch = true;
+                
+                // Check search match
+                if (currentSearch) {
+                    matchesSearch = name.includes(currentSearch);
+                }
+                
+                if (matchesSearch) {
+                    card.style.display = 'block';
+                    card.classList.add('animate-fade-in');
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                    card.classList.remove('animate-fade-in');
+                }
+            });
+            
+            // Update count
+            if (residentCount) {
+                residentCount.textContent = visibleCount;
+            }
+            
+            // Show/hide no results message
+            if (visibleCount === 0 && currentSearch) {
+                if (noResults) noResults.classList.remove('hidden');
+                if (residentsGrid) residentsGrid.classList.add('hidden');
+            } else {
+                if (noResults) noResults.classList.add('hidden');
+                if (residentsGrid) residentsGrid.classList.remove('hidden');
+            }
+        }
+
+        // Clear search function
+        window.clearSearch = function() {
+            if (searchInput) searchInput.value = '';
+            currentSearch = '';
+            filterResidents();
+        };
+
+        // Add intersection observer for animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all animated elements
+        document.querySelectorAll('.animate-fade-in-up, .animate-fade-in, .animate-slide-in-right').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+            observer.observe(el);
+        });
+
+            // Add hover effects to cards (excluding buttons)
+            document.querySelectorAll('.hover-lift:not(button)').forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-8px) scale(1.02)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+
+        // No ripple effects to prevent button expansion
+
+            // Add keyboard navigation for search
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        this.value = '';
+                        currentSearch = '';
+                        filterResidents();
+                    }
+                });
+            }
+        });
+
+        // Toggle family members visibility
+        function toggleFamily(residentId) {
+            const familySection = document.getElementById('family-' + residentId);
+            const toggleText = document.getElementById('toggle-text-' + residentId);
+            
+            if (familySection.classList.contains('hidden')) {
+                familySection.classList.remove('hidden');
+                toggleText.textContent = 'Hide Family';
+            } else {
+                familySection.classList.add('hidden');
+                toggleText.textContent = 'View Family';
+            }
+        }
+    </script>
+</div>
+</body>
+</html>
+
+

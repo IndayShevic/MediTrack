@@ -1,0 +1,77 @@
+# XAMPP and local development files
+.htaccess
+.htpasswd
+error_log
+access_log
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Database files (if any local dumps)
+*.sql.backup
+*.sql.bak
+
+# Uploaded files (keep structure but ignore content)
+public/uploads/profiles/*
+public/uploads/medicines/*
+public/uploads/proofs/*
+public/uploads/brand/*
+!public/uploads/profiles/.gitkeep
+!public/uploads/medicines/.gitkeep
+!public/uploads/proofs/.gitkeep
+!public/uploads/brand/.gitkeep
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Cache files
+cache/
+*.cache
+
+# Composer (if used)
+vendor/
+composer.lock
+
+# Node modules (if any frontend build tools are used)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build files
+dist/
+build/
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Local configuration overrides
+config/local.php
+config/local_*.php

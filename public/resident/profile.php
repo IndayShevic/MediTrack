@@ -297,6 +297,16 @@ $user_data = $stmt->fetch();
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+    </button>
+    
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" onclick="closeMobileMenu()"></div>
+    
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-brand">

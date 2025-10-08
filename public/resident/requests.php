@@ -175,6 +175,16 @@ $requests = $rows->fetchAll();
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+    </button>
+    
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" onclick="closeMobileMenu()"></div>
+    
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -240,15 +250,15 @@ $requests = $rows->fetchAll();
     <main class="main-content">
         <!-- Header -->
         <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div class="animate-fade-in-up">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                <div class="animate-fade-in-up mb-4 lg:mb-0">
                     <div class="flex items-center space-x-3 mb-2">
-                        <h1 class="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+                        <h1 class="text-2xl lg:text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
                             My Requests
                         </h1>
                         <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     </div>
-                    <p class="text-gray-600 text-lg">Track your medicine requests and their status</p>
+                    <p class="text-gray-600 text-base lg:text-lg">Track your medicine requests and their status</p>
                     <div class="flex items-center space-x-2 mt-2">
                         <div class="w-1 h-1 bg-blue-400 rounded-full"></div>
                         <div class="w-1 h-1 bg-purple-400 rounded-full"></div>
@@ -1017,6 +1027,54 @@ $requests = $rows->fetchAll();
             animation: shimmer 1.5s infinite;
         }
     </style>
+    
+    <script>
+        // Mobile menu functionality
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.mobile-overlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+            
+            // Prevent body scroll when menu is open
+            if (sidebar.classList.contains('open')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
+            }
+        }
+        
+        function closeMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.mobile-overlay');
+            
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        
+        // Close mobile menu when clicking on sidebar links
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarLinks = document.querySelectorAll('.sidebar-nav a');
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    // Only close on mobile
+                    if (window.innerWidth <= 768) {
+                        closeMobileMenu();
+                    }
+                });
+            });
+            
+            // Close mobile menu on window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth > 768) {
+                    closeMobileMenu();
+                }
+            });
+        });
+    </script>
+    
     <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>

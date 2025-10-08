@@ -141,6 +141,16 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+    </button>
+    
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" onclick="closeMobileMenu()"></div>
+    
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -206,15 +216,15 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
     <main class="main-content">
         <!-- Header -->
         <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div class="animate-fade-in-up">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                <div class="animate-fade-in-up mb-4 lg:mb-0">
                     <div class="flex items-center space-x-3 mb-2">
-                        <h1 class="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+                        <h1 class="text-2xl lg:text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
                             Welcome back, <?php echo htmlspecialchars($user['name']); ?>
                         </h1>
                         <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     </div>
-                    <p class="text-gray-600 text-lg"><?php echo $is_senior ? 'Senior citizen' : 'Resident'; ?> dashboard for medicine requests</p>
+                    <p class="text-gray-600 text-base lg:text-lg"><?php echo $is_senior ? 'Senior citizen' : 'Resident'; ?> dashboard for medicine requests</p>
                     <div class="flex items-center space-x-2 mt-2">
                         <div class="w-1 h-1 bg-blue-400 rounded-full"></div>
                         <div class="w-1 h-1 bg-purple-400 rounded-full"></div>
@@ -222,7 +232,7 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
                         <span class="text-sm text-gray-500 ml-2">Live dashboard</span>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4 animate-slide-in-right">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 animate-slide-in-right">
                     <?php if ($is_senior): ?>
                         <div class="gradient-border">
                             <div class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800">
@@ -246,19 +256,19 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
             <!-- Stats Cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Total Requests Card -->
-                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg">
+                <div class="stat-card hover-lift animate-fade-in-up p-4 lg:p-6 rounded-2xl shadow-lg">
                     <div class="flex items-center justify-between mb-4">
                         <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="w-12 h-12 lg:w-16 lg:h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-6 h-6 lg:w-8 lg:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                 </svg>
                             </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+                            <div class="absolute -top-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 bg-blue-400 rounded-full animate-pulse"></div>
                         </div>
                         <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-total-requests">0</p>
-                            <p class="text-sm text-gray-500">Total</p>
+                            <p class="text-2xl lg:text-3xl font-bold text-gray-900" id="stat-total-requests">0</p>
+                            <p class="text-xs lg:text-sm text-gray-500">Total</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -271,19 +281,19 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
                 </div>
 
                 <!-- Pending Requests Card -->
-                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.1s">
+                <div class="stat-card hover-lift animate-fade-in-up p-4 lg:p-6 rounded-2xl shadow-lg" style="animation-delay: 0.1s">
                     <div class="flex items-center justify-between mb-4">
                         <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="w-12 h-12 lg:w-16 lg:h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-6 h-6 lg:w-8 lg:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
                             </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-orange-400 rounded-full animate-pulse"></div>
+                            <div class="absolute -top-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 bg-orange-400 rounded-full animate-pulse"></div>
                         </div>
                         <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-pending-requests">0</p>
-                            <p class="text-sm text-gray-500">Pending</p>
+                            <p class="text-2xl lg:text-3xl font-bold text-gray-900" id="stat-pending-requests">0</p>
+                            <p class="text-xs lg:text-sm text-gray-500">Pending</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -753,7 +763,151 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
             background-size: 200px 100%;
             animation: shimmer 1.5s infinite;
         }
+        
+        /* Desktop layout - ensure sidebar is always visible */
+        @media (min-width: 769px) {
+            .mobile-menu-toggle {
+                display: none !important;
+            }
+            
+            .mobile-overlay {
+                display: none !important;
+            }
+            
+            .sidebar {
+                transform: translateX(0) !important;
+                position: fixed !important;
+                width: 280px !important;
+            }
+            
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+            
+            .content-header {
+                margin-top: 0 !important;
+            }
+        }
+        
+        /* Mobile layout - only apply on actual mobile devices */
+        @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: block !important;
+                position: fixed !important;
+                top: 1rem !important;
+                left: 1rem !important;
+                z-index: 1001 !important;
+                background: #1f2937 !important;
+                color: white !important;
+                border: 2px solid #374151 !important;
+                border-radius: 0.75rem !important;
+                padding: 0.875rem !important;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+                transition: all 0.2s ease-in-out !important;
+                backdrop-filter: blur(10px) !important;
+            }
+            
+            .mobile-menu-toggle:hover {
+                background: #374151 !important;
+                transform: scale(1.05) !important;
+                box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
+            }
+            
+            .mobile-menu-toggle:active {
+                transform: scale(0.95) !important;
+            }
+            
+            .mobile-overlay {
+                display: block !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                background: rgba(0, 0, 0, 0.5) !important;
+                z-index: 999 !important;
+                opacity: 0 !important;
+                transition: opacity 0.3s ease-in-out !important;
+            }
+            
+            .mobile-overlay.active {
+                opacity: 1 !important;
+            }
+            
+            .sidebar {
+                width: 280px !important;
+                transform: translateX(-100%) !important;
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0) !important;
+            }
+            
+            .main-content {
+                margin-left: 0 !important;
+                width: 100% !important;
+            }
+            
+            .content-header {
+                padding: 1rem !important;
+                margin-top: 4rem !important;
+            }
+            
+            .content-body {
+                padding: 1rem !important;
+            }
+        }
     </style>
+    
+    <script>
+        // Mobile menu functionality
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.mobile-overlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+            
+            // Prevent body scroll when menu is open
+            if (sidebar.classList.contains('open')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
+            }
+        }
+        
+        function closeMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.mobile-overlay');
+            
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        
+        // Close mobile menu when clicking on sidebar links
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarLinks = document.querySelectorAll('.sidebar-nav a');
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    // Only close on mobile
+                    if (window.innerWidth <= 768) {
+                        closeMobileMenu();
+                    }
+                });
+            });
+            
+            // Close mobile menu on window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth > 768) {
+                    closeMobileMenu();
+                }
+            });
+        });
+    </script>
+    
     <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>

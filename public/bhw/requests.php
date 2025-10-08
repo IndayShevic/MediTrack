@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('bhw/requests.php');
 }
 
-$rows = db()->prepare('SELECT r.id, m.name AS medicine, r.status, r.created_at, res.first_name, res.last_name FROM requests r JOIN medicines m ON m.id=r.medicine_id JOIN residents res ON res.id=r.resident_id WHERE r.bhw_id=? ORDER BY r.id DESC');
+$rows = db()->prepare('SELECT r.id, m.name AS medicine, r.status, r.created_at, r.requested_for, r.patient_name, r.patient_date_of_birth, r.relationship, r.reason, r.proof_image_path, r.rejection_reason, r.updated_at, res.first_name, res.last_name, fm.first_name AS family_first_name, fm.middle_initial AS family_middle_initial, fm.last_name AS family_last_name, fm.relationship AS family_relationship FROM requests r JOIN medicines m ON m.id=r.medicine_id JOIN residents res ON res.id=r.resident_id LEFT JOIN family_members fm ON fm.id=r.family_member_id WHERE r.bhw_id=? ORDER BY r.id DESC');
 $rows->execute([$user['id']]);
 $reqs = $rows->fetchAll();
 ?>
@@ -370,7 +370,18 @@ $reqs = $rows->fetchAll();
                             </div>
 
                             <!-- Action Buttons -->
-                            <div class="flex justify-end space-x-2">
+                            <div class="flex justify-between items-center">
+                                <!-- View Details Button -->
+                                <button onclick="openViewDetailsModal(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                    View Details
+                                </button>
+                                
+                                <!-- Approve/Reject Buttons -->
+                                <div class="flex space-x-2">
                                             <?php if ($r['status'] === 'submitted'): ?>
                                                     <form method="post" class="inline">
                                                         <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>" />
@@ -391,6 +402,7 @@ $reqs = $rows->fetchAll();
                                 <?php else: ?>
                                     <span class="text-gray-500 text-sm py-2">No actions available</span>
                                 <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -488,6 +500,40 @@ $reqs = $rows->fetchAll();
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Details Modal -->
+    <div id="viewDetailsModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
+            <!-- Header with gradient background -->
+            <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-t-3xl p-6 text-white">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-white/20 p-3 rounded-2xl">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold">Request Details</h2>
+                            <p class="text-blue-100 text-sm">Complete medicine request information</p>
+                        </div>
+                    </div>
+                    <button onclick="closeViewDetailsModal()" class="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all duration-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Content -->
+            <div class="p-8">
+                <div id="viewDetailsContent">
+                    <!-- Content will be populated by JavaScript -->
+                </div>
             </div>
         </div>
     </div>
@@ -594,6 +640,278 @@ $reqs = $rows->fetchAll();
             document.getElementById('rejectModal').classList.remove('flex');
         };
 
+        // View Details modal functions
+        window.openViewDetailsModal = function(requestId) {
+            // Find the request data
+            const requestData = <?php echo json_encode($reqs); ?>;
+            const request = requestData.find(r => r.id == requestId);
+            
+            if (!request) {
+                console.error('Request not found:', requestId);
+                return;
+            }
+            
+            // Populate modal content
+            populateViewDetailsModal(request);
+            
+            // Show modal
+            document.getElementById('viewDetailsModal').classList.remove('hidden');
+            document.getElementById('viewDetailsModal').classList.add('flex');
+        };
+
+        window.closeViewDetailsModal = function() {
+            document.getElementById('viewDetailsModal').classList.add('hidden');
+            document.getElementById('viewDetailsModal').classList.remove('flex');
+        };
+
+        function populateViewDetailsModal(request) {
+            const content = document.getElementById('viewDetailsContent');
+            
+            // Determine requested for display
+            let requestedForDisplay = '';
+            let patientInfo = '';
+            
+            if (request.requested_for === 'self') {
+                requestedForDisplay = 'Self';
+                patientInfo = `${request.first_name} ${request.last_name}`;
+            } else if (request.requested_for === 'family') {
+                if (request.family_first_name) {
+                    requestedForDisplay = 'Family Member';
+                    patientInfo = `${request.family_first_name} ${request.family_middle_initial || ''} ${request.family_last_name}`;
+                } else {
+                    requestedForDisplay = 'Family Member';
+                    patientInfo = request.patient_name || 'Unknown';
+                }
+            }
+            
+            // Status badge
+            let statusBadge = '';
+            if (request.status === 'submitted') {
+                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Pending</span>';
+            } else if (request.status === 'approved') {
+                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Approved</span>';
+            } else {
+                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>Rejected</span>';
+            }
+            
+            // Proof image section
+            let proofImageSection = '';
+            if (request.proof_image_path && request.proof_image_path.trim() !== '') {
+                proofImageSection = `
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-green-100 p-2 rounded-xl">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-green-800">Proof Image</h3>
+                                <p class="text-green-600 text-sm">Submitted by resident</p>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-green-200">
+                            <img src="${request.proof_image_path}" alt="Proof Image" class="w-full h-auto max-h-96 object-contain rounded-lg shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div style="display: none;" class="text-center py-8 text-gray-500">
+                                <svg class="w-12 h-12 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                <p>Image not available</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                proofImageSection = `
+                    <div class="bg-gradient-to-br from-gray-50 to-slate-50 border border-gray-200 rounded-2xl p-6">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-gray-100 p-2 rounded-xl">
+                                <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-700">Proof Image</h3>
+                                <p class="text-gray-500 text-sm">No image submitted</p>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-gray-200 text-center py-8">
+                            <svg class="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <p class="text-gray-500 font-medium">No proof image was submitted</p>
+                            <p class="text-gray-400 text-sm mt-1">The resident did not upload any supporting documentation</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Rejection reason section
+            let rejectionSection = '';
+            if (request.status === 'rejected' && request.rejection_reason) {
+                rejectionSection = `
+                    <div class="bg-gradient-to-br from-red-50 to-rose-50 border border-red-200 rounded-2xl p-6">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-red-100 p-2 rounded-xl">
+                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-red-800">Rejection Reason</h3>
+                                <p class="text-red-600 text-sm">Why this request was rejected</p>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-red-200">
+                            <p class="text-gray-800">${request.rejection_reason}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left Column -->
+                    <div class="space-y-6">
+                        <!-- Request ID & Status -->
+                        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+                            <div class="flex items-center space-x-3 mb-4">
+                                <div class="bg-blue-100 p-2 rounded-xl">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-blue-800">Request Information</h3>
+                                    <p class="text-blue-600 text-sm">Basic request details</p>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Request ID:</span>
+                                    <span class="text-sm font-mono text-gray-900">#${request.id}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Status:</span>
+                                    ${statusBadge}
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Created:</span>
+                                    <span class="text-sm text-gray-900">${new Date(request.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                </div>
+                                ${request.updated_at ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Updated:</span>
+                                    <span class="text-sm text-gray-900">${new Date(request.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Medicine Information -->
+                        <div class="bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-200 rounded-2xl p-6">
+                            <div class="flex items-center space-x-3 mb-4">
+                                <div class="bg-purple-100 p-2 rounded-xl">
+                                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-purple-800">Medicine</h3>
+                                    <p class="text-purple-600 text-sm">Requested medication</p>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl p-4 border border-purple-200">
+                                <h4 class="text-xl font-bold text-gray-900">${request.medicine}</h4>
+                            </div>
+                        </div>
+
+                        <!-- Patient Information -->
+                        <div class="bg-gradient-to-br from-cyan-50 to-teal-50 border border-cyan-200 rounded-2xl p-6">
+                            <div class="flex items-center space-x-3 mb-4">
+                                <div class="bg-cyan-100 p-2 rounded-xl">
+                                    <svg class="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-cyan-800">Patient Information</h3>
+                                    <p class="text-cyan-600 text-sm">Who the medicine is for</p>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Requested For:</span>
+                                    <span class="text-sm text-gray-900">${requestedForDisplay}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Patient Name:</span>
+                                    <span class="text-sm text-gray-900">${patientInfo}</span>
+                                </div>
+                                ${request.patient_date_of_birth ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Date of Birth:</span>
+                                    <span class="text-sm text-gray-900">${request.patient_date_of_birth ? new Date(request.patient_date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not provided'}</span>
+                                </div>
+                                ` : ''}
+                                ${request.relationship ? `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium text-gray-700">Relationship:</span>
+                                    <span class="text-sm text-gray-900">${request.relationship}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column -->
+                    <div class="space-y-6">
+                        <!-- Resident Information -->
+                        <div class="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-6">
+                            <div class="flex items-center space-x-3 mb-4">
+                                <div class="bg-indigo-100 p-2 rounded-xl">
+                                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-indigo-800">Resident</h3>
+                                    <p class="text-indigo-600 text-sm">Who submitted the request</p>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl p-4 border border-indigo-200">
+                                <h4 class="text-lg font-semibold text-gray-900">${request.first_name} ${request.last_name}</h4>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        ${request.reason ? `
+                        <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
+                            <div class="flex items-center space-x-3 mb-4">
+                                <div class="bg-amber-100 p-2 rounded-xl">
+                                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-amber-800">Reason</h3>
+                                    <p class="text-amber-600 text-sm">Why the medicine is needed</p>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl p-4 border border-amber-200">
+                                <p class="text-gray-800">${request.reason}</p>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        ${proofImageSection}
+
+                        ${rejectionSection}
+                    </div>
+                </div>
+            `;
+        }
+
         // Add intersection observer for animations
         const observerOptions = {
             threshold: 0.1,
@@ -665,6 +983,13 @@ $reqs = $rows->fetchAll();
         document.getElementById('rejectModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeRejectModal();
+            }
+        });
+
+        // Close view details modal on outside click
+        document.getElementById('viewDetailsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeViewDetailsModal();
             }
         });
     });

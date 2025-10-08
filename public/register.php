@@ -191,6 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($pdo)) $pdo->rollBack();
                 error_log('Registration failed: ' . $e->getMessage());
                 set_flash('Registration failed due to a system error. Please try again later.','error');
+                redirect_to('../index.php?modal=register');
             }
         }
     }
@@ -199,6 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($errors)) {
         $errorMessage = implode('<br>', $errors);
         set_flash($errorMessage, 'error');
+        redirect_to('../index.php?modal=register');
     }
 }
 ?>

@@ -802,6 +802,70 @@ function calculateAge($dob) {
             }
         `;
         document.head.appendChild(style);
+        
+        // Function to update notification badges
+        function updateNotificationBadges() {
+            fetch('<?php echo base_url('bhw/get_notification_counts.php'); ?>')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const counts = data.counts;
+                        
+                        // Update Pending Family Additions badge
+                        const pendingFamilyBadge = document.querySelector('a[href*="pending_family_additions.php"] .notification-badge');
+                        if (counts.pending_family_additions > 0) {
+                            if (pendingFamilyBadge) {
+                                pendingFamilyBadge.textContent = counts.pending_family_additions;
+                            } else {
+                                // Create badge if it doesn't exist
+                                const pendingFamilyLink = document.querySelector('a[href*="pending_family_additions.php"]');
+                                if (pendingFamilyLink) {
+                                    const badge = document.createElement('span');
+                                    badge.className = 'notification-badge';
+                                    badge.textContent = counts.pending_family_additions;
+                                    pendingFamilyLink.appendChild(badge);
+                                }
+                            }
+                        } else {
+                            // Remove badge if count is 0
+                            if (pendingFamilyBadge) {
+                                pendingFamilyBadge.remove();
+                            }
+                        }
+                        
+                        // Add visual feedback for badge updates
+                        const updatedBadges = document.querySelectorAll('.notification-badge');
+                        updatedBadges.forEach(badge => {
+                            badge.style.transform = 'scale(1.2)';
+                            badge.style.transition = 'transform 0.3s ease';
+                            setTimeout(() => {
+                                badge.style.transform = 'scale(1)';
+                            }, 300);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating notification badges:', error);
+                });
+        }
+        
+        // Update badges after approve/reject actions
+        document.addEventListener('DOMContentLoaded', function() {
+            const approveButtons = document.querySelectorAll('button[onclick*="approveFamilyAddition"]');
+            const rejectButtons = document.querySelectorAll('button[onclick*="showRejectModal"]');
+            
+            approveButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    setTimeout(updateNotificationBadges, 1000);
+                });
+            });
+            
+            rejectButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    setTimeout(updateNotificationBadges, 1000);
+                });
+            });
+        });
     </script>
 </body>
 </html>

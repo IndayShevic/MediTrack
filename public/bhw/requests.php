@@ -421,16 +421,12 @@ $reqs = $rows->fetchAll();
                                                 
                                                 <?php if ($r['status'] === 'submitted'): ?>
                                                     <!-- Approve Button -->
-                                                    <form method="post" class="inline">
-                                                        <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>" />
-                                                        <input type="hidden" name="action" value="approve" />
-                                                        <button class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-sm hover:shadow-md">
-                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                            </svg>
-                                                            Approve
-                                                        </button>
-                                                    </form>
+                                                    <button onclick="approveRequest(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-sm hover:shadow-md">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                        </svg>
+                                                        Approve
+                                                    </button>
                                                     
                                                     <!-- Reject Button -->
                                                     <button onclick="openRejectModal(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white text-xs font-medium rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 shadow-sm hover:shadow-md">
@@ -669,17 +665,7 @@ $reqs = $rows->fetchAll();
             filterRequests();
         };
 
-        // Reject modal functions
-        window.openRejectModal = function(requestId) {
-            document.getElementById('rejectRequestId').value = requestId;
-            document.getElementById('rejectModal').classList.remove('hidden');
-            document.getElementById('rejectModal').classList.add('flex');
-        };
-
-        window.closeRejectModal = function() {
-            document.getElementById('rejectModal').classList.add('hidden');
-            document.getElementById('rejectModal').classList.remove('flex');
-        };
+        // Reject modal functions (will be redefined below for AJAX)
 
         // View Details modal functions
         window.openViewDetailsModal = function(requestId) {
@@ -1031,6 +1017,185 @@ $reqs = $rows->fetchAll();
         document.getElementById('viewDetailsModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeViewDetailsModal();
+            }
+        });
+
+        // Function to update notification badges
+        function updateNotificationBadges() {
+            fetch('<?php echo base_url('bhw/get_notification_counts.php'); ?>')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const counts = data.counts;
+                        
+                        // Update Medicine Requests badge
+                        const medicineRequestsBadge = document.querySelector('a[href*="requests.php"] .notification-badge');
+                        if (counts.pending_requests > 0) {
+                            if (medicineRequestsBadge) {
+                                medicineRequestsBadge.textContent = counts.pending_requests;
+                            } else {
+                                // Create badge if it doesn't exist
+                                const medicineRequestsLink = document.querySelector('a[href*="requests.php"]');
+                                if (medicineRequestsLink) {
+                                    const badge = document.createElement('span');
+                                    badge.className = 'notification-badge';
+                                    badge.textContent = counts.pending_requests;
+                                    medicineRequestsLink.appendChild(badge);
+                                }
+                            }
+                        } else {
+                            // Remove badge if count is 0
+                            if (medicineRequestsBadge) {
+                                medicineRequestsBadge.remove();
+                            }
+                        }
+                        
+                        // Update Pending Registrations badge
+                        const pendingRegistrationsBadge = document.querySelector('a[href*="pending_residents.php"] .notification-badge');
+                        if (counts.pending_registrations > 0) {
+                            if (pendingRegistrationsBadge) {
+                                pendingRegistrationsBadge.textContent = counts.pending_registrations;
+                            } else {
+                                // Create badge if it doesn't exist
+                                const pendingRegistrationsLink = document.querySelector('a[href*="pending_residents.php"]');
+                                if (pendingRegistrationsLink) {
+                                    const badge = document.createElement('span');
+                                    badge.className = 'notification-badge';
+                                    badge.textContent = counts.pending_registrations;
+                                    pendingRegistrationsLink.appendChild(badge);
+                                }
+                            }
+                        } else {
+                            // Remove badge if count is 0
+                            if (pendingRegistrationsBadge) {
+                                pendingRegistrationsBadge.remove();
+                            }
+                        }
+                        
+                        // Update Pending Family Additions badge
+                        const pendingFamilyBadge = document.querySelector('a[href*="pending_family_additions.php"] .notification-badge');
+                        if (counts.pending_family_additions > 0) {
+                            if (pendingFamilyBadge) {
+                                pendingFamilyBadge.textContent = counts.pending_family_additions;
+                            } else {
+                                // Create badge if it doesn't exist
+                                const pendingFamilyLink = document.querySelector('a[href*="pending_family_additions.php"]');
+                                if (pendingFamilyLink) {
+                                    const badge = document.createElement('span');
+                                    badge.className = 'notification-badge';
+                                    badge.textContent = counts.pending_family_additions;
+                                    pendingFamilyLink.appendChild(badge);
+                                }
+                            }
+                        } else {
+                            // Remove badge if count is 0
+                            if (pendingFamilyBadge) {
+                                pendingFamilyBadge.remove();
+                            }
+                        }
+                        
+                        // Add visual feedback for badge updates
+                        const updatedBadges = document.querySelectorAll('.notification-badge');
+                        updatedBadges.forEach(badge => {
+                            badge.style.transform = 'scale(1.2)';
+                            badge.style.transition = 'transform 0.3s ease';
+                            setTimeout(() => {
+                                badge.style.transform = 'scale(1)';
+                            }, 300);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating notification badges:', error);
+                });
+        }
+
+        // AJAX approve request function
+        function approveRequest(requestId) {
+            const formData = new FormData();
+            formData.append('id', requestId);
+            formData.append('action', 'approve');
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                // Update badges immediately
+                updateNotificationBadges();
+                
+                // Reload page to show updated status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            })
+            .catch(error => {
+                console.error('Error approving request:', error);
+                alert('Error approving request. Please try again.');
+            });
+        }
+
+        // AJAX reject request function
+        function rejectRequest(requestId, reason) {
+            const formData = new FormData();
+            formData.append('id', requestId);
+            formData.append('action', 'reject');
+            formData.append('reason', reason);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                // Update badges immediately
+                updateNotificationBadges();
+                
+                // Close reject modal
+                closeRejectModal();
+                
+                // Reload page to show updated status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            })
+            .catch(error => {
+                console.error('Error rejecting request:', error);
+                alert('Error rejecting request. Please try again.');
+            });
+        }
+
+        // Update reject modal form submission
+        window.openRejectModal = function(requestId) {
+            document.getElementById('rejectRequestId').value = requestId;
+            document.getElementById('rejectModal').classList.remove('hidden');
+            document.getElementById('rejectModal').classList.add('flex');
+        };
+
+        window.closeRejectModal = function() {
+            document.getElementById('rejectModal').classList.add('hidden');
+            document.getElementById('rejectModal').classList.remove('flex');
+            // Reset form
+            document.querySelector('#rejectModal form').reset();
+        };
+
+        // Override reject form submission to use AJAX
+        document.addEventListener('DOMContentLoaded', function() {
+            const rejectForm = document.querySelector('#rejectModal form');
+            if (rejectForm) {
+                rejectForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const requestId = document.getElementById('rejectRequestId').value;
+                    const reason = document.querySelector('#rejectModal textarea[name="reason"]').value;
+                    
+                    if (!reason.trim()) {
+                        alert('Please provide a rejection reason.');
+                        return;
+                    }
+                    
+                    rejectRequest(requestId, reason);
+                });
             }
         });
     });

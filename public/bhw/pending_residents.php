@@ -960,6 +960,68 @@ try {
             <?php if (isset($flash) && $flash): ?>
                 toastManager.show('<?php echo $flashType === 'success' ? 'success' : 'error'; ?>', '<?php echo $flashType === 'success' ? 'Success!' : 'Error!'; ?>', '<?php echo addslashes($flash); ?>');
             <?php endif; ?>
+            
+            // Function to update notification badges
+            function updateNotificationBadges() {
+                fetch('<?php echo base_url('bhw/get_notification_counts.php'); ?>')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const counts = data.counts;
+                            
+                            // Update Pending Registrations badge
+                            const pendingRegistrationsBadge = document.querySelector('a[href*="pending_residents.php"] .notification-badge');
+                            if (counts.pending_registrations > 0) {
+                                if (pendingRegistrationsBadge) {
+                                    pendingRegistrationsBadge.textContent = counts.pending_registrations;
+                                } else {
+                                    // Create badge if it doesn't exist
+                                    const pendingRegistrationsLink = document.querySelector('a[href*="pending_residents.php"]');
+                                    if (pendingRegistrationsLink) {
+                                        const badge = document.createElement('span');
+                                        badge.className = 'notification-badge';
+                                        badge.textContent = counts.pending_registrations;
+                                        pendingRegistrationsLink.appendChild(badge);
+                                    }
+                                }
+                            } else {
+                                // Remove badge if count is 0
+                                if (pendingRegistrationsBadge) {
+                                    pendingRegistrationsBadge.remove();
+                                }
+                            }
+                            
+                            // Add visual feedback for badge updates
+                            const updatedBadges = document.querySelectorAll('.notification-badge');
+                            updatedBadges.forEach(badge => {
+                                badge.style.transform = 'scale(1.2)';
+                                badge.style.transition = 'transform 0.3s ease';
+                                setTimeout(() => {
+                                    badge.style.transform = 'scale(1)';
+                                }, 300);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error updating notification badges:', error);
+                    });
+            }
+            
+            // Update badges after approve/reject actions
+            const approveButtons = document.querySelectorAll('button[onclick*="approveResident"]');
+            const rejectButtons = document.querySelectorAll('button[onclick*="showRejectModal"]');
+            
+            approveButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    setTimeout(updateNotificationBadges, 1000);
+                });
+            });
+            
+            rejectButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    setTimeout(updateNotificationBadges, 1000);
+                });
+            });
         });
     </script>
 </body>

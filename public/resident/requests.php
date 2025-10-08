@@ -315,31 +315,86 @@ $requests = $rows->fetchAll();
                 </div>
             </div>
 
-            <!-- Requests Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6" id="requestsGrid">
+            <!-- Requests Table -->
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Request Details
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Medicine
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Requested For
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Date
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="requestsTable">
                 <?php foreach ($requests as $index => $r): ?>
-                    <div class="request-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" 
+                                <tr class="request-row hover:bg-gray-50 transition-colors duration-200" 
                          data-medicine="<?php echo strtolower(htmlspecialchars($r['medicine'])); ?>"
                          data-status="<?php echo $r['status']; ?>"
-                         data-patient="<?php echo strtolower(htmlspecialchars($r['patient_name'] ?? '')); ?>"
-                         style="animation-delay: <?php echo $index * 0.1; ?>s">
-                        
-                        <!-- Request Header -->
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                                    data-patient="<?php echo strtolower(htmlspecialchars($r['patient_name'] ?? '')); ?>">
+                                    <!-- Request Details Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mr-3">
                                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                     </svg>
                                 </div>
                                 <div>
-                                    <div class="font-mono text-sm text-gray-600">#<?php echo (int)$r['id']; ?></div>
+                                                <div class="font-mono text-sm font-medium text-gray-900">#<?php echo (int)$r['id']; ?></div>
                                     <div class="text-xs text-gray-500"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></div>
                                 </div>
                 </div>
-                            
-                            <!-- Status Badge -->
-                            <div class="status-indicator">
+                                    </td>
+                                    
+                                    <!-- Medicine Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($r['medicine']); ?></div>
+                                        <?php if ($r['reason']): ?>
+                                            <div class="text-xs text-gray-500 mt-1"><?php echo htmlspecialchars(substr($r['reason'], 0, 50)) . (strlen($r['reason']) > 50 ? '...' : ''); ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Requested For Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <?php if ($r['requested_for'] === 'self'): ?>
+                                                <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                                </svg>
+                                                <span class="text-sm text-gray-900">Self</span>
+                                            <?php else: ?>
+                                                <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                </svg>
+                                                <span class="text-sm text-gray-900"><?php echo htmlspecialchars($r['patient_name'] ?? 'Family Member'); ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    
+                                    <!-- Date Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <div><?php echo date('M j, Y', strtotime($r['created_at'])); ?></div>
+                                        <div class="text-xs"><?php echo date('g:i A', strtotime($r['created_at'])); ?></div>
+                                    </td>
+                                    
+                                    <!-- Status Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
                                             <?php if ($r['status'] === 'submitted'): ?>
                                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
                                                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,104 +430,45 @@ $requests = $rows->fetchAll();
                                         </svg>
                                         Claimed
                                     </span>
-                                            <?php endif; ?>
-                            </div>
-                        </div>
-
-                        <!-- Medicine Info -->
-                        <div class="mb-4">
-                            <h3 class="text-lg font-bold text-gray-900 mb-2"><?php echo htmlspecialchars($r['medicine']); ?></h3>
-                            
-                            <!-- Requested For -->
-                            <div class="flex items-center space-x-2 mb-3">
-                                <?php if ($r['requested_for'] === 'self'): ?>
-                                    <div class="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full">
-                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                        <?php elseif ($r['status'] === 'rejected'): ?>
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                         </svg>
-                                        <span class="text-sm font-medium text-blue-700">Self</span>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="flex items-center space-x-2 px-3 py-1 bg-purple-50 rounded-full">
-                                        <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                                Rejected
+                                            </span>
+                                        <?php elseif ($r['status'] === 'ready_to_claim'): ?>
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                                         </svg>
-                                        <span class="text-sm font-medium text-purple-700">Family</span>
-                                    </div>
-                                    <?php if ($r['patient_name']): ?>
-                                        <div class="text-sm text-gray-600"><?php echo htmlspecialchars($r['patient_name']); ?></div>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-
-                        <!-- BHW Assignment -->
-                        <div class="mb-4 p-3 bg-gray-50 rounded-lg">
-                            <div class="flex items-center space-x-2">
-                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                </svg>
-                                <span class="text-sm font-medium text-gray-700">Assigned BHW:</span>
-                                <span class="text-sm text-gray-600">
-                                    <?php if ($r['bhw_first_name'] && $r['bhw_last_name']): ?>
-                                        <?php echo htmlspecialchars($r['bhw_first_name'] . ' ' . $r['bhw_last_name']); ?>
-                                    <?php else: ?>
-                                        <span class="text-gray-400">Not assigned</span>
-                                    <?php endif; ?>
+                                                Ready to Claim
                                 </span>
-                            </div>
-                        </div>
-
-                        <!-- Approval/Rejection Info -->
-                        <?php if ($r['status'] === 'approved' && $r['approver_first_name']): ?>
-                            <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                                <div class="flex items-center space-x-2 mb-1">
-                                    <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <?php elseif ($r['status'] === 'claimed'): ?>
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                     </svg>
-                                    <span class="text-sm font-medium text-green-700">Approved by</span>
-                                </div>
-                                <div class="text-sm text-green-800 font-medium">
-                                    <?php echo htmlspecialchars($r['approver_first_name'] . ' ' . $r['approver_last_name']); ?>
-                                </div>
-                                <?php if ($r['approved_at']): ?>
-                                    <div class="text-xs text-green-600">
-                                        <?php echo date('M j, Y g:i A', strtotime($r['approved_at'])); ?>
-                                    </div>
+                                                Claimed
+                                            </span>
                                 <?php endif; ?>
-                            </div>
-                        <?php elseif ($r['status'] === 'rejected' && $r['rejector_first_name']): ?>
-                            <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                <div class="flex items-center space-x-2 mb-1">
-                                    <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                    <span class="text-sm font-medium text-red-700">Rejected by</span>
-                                </div>
-                                <div class="text-sm text-red-800 font-medium">
-                                    <?php echo htmlspecialchars($r['rejector_first_name'] . ' ' . $r['rejector_last_name']); ?>
-                                </div>
-                                <?php if ($r['rejected_at']): ?>
-                                    <div class="text-xs text-red-600">
-                                        <?php echo date('M j, Y g:i A', strtotime($r['rejected_at'])); ?>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endif; ?>
-
-                        <!-- Action Button -->
-                        <div class="flex justify-end">
-                            <button onclick="showRequestDetails(<?php echo htmlspecialchars(json_encode($r)); ?>)" 
-                                    class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    </td>
+                                    
+                                    <!-- Actions Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="showRequestDetails(<?php echo htmlspecialchars(json_encode($r)); ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow-md">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                 </svg>
                                 View Details
                             </button>
-                        </div>
-                    </div>
+                                    </td>
+                                </tr>
                 <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- No Results Message -->
@@ -537,7 +533,7 @@ $requests = $rows->fetchAll();
                         </svg>
                     </button>
                 </div>
-            </div>
+                </div>
             
             <!-- Content -->
             <div class="p-8">
@@ -567,8 +563,7 @@ $requests = $rows->fetchAll();
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const filterChips = document.querySelectorAll('.filter-chip');
-            const requestCards = document.querySelectorAll('.request-card');
-            const requestsGrid = document.getElementById('requestsGrid');
+            const requestRows = document.querySelectorAll('.request-row');
             const noResults = document.getElementById('noResults');
             const requestCount = document.getElementById('request-count');
 
@@ -594,12 +589,13 @@ $requests = $rows->fetchAll();
             });
 
             function filterRequests() {
+                const rows = document.querySelectorAll('.request-row');
                 let visibleCount = 0;
                 
-                requestCards.forEach(card => {
-                    const medicine = card.dataset.medicine;
-                    const status = card.dataset.status;
-                    const patient = card.dataset.patient;
+                rows.forEach(row => {
+                    const medicine = row.dataset.medicine;
+                    const status = row.dataset.status;
+                    const patient = row.dataset.patient;
                     
                     let matchesSearch = true;
                     let matchesFilter = true;
@@ -615,12 +611,10 @@ $requests = $rows->fetchAll();
                     }
                     
                     if (matchesSearch && matchesFilter) {
-                        card.style.display = 'block';
-                        card.classList.add('animate-fade-in');
+                        row.style.display = '';
                         visibleCount++;
                     } else {
-                        card.style.display = 'none';
-                        card.classList.remove('animate-fade-in');
+                        row.style.display = 'none';
                     }
                 });
                 
@@ -630,10 +624,10 @@ $requests = $rows->fetchAll();
                 // Show/hide no results message
                 if (visibleCount === 0) {
                     noResults.classList.remove('hidden');
-                    requestsGrid.classList.add('hidden');
+                    document.querySelector('table').parentElement.classList.add('hidden');
                 } else {
                     noResults.classList.add('hidden');
-                    requestsGrid.classList.remove('hidden');
+                    document.querySelector('table').parentElement.classList.remove('hidden');
                 }
             }
 
@@ -715,9 +709,25 @@ $requests = $rows->fetchAll();
             });
         });
 
-        function showRequestDetails(request) {
+        window.showRequestDetails = function(request) {
+            console.log('showRequestDetails called with:', request);
             const modal = document.getElementById('requestDetailsModal');
             const content = document.getElementById('requestDetailsContent');
+            
+            if (!modal) {
+                console.error('Modal not found');
+                return;
+            }
+            
+            if (!content) {
+                console.error('Modal content not found');
+                return;
+            }
+            
+            // Show the modal
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
             
             // Build the content with enhanced design
             let html = `
@@ -731,7 +741,7 @@ $requests = $rows->fetchAll();
                                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
                                     </svg>
-                                </div>
+                        </div>
                                 <label class="text-sm font-semibold text-blue-700 uppercase tracking-wide">Request ID</label>
                             </div>
                             <div class="text-2xl font-bold text-blue-900 font-mono">#${request.id}</div>
@@ -933,12 +943,9 @@ $requests = $rows->fetchAll();
             `;
             
             content.innerHTML = html;
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            document.body.style.overflow = 'hidden';
         }
 
-        function closeRequestDetails() {
+        window.closeRequestDetails = function() {
             const modal = document.getElementById('requestDetailsModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');

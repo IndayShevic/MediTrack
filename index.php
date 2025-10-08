@@ -2,6 +2,7 @@
 declare(strict_types=1);
 // Root landing page for MediTrack
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/email_notifications.php';
 
 $user = current_user();
 if ($user) {
@@ -9,13 +10,272 @@ if ($user) {
     if ($user['role'] === 'bhw') { header('Location: public/bhw/dashboard.php'); exit; }
     if ($user['role'] === 'resident') { header('Location: public/resident/dashboard.php'); exit; }
 }
+
+// Handle duplicate checking
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_duplicate') {
+    header('Content-Type: application/json');
+    
+    $type = $_POST['type'] ?? '';
+    $response = ['duplicate' => false, 'message' => ''];
+    
+    if ($type === 'personal_info') {
+        $email = trim($_POST['email'] ?? '');
+        $first_name = trim($_POST['first_name'] ?? '');
+        $last_name = trim($_POST['last_name'] ?? '');
+        $middle_initial = trim($_POST['middle_initial'] ?? '');
+        
+        // Check email in pending_residents
+        $emailCheck = db()->prepare('SELECT id FROM pending_residents WHERE LOWER(email) = LOWER(?)');
+        $emailCheck->execute([$email]);
+        if ($emailCheck->fetch()) {
+            $response = ['duplicate' => true, 'message' => 'This email is already registered and pending approval.'];
+        }
+        
+        // Check email in users (approved accounts)
+        if (!$response['duplicate']) {
+            $emailCheck = db()->prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)');
+            $emailCheck->execute([$email]);
+            if ($emailCheck->fetch()) {
+                $response = ['duplicate' => true, 'message' => 'This email is already registered and approved.'];
+            }
+        }
+        
+        // Check name combination in pending_residents
+        if (!$response['duplicate']) {
+            $nameCheck = db()->prepare('SELECT id FROM pending_residents WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND LOWER(COALESCE(middle_initial, "")) = LOWER(COALESCE(?, ""))');
+            $nameCheck->execute([$first_name, $last_name, $middle_initial]);
+            if ($nameCheck->fetch()) {
+                $response = ['duplicate' => true, 'message' => 'A person with this name is already registered and pending approval.'];
+            }
+        }
+        
+        // Check name combination in users (approved accounts)
+        if (!$response['duplicate']) {
+            $nameCheck = db()->prepare('SELECT id FROM users WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND LOWER(COALESCE(middle_initial, "")) = LOWER(COALESCE(?, ""))');
+            $nameCheck->execute([$first_name, $last_name, $middle_initial]);
+            if ($nameCheck->fetch()) {
+                $response = ['duplicate' => true, 'message' => 'A person with this name is already registered and approved.'];
+            }
+        }
+    }
+    
+    if ($type === 'family_member') {
+        $first_name = trim($_POST['first_name'] ?? '');
+        $last_name = trim($_POST['last_name'] ?? '');
+        $middle_initial = trim($_POST['middle_initial'] ?? '');
+        
+        // Check in pending_family_members
+        $familyCheck = db()->prepare('SELECT id FROM pending_family_members WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND LOWER(COALESCE(middle_initial, "")) = LOWER(COALESCE(?, ""))');
+        $familyCheck->execute([$first_name, $last_name, $middle_initial]);
+        if ($familyCheck->fetch()) {
+            $response = ['duplicate' => true, 'message' => 'This family member is already registered and pending approval.'];
+        }
+        
+        // Check in family_members (approved)
+        if (!$response['duplicate']) {
+            $familyCheck = db()->prepare('SELECT id FROM family_members WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND LOWER(COALESCE(middle_initial, "")) = LOWER(COALESCE(?, ""))');
+            $familyCheck->execute([$first_name, $last_name, $middle_initial]);
+            if ($familyCheck->fetch()) {
+                $response = ['duplicate' => true, 'message' => 'This family member is already registered and approved.'];
+            }
+        }
+    }
+    
+    echo json_encode($response);
+    exit;
+}
+
+// Handle registration form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $errors = [];
+    
+    // Debug: Log all POST data
+    error_log('POST data received in index.php: ' . print_r($_POST, true));
+    file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - POST data: ' . print_r($_POST, true) . "\n", FILE_APPEND);
+    
+    // Sanitize and validate input data
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $first = trim($_POST['first_name'] ?? '');
+    $last = trim($_POST['last_name'] ?? '');
+    $middle = trim($_POST['middle_initial'] ?? '');
+    $dob = $_POST['date_of_birth'] ?? '';
+    $purok_id = (int)($_POST['purok_id'] ?? 0);
+    $phone = trim($_POST['phone'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    
+    // Debug: Log processed data
+    error_log('Processed data - Email: ' . $email . ', First: ' . $first . ', Last: ' . $last . ', Purok: ' . $purok_id);
+    
+    // Validation rules
+    if (empty($first) || strlen($first) < 2) {
+        $errors[] = 'First name must be at least 2 characters long.';
+    }
+    
+    if (empty($last) || strlen($last) < 2) {
+        $errors[] = 'Last name must be at least 2 characters long.';
+    }
+    
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Please enter a valid email address.';
+    }
+    
+    if (empty($password) || strlen($password) < 8) {
+        $errors[] = 'Password must be at least 8 characters long.';
+    }
+    
+    if (empty($dob)) {
+        $errors[] = 'Please select your date of birth.';
+    }
+    
+    if (empty($phone)) {
+        $errors[] = 'Please enter your phone number.';
+    }
+    
+    if (empty($purok_id)) {
+        $errors[] = 'Please select your purok.';
+    }
+    
+    // Family members data validation
+    $family_members = [];
+    if (isset($_POST['family_members']) && is_array($_POST['family_members'])) {
+        foreach ($_POST['family_members'] as $index => $member) {
+            $first_name = trim($member['first_name'] ?? '');
+            $middle_initial = trim($member['middle_initial'] ?? '');
+            $last_name = trim($member['last_name'] ?? '');
+            $relationship = trim($member['relationship'] ?? '');
+            $date_of_birth = $member['date_of_birth'] ?? '';
+            
+            // Only validate if at least one field is filled
+            if (!empty($first_name) || !empty($last_name) || !empty($relationship) || !empty($date_of_birth)) {
+                if (empty($first_name) || strlen($first_name) < 2) {
+                    $errors[] = "Family member " . ($index + 1) . ": First name must be at least 2 characters long.";
+                }
+                
+                if (empty($last_name) || strlen($last_name) < 2) {
+                    $errors[] = "Family member " . ($index + 1) . ": Last name must be at least 2 characters long.";
+                }
+                
+                if (empty($relationship)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Relationship is required.";
+                }
+                
+                if (empty($date_of_birth)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Date of birth is required.";
+                }
+                
+                if (empty($errors)) {
+                    $family_members[] = [
+                        'first_name' => $first_name,
+                        'middle_initial' => $middle_initial,
+                        'last_name' => $last_name,
+                        'relationship' => $relationship,
+                        'date_of_birth' => $date_of_birth
+                    ];
+                }
+            }
+        }
+    }
+    
+    // If no validation errors, proceed with registration
+    if (empty($errors)) {
+        try {
+            error_log('Starting database insertion in index.php...');
+            
+            // Test database connection first
+            $pdo = db();
+            if (!$pdo) {
+                throw new Exception('Database connection failed');
+            }
+            
+            $pdo->beginTransaction();
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            
+            // Get barangay_id from purok_id
+            $q = db()->prepare('SELECT barangay_id FROM puroks WHERE id = ? LIMIT 1');
+            $q->execute([$purok_id]);
+            $row = $q->fetch();
+            $barangay_id = $row ? (int)$row['barangay_id'] : 0;
+            
+            // Insert into pending_residents table
+            $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, date_of_birth, phone, address, barangay_id, purok_id) VALUES(?,?,?,?,?,?,?,?,?,?)');
+            $result = $insPending->execute([$email, $hash, $first, $last, $middle, $dob, $phone, $address, $barangay_id, $purok_id]);
+            
+            if (!$result) {
+                throw new Exception('Failed to insert pending resident: ' . implode(', ', $insPending->errorInfo()));
+            }
+            
+            $pendingId = (int)$pdo->lastInsertId();
+            error_log('Pending resident inserted with ID: ' . $pendingId);
+            
+            // Insert family members
+            if (!empty($family_members)) {
+                $insFamily = $pdo->prepare('INSERT INTO pending_family_members(pending_resident_id, first_name, middle_initial, last_name, relationship, date_of_birth) VALUES(?,?,?,?,?,?)');
+                foreach ($family_members as $member) {
+                    $result = $insFamily->execute([$pendingId, $member['first_name'], $member['middle_initial'], $member['last_name'], $member['relationship'], $member['date_of_birth']]);
+                    if (!$result) {
+                        throw new Exception('Failed to insert family member: ' . implode(', ', $insFamily->errorInfo()));
+                    }
+                }
+                error_log('Family members inserted: ' . count($family_members));
+            }
+            
+            $pdo->commit();
+            
+            // Notify assigned BHW about new registration
+            try {
+                error_log('Looking for BHW for purok_id: ' . $purok_id);
+                $bhwStmt = db()->prepare('SELECT u.email, u.first_name, u.last_name, p.name as purok_name FROM users u JOIN puroks p ON p.id = u.purok_id WHERE u.role = "bhw" AND u.purok_id = ? LIMIT 1');
+                $bhwStmt->execute([$purok_id]);
+                $bhw = $bhwStmt->fetch();
+                
+                if ($bhw) {
+                    error_log('BHW found: ' . $bhw['email']);
+                    $bhwName = format_full_name($bhw['first_name'] ?? '', $bhw['last_name'] ?? '', $bhw['middle_initial'] ?? null);
+                    $residentName = format_full_name($first, $last, $middle);
+                    $success = send_new_registration_notification_to_bhw($bhw['email'], $bhwName, $residentName, $bhw['purok_name']);
+                    error_log('Email sent successfully: ' . ($success ? 'Yes' : 'No'));
+                    log_email_notification(0, 'new_registration', 'New Registration', 'New resident registration notification sent to BHW', $success);
+                } else {
+                    error_log('No BHW found for purok_id: ' . $purok_id);
+                }
+            } catch (Throwable $e) {
+                error_log('Email notification failed: ' . $e->getMessage());
+            }
+            
+            // Return success response
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'message' => 'Registration submitted successfully!']);
+            exit;
+            
+        } catch (Throwable $e) {
+            if (isset($pdo)) $pdo->rollBack();
+            error_log('Registration failed: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            
+            // Also log to debug file
+            file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - Registration Error: ' . $e->getMessage() . "\n", FILE_APPEND);
+            file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - Stack trace: ' . $e->getTraceAsString() . "\n", FILE_APPEND);
+            
+            // Return error response
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Registration failed: ' . $e->getMessage()]);
+            exit;
+        }
+    } else {
+        // Return validation errors
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => implode('<br>', $errors)]);
+        exit;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MediTrack - Medicine Management</title>
+    <title>MediTrack - Medicine Management - UPDATED WITH SEPARATE NAME FIELDS!</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -396,6 +656,12 @@ if ($user) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                             </svg>
                         </button>
+                        <button onclick="openRegisterModal()" class="btn btn-secondary btn-lg animate-scale-in delay-300 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-green-600 hover:border-green-700">
+                            Register Now
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                            </svg>
+                        </button>
                         <a href="#features" class="btn btn-secondary btn-lg animate-scale-in delay-300">
                             Learn More
                         </a>
@@ -730,7 +996,7 @@ if ($user) {
                 
             <!-- Form Body -->
             <div class="p-8">
-                <form id="registerForm" action="public/register.php" method="post" class="space-y-6">
+                <form id="registerForm" action="" method="post" class="space-y-6">
                     <?php if (!empty($_SESSION['flash'])): ?>
                         <div class="flex items-start space-x-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-shake">
                             <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -739,6 +1005,9 @@ if ($user) {
                             <span><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
                         </div>
                     <?php endif; ?>
+                    
+                    <!-- Step 1: Personal Information -->
+                    <div id="step-1" class="step-content">
                     
                     <!-- Personal Information Grid -->
                     <div class="bg-white rounded-2xl border-2 border-gray-100 p-6 space-y-5">
@@ -886,6 +1155,19 @@ if ($user) {
                         </div>
                     </div>
                     
+                    <!-- Step 1 Navigation -->
+                    <div class="flex justify-end pt-4">
+                        <button type="button" onclick="goToStep(2)" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
+                            Proceed to Family Members
+                            <svg class="w-5 h-5 inline ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    </div>
+                    
+                    <!-- Step 2: Family Members -->
+                    <div id="step-2" class="step-content hidden">
                     <!-- Family Members Section -->
                     <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-100 p-6 space-y-4">
                         <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -897,18 +1179,30 @@ if ($user) {
                         </h3>
                         
                         <div id="family-members-container">
-                            <div class="family-member bg-white rounded-xl border-2 border-blue-200 p-4 mb-3 transition-all duration-300 hover:shadow-md">
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="family-member bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:border-blue-300">
+                                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Full Name</label>
-                                        <input type="text" name="family_members[0][full_name]" 
-                                               class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none" 
-                                               placeholder="e.g., Juan Dela Cruz" />
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
+                                        <input type="text" name="family_members[0][first_name]" 
+                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
+                                               placeholder="Juan" />
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Relationship</label>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">M.I.</label>
+                                        <input type="text" name="family_members[0][middle_initial]" 
+                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
+                                               placeholder="D" maxlength="5" />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
+                                        <input type="text" name="family_members[0][last_name]" 
+                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
+                                               placeholder="Dela Cruz" />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Relationship</label>
                                         <select name="family_members[0][relationship]" 
-                                                class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none">
+                                                class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm">
                                             <option value="">Select Relationship</option>
                                             <option value="Father">Father</option>
                                             <option value="Mother">Mother</option>
@@ -922,16 +1216,16 @@ if ($user) {
                                         </select>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
                                         <input type="date" name="family_members[0][date_of_birth]" 
-                                               class="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none" />
+                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" />
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
                         <button type="button" id="add-family-member" 
-                                class="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95 transition-all duration-200">
+                                class="inline-flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-blue-700 hover:to-indigo-700">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                             </svg>
@@ -939,8 +1233,70 @@ if ($user) {
                         </button>
                     </div>
                     
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-3 pt-4">
+                    <!-- Step 2 Navigation -->
+                    <div class="flex justify-between pt-6">
+                        <button type="button" onclick="goToStep(1)" class="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
+                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+                            </svg>
+                            Back to Personal Info
+                        </button>
+                        <button type="button" onclick="goToStep(3)" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
+                            Proceed to Review
+                            <svg class="w-5 h-5 inline ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    </div>
+                    
+                    <!-- Step 3: Review -->
+                    <div id="step-3" class="step-content hidden">
+                    <!-- Review Section -->
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-100 p-6 space-y-4">
+                        <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>Review Your Information</span>
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div class="bg-white rounded-lg p-4 border border-gray-200">
+                                <h4 class="font-semibold text-gray-900 mb-2">Personal Information</h4>
+                                <div id="review-personal-info" class="text-sm text-gray-600">
+                                    <!-- Personal info will be populated here -->
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg p-4 border border-gray-200">
+                                <h4 class="font-semibold text-gray-900 mb-2">Family Members</h4>
+                                <div id="review-family-members" class="text-sm text-gray-600">
+                                    <!-- Family members will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3 Navigation -->
+                    <div class="flex justify-between pt-6">
+                        <button type="button" onclick="goToStep(2)" class="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
+                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+                            </svg>
+                            Back to Family Members
+                        </button>
+                        <button type="button" id="submitRegistrationBtn" onclick="handleFormSubmission()" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
+                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span id="submitText">Submit Registration</span>
+                        </button>
+                    </div>
+                    </div>
+                    
+                    <!-- Action Buttons (Hidden - only for step 3) -->
+                    <div class="flex justify-end space-x-3 pt-4 hidden">
                         <button type="button" onclick="closeRegisterModal()" 
                                 class="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
                             Cancel
@@ -1070,6 +1426,515 @@ if ($user) {
             document.getElementById('registerModal').classList.remove('hidden');
             document.getElementById('registerModal').classList.add('flex');
             document.body.style.overflow = 'hidden';
+            // Reset to step 1
+            goToStep(1);
+        }
+        
+        async function goToStep(step) {
+            // Validate current step before proceeding
+            if (step === 2) {
+                const isValid = await validateStep1();
+                if (!isValid) {
+                    return;
+                }
+            } else if (step === 3) {
+                const step1Valid = await validateStep1();
+                const step2Valid = await validateStep2();
+                if (!step1Valid || !step2Valid) {
+                    return;
+                }
+            }
+            
+            // Hide all steps
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Show current step
+            document.getElementById(`step-${step}`).classList.remove('hidden');
+            
+            // Update progress indicator
+            updateProgressIndicator(step);
+            
+            // If going to step 3, populate review
+            if (step === 3) {
+                populateReview();
+            }
+        }
+        
+        async function validateStep1() {
+            const firstName = document.querySelector('input[name="first_name"]').value.trim();
+            const lastName = document.querySelector('input[name="last_name"]').value.trim();
+            const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
+            const email = document.querySelector('input[name="email"]').value.trim();
+            
+            if (!firstName || !lastName || !email) {
+                showToast('Please fill in all required fields (First Name, Last Name, Email).', 'error');
+                return false;
+            }
+            
+            try {
+                // Check for duplicates
+                const formData = new FormData();
+                formData.append('action', 'check_duplicate');
+                formData.append('type', 'personal_info');
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('email', email);
+                
+                const response = await fetch('', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.duplicate) {
+                    showToast(data.message, 'error');
+                    return false;
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Validation error:', error);
+                return true; // Allow proceeding if validation fails
+            }
+        }
+        
+        async function validateStep2() {
+            const familyMembers = document.querySelectorAll('.family-member');
+            let hasValidMembers = false;
+            
+            for (let member of familyMembers) {
+                const firstName = member.querySelector('input[name*="[first_name]"]').value.trim();
+                const lastName = member.querySelector('input[name*="[last_name]"]').value.trim();
+                const middleInitial = member.querySelector('input[name*="[middle_initial]"]').value.trim();
+                const relationship = member.querySelector('select[name*="[relationship]"]').value;
+                const dob = member.querySelector('input[name*="[date_of_birth]"]').value;
+                
+                // Check if member has any data
+                if (firstName || lastName || relationship || dob) {
+                    hasValidMembers = true;
+                    
+                    // Validate required fields
+                    if (!firstName || !lastName || !relationship || !dob) {
+                        showToast('Please fill in all fields for family members (First Name, Last Name, Relationship, Date of Birth).', 'error');
+                        return false;
+                    }
+                    
+                    try {
+                        // Check for duplicates
+                        const formData = new FormData();
+                        formData.append('action', 'check_duplicate');
+                        formData.append('type', 'family_member');
+                        formData.append('first_name', firstName);
+                        formData.append('last_name', lastName);
+                        formData.append('middle_initial', middleInitial);
+                        
+                        const response = await fetch('', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.duplicate) {
+                            showToast(data.message, 'error');
+                            return false;
+                        }
+                    } catch (error) {
+                        console.error('Family member validation error:', error);
+                        // Continue if validation fails
+                    }
+                }
+            }
+            
+            return true;
+        }
+        
+        function populateReview() {
+            // Populate personal information
+            const personalInfo = document.getElementById('review-personal-info');
+            const firstName = document.querySelector('input[name="first_name"]').value;
+            const middleInitial = document.querySelector('input[name="middle_initial"]').value;
+            const lastName = document.querySelector('input[name="last_name"]').value;
+            const email = document.querySelector('input[name="email"]').value;
+            const phone = document.querySelector('input[name="phone"]').value;
+            const dob = document.querySelector('input[name="date_of_birth"]').value;
+            const purokSelect = document.querySelector('select[name="purok_id"]');
+            const purok = purokSelect.options[purokSelect.selectedIndex].text;
+            
+            let fullName = firstName;
+            if (middleInitial) fullName += ' ' + middleInitial;
+            if (lastName) fullName += ' ' + lastName;
+            
+            personalInfo.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div><strong>Full Name:</strong> ${fullName}</div>
+                    <div><strong>Email:</strong> ${email}</div>
+                    <div><strong>Phone:</strong> ${phone}</div>
+                    <div><strong>Date of Birth:</strong> ${dob}</div>
+                    <div><strong>Purok:</strong> ${purok}</div>
+                </div>
+            `;
+            
+            // Populate family members
+            const familyMembers = document.getElementById('review-family-members');
+            const familyMemberElements = document.querySelectorAll('.family-member');
+            let familyHTML = '';
+            
+            if (familyMemberElements.length === 0) {
+                familyHTML = '<p class="text-gray-500">No family members added.</p>';
+            } else {
+                familyMemberElements.forEach((member, index) => {
+                    const firstName = member.querySelector('input[name*="[first_name]"]').value;
+                    const middleInitial = member.querySelector('input[name*="[middle_initial]"]').value;
+                    const lastName = member.querySelector('input[name*="[last_name]"]').value;
+                    const relationship = member.querySelector('select[name*="[relationship]"]').value;
+                    const dob = member.querySelector('input[name*="[date_of_birth]"]').value;
+                    
+                    let fullName = firstName;
+                    if (middleInitial) fullName += ' ' + middleInitial;
+                    if (lastName) fullName += ' ' + lastName;
+                    
+                    if (firstName || lastName || relationship) {
+                        familyHTML += `
+                            <div class="border-b border-gray-200 pb-2 mb-2 last:border-b-0">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><strong>Name:</strong> ${fullName}</div>
+                                    <div><strong>Relationship:</strong> ${relationship}</div>
+                                    <div><strong>Date of Birth:</strong> ${dob}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            familyMembers.innerHTML = familyHTML;
+        }
+        
+        // Handle form submission - simplified approach
+        function handleFormSubmission() {
+            console.log('Submit button clicked!');
+            
+            const submitBtn = document.getElementById('submitRegistrationBtn');
+            const submitText = document.getElementById('submitText');
+            const form = document.getElementById('registerForm');
+            
+            if (!submitBtn || !form) {
+                console.error('Submit button or form not found!');
+                alert('Submit button or form not found!');
+                return;
+            }
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitText.textContent = 'Submitting...';
+            submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+            
+            // Validate required fields
+            const requiredFields = [
+                'first_name', 'last_name', 'email', 'password', 
+                'date_of_birth', 'phone', 'purok_id'
+            ];
+            
+            let isValid = true;
+            let errorMessage = '';
+            
+            requiredFields.forEach(fieldName => {
+                const field = document.querySelector(`[name="${fieldName}"]`);
+                if (!field || !field.value.trim()) {
+                    isValid = false;
+                    errorMessage = `Please fill in all required fields. Missing: ${fieldName}`;
+                }
+            });
+            
+            if (!isValid) {
+                showToast(errorMessage, 'error');
+                // Reset button state
+                submitBtn.disabled = false;
+                submitText.textContent = 'Submit Registration';
+                submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                return;
+            }
+            
+            // Submit the form
+            const formData = new FormData(form);
+            
+            console.log('Submitting form to:', form.action);
+            console.log('Form data:', Object.fromEntries(formData));
+            
+            fetch(form.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Network response was not ok');
+            })
+            .then(data => {
+                console.log('Success response:', data);
+                if (data.success) {
+                    // Success - show success message
+                    submitText.textContent = 'Registration Submitted!';
+                    submitBtn.classList.remove('bg-gradient-to-r', 'from-green-600', 'to-emerald-600');
+                    submitBtn.classList.add('bg-green-500');
+                    
+                    // Close modal after 2 seconds
+                    setTimeout(() => {
+                        closeRegisterModal();
+                        // Show success notification
+                        showSuccessNotification();
+                    }, 2000);
+                } else {
+                    // Show error message
+                    showToast(data.message || 'Registration failed. Please try again.', 'error');
+                    
+                    // Reset button state
+                    submitBtn.disabled = false;
+                    submitText.textContent = 'Submit Registration';
+                    submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Registration failed. Please try again.', 'error');
+                
+                // Reset button state
+                submitBtn.disabled = false;
+                submitText.textContent = 'Submit Registration';
+                submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+            });
+        }
+        
+        // Add event listener when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, setting up form submission');
+            
+            // Try multiple approaches to attach the event listener
+            const submitBtn = document.getElementById('submitRegistrationBtn');
+            const form = document.getElementById('registerForm');
+            
+            if (submitBtn) {
+                console.log('Submit button found, adding click listener');
+                submitBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    handleFormSubmission();
+                });
+            }
+            
+            if (form) {
+                console.log('Form found, adding submit listener');
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    handleFormSubmission();
+                });
+            }
+            
+            // Add real-time validation for personal info fields
+            setupPersonalInfoValidation();
+            
+            // Add real-time validation for existing family member
+            const firstFamilyMember = document.querySelector('.family-member');
+            if (firstFamilyMember) {
+                setupFamilyMemberValidation(firstFamilyMember);
+            }
+        });
+        
+        function setupPersonalInfoValidation() {
+            const firstNameInput = document.querySelector('input[name="first_name"]');
+            const lastNameInput = document.querySelector('input[name="last_name"]');
+            const middleInitialInput = document.querySelector('input[name="middle_initial"]');
+            const emailInput = document.querySelector('input[name="email"]');
+            
+            if (firstNameInput && lastNameInput && emailInput) {
+                // Add event listeners for real-time validation
+                [firstNameInput, lastNameInput, middleInitialInput, emailInput].forEach(input => {
+                    if (input) {
+                        input.addEventListener('blur', function() {
+                            checkPersonalInfoDuplicate();
+                        });
+                    }
+                });
+            }
+        }
+        
+        async function checkPersonalInfoDuplicate() {
+            const firstName = document.querySelector('input[name="first_name"]').value.trim();
+            const lastName = document.querySelector('input[name="last_name"]').value.trim();
+            const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
+            const email = document.querySelector('input[name="email"]').value.trim();
+            
+            // Only check if we have minimum required data
+            if (firstName.length >= 2 && lastName.length >= 2 && email.length >= 5) {
+                try {
+                    const formData = new FormData();
+                    formData.append('action', 'check_duplicate');
+                    formData.append('type', 'personal_info');
+                    formData.append('first_name', firstName);
+                    formData.append('last_name', lastName);
+                    formData.append('middle_initial', middleInitial);
+                    formData.append('email', email);
+                    
+                    const response = await fetch('', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.duplicate) {
+                        showToast(data.message, 'warning');
+                    }
+                } catch (error) {
+                    console.error('Real-time validation error:', error);
+                }
+            }
+        }
+        
+        function setupFamilyMemberValidation(memberElement) {
+            const firstNameInput = memberElement.querySelector('input[name*="[first_name]"]');
+            const lastNameInput = memberElement.querySelector('input[name*="[last_name]"]');
+            const middleInitialInput = memberElement.querySelector('input[name*="[middle_initial]"]');
+            
+            if (firstNameInput && lastNameInput) {
+                // Add event listeners for real-time validation
+                [firstNameInput, lastNameInput, middleInitialInput].forEach(input => {
+                    if (input) {
+                        input.addEventListener('blur', function() {
+                            checkFamilyMemberDuplicate(memberElement);
+                        });
+                    }
+                });
+            }
+        }
+        
+        async function checkFamilyMemberDuplicate(memberElement) {
+            const firstName = memberElement.querySelector('input[name*="[first_name]"]').value.trim();
+            const lastName = memberElement.querySelector('input[name*="[last_name]"]').value.trim();
+            const middleInitial = memberElement.querySelector('input[name*="[middle_initial]"]').value.trim();
+            
+            // Only check if we have minimum required data
+            if (firstName.length >= 2 && lastName.length >= 2) {
+                try {
+                    const formData = new FormData();
+                    formData.append('action', 'check_duplicate');
+                    formData.append('type', 'family_member');
+                    formData.append('first_name', firstName);
+                    formData.append('last_name', lastName);
+                    formData.append('middle_initial', middleInitial);
+                    
+                    const response = await fetch('', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.duplicate) {
+                        showToast(data.message, 'warning');
+                    }
+                } catch (error) {
+                    console.error('Family member validation error:', error);
+                }
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            // Create toast notification
+            const toast = document.createElement('div');
+            
+            // Set colors based on type
+            let bgColor = 'bg-blue-500';
+            let icon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>`;
+            
+            if (type === 'success') {
+                bgColor = 'bg-green-500';
+                icon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>`;
+            } else if (type === 'error') {
+                bgColor = 'bg-red-500';
+                icon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>`;
+            } else if (type === 'warning') {
+                bgColor = 'bg-yellow-500';
+                icon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>`;
+            }
+            
+            toast.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-4 rounded-lg shadow-lg z-50 transform translate-x-full transition-all duration-300 max-w-md`;
+            toast.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0">
+                        ${icon}
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium">${message}</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="flex-shrink-0 ml-2 text-white hover:text-gray-200">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full');
+            }, 100);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        document.body.removeChild(toast);
+                    }
+                }, 300);
+            }, 5000);
+        }
+        
+        function showSuccessNotification() {
+            showToast('Registration submitted successfully! You will receive an email once approved.', 'success');
+        }
+        
+        function updateProgressIndicator(currentStep) {
+            // Reset all steps
+            for (let i = 1; i <= 3; i++) {
+                const stepElement = document.getElementById(`modal-step-${i}`);
+                const stepText = stepElement.parentElement.querySelector('span');
+                const connector = stepElement.parentElement.nextElementSibling;
+                
+                if (i < currentStep) {
+                    // Completed step
+                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gradient-to-br from-green-600 to-emerald-600 text-white shadow-lg';
+                    stepText.className = 'ml-2 text-sm font-semibold text-green-600';
+                    if (connector) connector.className = 'w-12 h-1 bg-gradient-to-r from-green-300 to-green-200 rounded-full';
+                } else if (i === currentStep) {
+                    // Current step
+                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gradient-to-br from-green-600 to-emerald-600 text-white shadow-lg';
+                    stepText.className = 'ml-2 text-sm font-semibold text-gray-900';
+                    if (connector) connector.className = 'w-12 h-1 bg-gradient-to-r from-green-300 to-gray-200 rounded-full';
+                } else {
+                    // Future step
+                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 shadow';
+                    stepText.className = 'ml-2 text-sm font-medium text-gray-500';
+                    if (connector) connector.className = 'w-12 h-1 bg-gray-200 rounded-full';
+                }
+            }
         }
         
         function closeRegisterModal() {
@@ -1180,20 +2045,28 @@ if ($user) {
         document.getElementById('add-family-member').addEventListener('click', function() {
             const container = document.getElementById('family-members-container');
             const newMember = document.createElement('div');
-            newMember.className = 'family-member border rounded p-4 mb-3';
+            newMember.className = 'family-member bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:border-blue-300';
             newMember.innerHTML = `
-                <div class="flex justify-between items-center mb-2">
-                    <h4 class="font-medium text-gray-700">Family Member ${familyMemberCount + 1}</h4>
-                    <button type="button" class="remove-family-member text-red-600 hover:text-red-700 text-sm">Remove</button>
+                <div class="flex justify-between items-center mb-3">
+                    <h4 class="font-semibold text-gray-800 text-lg">Family Member ${familyMemberCount + 1}</h4>
+                    <button type="button" class="remove-family-member text-red-600 hover:text-red-700 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-all duration-200">Remove</button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-sm text-gray-700 mb-1">Full Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][full_name]" class="w-full border rounded px-3 py-2" placeholder="e.g., Juan Dela Cruz" />
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][first_name]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="Juan" />
                     </div>
-                    <div>
-                        <label class="block text-sm text-gray-700 mb-1">Relationship</label>
-                        <select name="family_members[${familyMemberCount}][relationship]" class="w-full border rounded px-3 py-2">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">M.I.</label>
+                        <input type="text" name="family_members[${familyMemberCount}][middle_initial]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="D" maxlength="5" />
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][last_name]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="Dela Cruz" />
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Relationship</label>
+                        <select name="family_members[${familyMemberCount}][relationship]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm">
                             <option value="">Select Relationship</option>
                             <option value="Father">Father</option>
                             <option value="Mother">Mother</option>
@@ -1206,9 +2079,9 @@ if ($user) {
                             <option value="Other">Other</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-sm text-gray-700 mb-1">Date of Birth</label>
-                        <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" class="w-full border rounded px-3 py-2" />
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
+                        <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" />
                     </div>
                 </div>
             `;
@@ -1219,6 +2092,9 @@ if ($user) {
             newMember.querySelector('.remove-family-member').addEventListener('click', function() {
                 newMember.remove();
             });
+            
+            // Add real-time validation for family member fields
+            setupFamilyMemberValidation(newMember);
         });
         
         // Close modal when clicking outside

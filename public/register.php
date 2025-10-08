@@ -1,5 +1,20 @@
-j ll<?php
+<?php
 declare(strict_types=1);
+
+// Force cache refresh
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+// Force redirect to new version if not already there
+// Temporarily disabled to fix Not Found error
+// if (!isset($_GET['v']) || $_GET['v'] !== '3') {
+//     $current_url = $_SERVER['REQUEST_URI'];
+//     $separator = strpos($current_url, '?') !== false ? '&' : '?';
+//     header("Location: " . $current_url . $separator . "v=3");
+//     exit;
+// }
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/email_notifications.php';
 
@@ -17,6 +32,9 @@ $puroks = db()->query('SELECT p.id, p.name, b.name AS barangay, p.barangay_id FR
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
     
+    // Debug: Log all POST data
+    error_log('POST data received: ' . print_r($_POST, true));
+    
     // Sanitize and validate input data
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -27,6 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $purok_id = (int)($_POST['purok_id'] ?? 0);
     $phone = trim($_POST['phone'] ?? '');
     $address = trim($_POST['address'] ?? '');
+    
+    // Debug: Log processed data
+    error_log('Processed data - Email: ' . $email . ', First: ' . $first . ', Last: ' . $last . ', Purok: ' . $purok_id);
     
     // Validation rules
     if (empty($first) || strlen($first) < 2) {
@@ -91,16 +112,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $family_members = [];
     if (isset($_POST['family_members']) && is_array($_POST['family_members'])) {
         foreach ($_POST['family_members'] as $index => $member) {
-            $full_name = trim($member['full_name'] ?? '');
+            $first_name = trim($member['first_name'] ?? '');
+            $middle_initial = trim($member['middle_initial'] ?? '');
+            $last_name = trim($member['last_name'] ?? '');
             $relationship = trim($member['relationship'] ?? '');
             $date_of_birth = $member['date_of_birth'] ?? '';
             
             // Only validate if at least one field is filled
-            if (!empty($full_name) || !empty($relationship) || !empty($date_of_birth)) {
-                if (empty($full_name)) {
-                    $errors[] = "Family member " . ($index + 1) . ": Full name is required.";
-                } elseif (!preg_match('/^[a-zA-Z\s]+$/', $full_name)) {
-                    $errors[] = "Family member " . ($index + 1) . ": Full name can only contain letters and spaces.";
+            if (!empty($first_name) || !empty($last_name) || !empty($relationship) || !empty($date_of_birth)) {
+                if (empty($first_name) || strlen($first_name) < 2) {
+                    $errors[] = "Family member " . ($index + 1) . ": First name must be at least 2 characters long.";
+                } elseif (!preg_match('/^[a-zA-Z\s]+$/', $first_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": First name can only contain letters and spaces.";
+                }
+                
+                if (empty($last_name) || strlen($last_name) < 2) {
+                    $errors[] = "Family member " . ($index + 1) . ": Last name must be at least 2 characters long.";
+                } elseif (!preg_match('/^[a-zA-Z\s]+$/', $last_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Last name can only contain letters and spaces.";
+                }
+                
+                if (!empty($middle_initial) && !preg_match('/^[a-zA-Z\s]+$/', $middle_initial)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Middle initial can only contain letters and spaces.";
+                }
+                
+                if (strlen($middle_initial) > 5) {
+                    $errors[] = "Family member " . ($index + 1) . ": Middle initial must be 5 characters or less.";
                 }
                 
                 if (empty($relationship)) {
@@ -119,7 +156,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (empty($errors)) {
                     $family_members[] = [
-                        'full_name' => $full_name,
+                        'first_name' => $first_name,
+                        'middle_initial' => $middle_initial,
+                        'last_name' => $last_name,
                         'relationship' => $relationship,
                         'date_of_birth' => $date_of_birth
                     ];
@@ -149,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($errors)) {
             try {
+                error_log('Starting database insertion...');
                 $pdo = db();
                 $pdo->beginTransaction();
                 $hash = password_hash($password, PASSWORD_BCRYPT);
@@ -158,11 +198,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insPending->execute([$email, $hash, $first, $last, $middle, $dob, $phone, $address, $barangay_id, $purok_id]);
                 $pendingId = (int)$pdo->lastInsertId();
                 
+                error_log('Pending resident inserted with ID: ' . $pendingId);
+                
                 // Insert family members
                 if (!empty($family_members)) {
-                    $insFamily = $pdo->prepare('INSERT INTO pending_family_members(pending_resident_id, full_name, relationship, date_of_birth) VALUES(?,?,?,?)');
+                    $insFamily = $pdo->prepare('INSERT INTO pending_family_members(pending_resident_id, first_name, middle_initial, last_name, relationship, date_of_birth) VALUES(?,?,?,?,?,?)');
                     foreach ($family_members as $member) {
-                        $insFamily->execute([$pendingId, $member['full_name'], $member['relationship'], $member['date_of_birth']]);
+                        $insFamily->execute([$pendingId, $member['first_name'], $member['middle_initial'], $member['last_name'], $member['relationship'], $member['date_of_birth']]);
                     }
                 }
                 
@@ -170,15 +212,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Notify assigned BHW about new registration
                 try {
+                    error_log('Looking for BHW for purok_id: ' . $purok_id);
                     $bhwStmt = db()->prepare('SELECT u.email, u.first_name, u.last_name, p.name as purok_name FROM users u JOIN puroks p ON p.id = u.purok_id WHERE u.role = "bhw" AND u.purok_id = ? LIMIT 1');
                     $bhwStmt->execute([$purok_id]);
                     $bhw = $bhwStmt->fetch();
                     
                     if ($bhw) {
+                        error_log('BHW found: ' . $bhw['email']);
                         $bhwName = format_full_name($bhw['first_name'] ?? '', $bhw['last_name'] ?? '', $bhw['middle_initial'] ?? null);
                         $residentName = format_full_name($first, $last, $middle);
                         $success = send_new_registration_notification_to_bhw($bhw['email'], $bhwName, $residentName, $bhw['purok_name']);
+                        error_log('Email sent successfully: ' . ($success ? 'Yes' : 'No'));
                         log_email_notification(0, 'new_registration', 'New Registration', 'New resident registration notification sent to BHW', $success);
+                    } else {
+                        error_log('No BHW found for purok_id: ' . $purok_id);
                     }
                 } catch (Throwable $e) {
                     // Log error silently
@@ -190,6 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $e) {
                 if (isset($pdo)) $pdo->rollBack();
                 error_log('Registration failed: ' . $e->getMessage());
+                error_log('Stack trace: ' . $e->getTraceAsString());
                 set_flash('Registration failed due to a system error. Please try again later.','error');
                 redirect_to('../index.php?modal=register');
             }
@@ -198,6 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // If there are validation errors, display them
     if (!empty($errors)) {
+        error_log('Validation errors: ' . print_r($errors, true));
         $errorMessage = implode('<br>', $errors);
         set_flash($errorMessage, 'error');
         redirect_to('../index.php?modal=register');
@@ -209,12 +258,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Register · MediTrack</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Register · MediTrack - UPDATED VERSION 4 - <?php echo date('H:i:s'); ?></title>
+    <!-- Updated: <?php echo date('Y-m-d H:i:s'); ?> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
+        // Force refresh if this is an old cached version
+        // Temporarily disabled to fix Not Found error
+        // if (!window.location.href.includes('v=3')) {
+        //     window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'v=3';
+        // }
+        
         tailwind.config = {
             theme: {
                 extend: {
@@ -283,6 +342,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">Create Resident Account</h1>
                 <p class="text-gray-600">Join MediTrack to manage your medicine requests</p>
+                <div class="mt-4 p-4 bg-red-100 border-2 border-red-400 rounded-lg">
+                    <p class="text-red-800 font-bold text-lg">🚨 UPDATED VERSION 4: Family members now use separate First Name, M.I., and Last Name fields!</p>
+                    <p class="text-red-700 text-sm mt-1">If you still see "Full Name", please clear your browser cache or use Ctrl+F5</p>
+                    <p class="text-red-700 text-sm mt-1 font-bold">THIS IS THE UPDATED VERSION - NO MORE REDIRECTS!</p>
+                </div>
             </div>
 
             <!-- Progress Steps -->
@@ -422,11 +486,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </svg>
                                 </button>
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div>
-                                    <label class="form-label">Full Name</label>
-                                    <input type="text" name="family_members[0][full_name]" class="form-input" placeholder="e.g., Juan Dela Cruz" />
-                                    <div class="error-message" id="family_member_0_full_name_error"></div>
+                                    <label class="form-label">First Name</label>
+                                    <input type="text" name="family_members[0][first_name]" class="form-input" placeholder="Juan" />
+                                    <div class="error-message" id="family_member_0_first_name_error"></div>
+                                </div>
+                                <div>
+                                    <label class="form-label">M.I.</label>
+                                    <input type="text" name="family_members[0][middle_initial]" class="form-input" placeholder="D" maxlength="5" />
+                                    <div class="error-message" id="family_member_0_middle_initial_error"></div>
+                                </div>
+                                <div>
+                                    <label class="form-label">Last Name</label>
+                                    <input type="text" name="family_members[0][last_name]" class="form-input" placeholder="Dela Cruz" />
+                                    <div class="error-message" id="family_member_0_last_name_error"></div>
                                 </div>
                                 <div>
                                     <label class="form-label">Relationship</label>
@@ -810,11 +884,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             let reviewHTML = '';
             
             familyMembers.forEach((member, index) => {
-                const fullName = member.querySelector('input[name*="[full_name]"]').value.trim();
+                const firstName = member.querySelector('input[name*="[first_name]"]').value.trim();
+                const middleInitial = member.querySelector('input[name*="[middle_initial]"]').value.trim();
+                const lastName = member.querySelector('input[name*="[last_name]"]').value.trim();
                 const relationship = member.querySelector('select[name*="[relationship]"]').value;
                 const dob = member.querySelector('input[name*="[date_of_birth]"]').value;
                 
-                if (fullName || relationship || dob) {
+                // Format full name
+                let fullName = firstName;
+                if (middleInitial) fullName += ' ' + middleInitial;
+                if (lastName) fullName += ' ' + lastName;
+                
+                if (firstName || lastName || relationship || dob) {
                     hasFamilyMembers = true;
                     reviewHTML += `
                         <div class="border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
@@ -874,11 +955,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </svg>
                     </button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][full_name]" class="form-input" placeholder="e.g., Juan Dela Cruz" />
-                        <div class="error-message" id="family_member_${familyMemberCount}_full_name_error"></div>
+                        <label class="form-label">First Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][first_name]" class="form-input" placeholder="Juan" />
+                        <div class="error-message" id="family_member_${familyMemberCount}_first_name_error"></div>
+                    </div>
+                    <div>
+                        <label class="form-label">M.I.</label>
+                        <input type="text" name="family_members[${familyMemberCount}][middle_initial]" class="form-input" placeholder="D" maxlength="5" />
+                        <div class="error-message" id="family_member_${familyMemberCount}_middle_initial_error"></div>
+                    </div>
+                    <div>
+                        <label class="form-label">Last Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][last_name]" class="form-input" placeholder="Dela Cruz" />
+                        <div class="error-message" id="family_member_${familyMemberCount}_last_name_error"></div>
                     </div>
                     <div>
                         <label class="form-label">Relationship</label>

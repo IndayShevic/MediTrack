@@ -5,6 +5,11 @@ require_once __DIR__ . '/../../config/email_notifications.php';
 require_auth(['bhw']);
 
 $user = current_user();
+$bhw_purok_id = $user['purok_id'] ?? 0;
+
+// Get notification counts for sidebar
+require_once __DIR__ . '/includes/sidebar_counts.php';
+$notification_counts = get_bhw_notification_counts($bhw_purok_id);
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -281,6 +286,51 @@ $user_data = $stmt->fetch();
             background-clip: text;
         }
     </style>
+    <style>
+        .notification-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.25rem;
+            height: 1.25rem;
+            padding: 0 0.375rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-radius: 9999px;
+            margin-left: auto;
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-badge {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .sidebar-nav a {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: transform, background-color;
+        }
+        
+        .sidebar-nav a:active {
+            transform: scale(0.98);
+        }
+        
+        /* Optimize rendering */
+        .sidebar {
+            will-change: scroll-position;
+        }
+        
+        /* Preload hover states */
+        .sidebar-nav a:hover {
+            transform: translateX(2px);
+        }
+    </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
     <!-- Sidebar -->
@@ -309,7 +359,10 @@ $user_data = $stmt->fetch();
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                 </svg>
-                Medicine Requests
+                <span style="flex: 1;">Medicine Requests</span>
+                <?php if ($notification_counts['pending_requests'] > 0): ?>
+                    <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
+                <?php endif; ?>
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,13 +380,25 @@ $user_data = $stmt->fetch();
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-                Pending Registrations
+                <span style="flex: 1;">Pending Registrations</span>
+                <?php if ($notification_counts['pending_registrations'] > 0): ?>
+                    <span class="notification-badge"><?php echo $notification_counts['pending_registrations']; ?></span>
+                <?php endif; ?>
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 Statistics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_family_additions.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <span style="flex: 1;">Pending Family Additions</span>
+                <?php if (!empty($notification_counts['pending_family_additions'])): ?>
+                    <span class="notification-badge"><?php echo (int)$notification_counts['pending_family_additions']; ?></span>
+                <?php endif; ?>
             </a>
             <a class="active" href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

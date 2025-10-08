@@ -17,24 +17,17 @@ $rows = db()->prepare('
         r.status, 
         r.requested_for,
         r.patient_name,
-        r.patient_age,
+        r.patient_date_of_birth,
         r.relationship,
         r.reason,
         r.rejection_reason,
         r.created_at,
-        r.approved_at,
-        r.rejected_at,
+        r.updated_at,
         bhw.first_name AS bhw_first_name,
-        bhw.last_name AS bhw_last_name,
-        approver.first_name AS approver_first_name,
-        approver.last_name AS approver_last_name,
-        rejector.first_name AS rejector_first_name,
-        rejector.last_name AS rejector_last_name
+        bhw.last_name AS bhw_last_name
     FROM requests r 
     JOIN medicines m ON m.id = r.medicine_id 
     LEFT JOIN users bhw ON bhw.id = r.bhw_id
-    LEFT JOIN users approver ON approver.id = r.approved_by
-    LEFT JOIN users rejector ON rejector.id = r.rejected_by
     WHERE r.resident_id = ? 
     ORDER BY r.id DESC
 ');
@@ -51,6 +44,7 @@ $requests = $rows->fetchAll();
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -220,6 +214,18 @@ $requests = $rows->fetchAll();
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                 </svg>
                 Allocations
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/family_members.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Family Members
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                Profile
             </a>
             <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,17 +505,32 @@ $requests = $rows->fetchAll();
     </main>
 
     <!-- Request Details Modal -->
-    <div id="requestDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div class="p-6">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-semibold text-gray-800">Request Details</h2>
-                    <button onclick="closeRequestDetails()" class="text-gray-400 hover:text-gray-600">
+    <div id="requestDetailsModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
+            <!-- Header with gradient background -->
+            <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-t-3xl p-6 text-white">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-white/20 p-3 rounded-2xl">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold">Request Details</h2>
+                            <p class="text-blue-100 text-sm">Medicine request information</p>
+                        </div>
+                    </div>
+                    <button onclick="closeRequestDetails()" class="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all duration-200">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
+            </div>
+            
+            <!-- Content -->
+            <div class="p-8">
                 
                 <div id="requestDetailsContent">
                     <!-- Content will be populated by JavaScript -->
@@ -519,6 +540,19 @@ $requests = $rows->fetchAll();
     </div>
 
     <script>
+        // Calculate age from birthdate
+        function calculateAge(birthdate) {
+            if (!birthdate) return '';
+            const today = new Date();
+            const birth = new Date(birthdate);
+            let age = today.getFullYear() - birth.getFullYear();
+            const monthDiff = today.getMonth() - birth.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
@@ -675,43 +709,84 @@ $requests = $rows->fetchAll();
             const modal = document.getElementById('requestDetailsModal');
             const content = document.getElementById('requestDetailsContent');
             
-            // Build the content
+            // Build the content with enhanced design
             let html = `
-                <div class="space-y-6">
-                    <!-- Request Info -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Request ID</label>
-                            <div class="text-lg font-mono text-gray-600">#${request.id}</div>
+                <div class="space-y-8">
+                    <!-- Request Info Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Request ID Card -->
+                        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-100">
+                            <div class="flex items-center space-x-3 mb-3">
+                                <div class="bg-blue-500 p-2 rounded-xl">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                                    </svg>
+                                </div>
+                                <label class="text-sm font-semibold text-blue-700 uppercase tracking-wide">Request ID</label>
+                            </div>
+                            <div class="text-2xl font-bold text-blue-900 font-mono">#${request.id}</div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+
+                        <!-- Status Card -->
+                        <div class="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-2xl border border-orange-100">
+                            <div class="flex items-center space-x-3 mb-3">
+                                <div class="bg-orange-500 p-2 rounded-xl">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <label class="text-sm font-semibold text-orange-700 uppercase tracking-wide">Status</label>
+                            </div>
                             <div class="mt-1">
                                 ${getStatusBadge(request.status)}
                             </div>
                         </div>
                     </div>
 
-                    <!-- Medicine Info -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Medicine</label>
-                        <div class="text-lg font-semibold text-gray-900">${request.medicine}</div>
+                    <!-- Medicine Info Card -->
+                    <div class="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-2xl border border-purple-100">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-purple-500 p-3 rounded-xl">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                </svg>
+                            </div>
+                            <label class="text-sm font-semibold text-purple-700 uppercase tracking-wide">Medicine</label>
+                        </div>
+                        <div class="text-2xl font-bold text-purple-900">${request.medicine}</div>
                     </div>
 
-                    <!-- Request Details -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Requested For</label>
-                            <div class="text-gray-900">
+                    <!-- Request Details Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Requested For Card -->
+                        <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-100">
+                            <div class="flex items-center space-x-3 mb-3">
+                                <div class="bg-green-500 p-2 rounded-xl">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <label class="text-sm font-semibold text-green-700 uppercase tracking-wide">Requested For</label>
+                            </div>
+                            <div class="text-lg font-semibold">
                                 ${request.requested_for === 'self' ? 
-                                    '<span class="text-blue-600 font-medium">Self</span>' : 
-                                    '<span class="text-purple-600 font-medium">Family Member</span>'
+                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>Self</span>' : 
+                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Family Member</span>'
                                 }
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Created</label>
-                            <div class="text-gray-900">${new Date(request.created_at).toLocaleDateString('en-US', { 
+
+                        <!-- Created Date Card -->
+                        <div class="bg-gradient-to-br from-gray-50 to-slate-50 p-6 rounded-2xl border border-gray-100">
+                            <div class="flex items-center space-x-3 mb-3">
+                                <div class="bg-gray-500 p-2 rounded-xl">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <label class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Created</label>
+                            </div>
+                            <div class="text-lg font-semibold text-gray-900">${new Date(request.created_at).toLocaleDateString('en-US', { 
                                 year: 'numeric', 
                                 month: 'short', 
                                 day: 'numeric',
@@ -722,9 +797,16 @@ $requests = $rows->fetchAll();
                     </div>
 
                     ${request.requested_for === 'family' && request.patient_name ? `
-                    <!-- Patient Info -->
-                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold text-purple-900 mb-3">Patient Information</h3>
+                    <!-- Patient Info Card -->
+                    <div class="bg-gradient-to-br from-purple-50 to-violet-50 p-6 rounded-2xl border border-purple-100">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-purple-500 p-3 rounded-xl">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-purple-900">Patient Information</h3>
+                        </div>
                         <div class="grid grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-purple-700 mb-1">Name</label>
@@ -732,7 +814,7 @@ $requests = $rows->fetchAll();
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-purple-700 mb-1">Age</label>
-                                <div class="text-purple-900">${request.patient_age || '-'}</div>
+                                <div class="text-purple-900">${request.patient_date_of_birth ? calculateAge(request.patient_date_of_birth) + ' years' : '-'}</div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-purple-700 mb-1">Relationship</label>
@@ -742,29 +824,50 @@ $requests = $rows->fetchAll();
                     </div>
                     ` : ''}
 
-                    <!-- Reason -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Reason for Request</label>
-                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                            <p class="text-gray-900">${request.reason || 'No reason provided'}</p>
+                    <!-- Reason Card -->
+                    <div class="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-2xl border border-indigo-100">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-indigo-500 p-3 rounded-xl">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <label class="text-sm font-semibold text-indigo-700 uppercase tracking-wide">Reason for Request</label>
+                        </div>
+                        <div class="bg-white/60 border border-indigo-200 rounded-xl p-4">
+                            <p class="text-indigo-900 text-lg leading-relaxed">${request.reason || 'No reason provided'}</p>
                         </div>
                     </div>
 
-                    <!-- BHW Assignment -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Assigned BHW</label>
-                        <div class="text-gray-900">
+                    <!-- BHW Assignment Card -->
+                    <div class="bg-gradient-to-br from-teal-50 to-cyan-50 p-6 rounded-2xl border border-teal-100">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-teal-500 p-3 rounded-xl">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                            </div>
+                            <label class="text-sm font-semibold text-teal-700 uppercase tracking-wide">Assigned BHW</label>
+                        </div>
+                        <div class="text-xl font-semibold text-teal-900">
                             ${request.bhw_first_name && request.bhw_last_name ? 
-                                `${request.bhw_first_name} ${request.bhw_last_name}` : 
-                                '<span class="text-gray-400">Not assigned</span>'
+                                `<span class="inline-flex items-center px-4 py-2 bg-teal-100 text-teal-800 rounded-full"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>${request.bhw_first_name} ${request.bhw_last_name}</span>` : 
+                                '<span class="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-600 rounded-full"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Not assigned</span>'
                             }
                         </div>
                     </div>
 
                     ${request.status === 'approved' && request.approver_first_name ? `
-                    <!-- Approval Info -->
-                    <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold text-green-900 mb-3">Approval Information</h3>
+                    <!-- Approval Info Card -->
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-100">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-green-500 p-3 rounded-xl">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-green-900">Approval Information</h3>
+                        </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-green-700 mb-1">Approved By</label>
@@ -914,6 +1017,7 @@ $requests = $rows->fetchAll();
             animation: shimmer 1.5s infinite;
         }
     </style>
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

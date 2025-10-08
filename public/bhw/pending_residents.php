@@ -7,13 +7,22 @@ require_auth(['bhw']);
 $user = current_user();
 $bhw_purok_id = $user['purok_id'] ?? 0;
 
+// Get notification counts for sidebar
+require_once __DIR__ . '/includes/sidebar_counts.php';
+$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+
 // Handle approval/rejection
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    error_log('BHW POST data received: ' . print_r($_POST, true));
+    file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW POST data: ' . print_r($_POST, true) . "\n", FILE_APPEND);
     $action = $_POST['action'] ?? '';
     $pending_id = (int)($_POST['pending_id'] ?? 0);
+    error_log('BHW Action: ' . $action . ', Pending ID: ' . $pending_id);
+    file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Action: ' . $action . ', Pending ID: ' . $pending_id . "\n", FILE_APPEND);
     
     if ($action === 'approve' && $pending_id > 0) {
         try {
+            error_log('BHW Approval: Starting approval process for pending_id: ' . $pending_id);
             $pdo = db();
             $pdo->beginTransaction();
             
@@ -39,8 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $familyMembers = $familyStmt->fetchAll();
                 
                 foreach ($familyMembers as $member) {
-                    $insFamily = $pdo->prepare('INSERT INTO family_members(resident_id, full_name, relationship, date_of_birth) VALUES(?,?,?,?)');
-                    $insFamily->execute([$residentId, $member['full_name'], $member['relationship'], $member['date_of_birth']]);
+                    $insFamily = $pdo->prepare('INSERT INTO family_members(resident_id, first_name, middle_initial, last_name, relationship, date_of_birth) VALUES(?,?,?,?,?,?)');
+                    $insFamily->execute([$residentId, $member['first_name'], $member['middle_initial'], $member['last_name'], $member['relationship'], $member['date_of_birth']]);
                 }
                 
                 // Update pending status
@@ -52,14 +61,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_email_notification($userId, 'registration_approval', 'Registration Approved', 'Resident registration approved', $success);
                 
                 $pdo->commit();
+                error_log('BHW Approval: Successfully approved pending_id: ' . $pending_id);
+                file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Approval: Successfully approved pending_id: ' . $pending_id . "\n", FILE_APPEND);
                 set_flash('Resident registration approved successfully.', 'success');
             }
         } catch (Throwable $e) {
             if (isset($pdo)) $pdo->rollBack();
-            set_flash('Failed to approve registration.', 'error');
+            error_log('BHW Approval Error: ' . $e->getMessage());
+            file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Approval Error: ' . $e->getMessage() . "\n", FILE_APPEND);
+            set_flash('Failed to approve registration: ' . $e->getMessage(), 'error');
         }
     } elseif ($action === 'reject' && $pending_id > 0) {
         $reason = trim($_POST['rejection_reason'] ?? '');
+        error_log('BHW Rejection: Starting rejection process for pending_id: ' . $pending_id . ', reason: ' . $reason);
         try {
             // Get pending resident data for email
             $stmt = db()->prepare('SELECT * FROM pending_residents WHERE id = ? AND purok_id = ?');
@@ -71,7 +85,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$user['id'], $reason, $pending_id, $bhw_purok_id]);
                 
                 // Send rejection email to resident
+                error_log('BHW Rejection: Sending email to ' . $pending['email'] . ' with reason: ' . $reason);
+                file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Rejection: Sending email to ' . $pending['email'] . ' with reason: ' . $reason . "\n", FILE_APPEND);
                 $success = send_registration_rejection_email($pending['email'], format_full_name($pending['first_name'], $pending['last_name'], $pending['middle_initial'] ?? null), $reason);
+                error_log('BHW Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No'));
+                file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No') . "\n", FILE_APPEND);
                 log_email_notification(0, 'registration_rejection', 'Registration Rejected', 'Resident registration rejected: ' . $reason, $success);
                 
                 set_flash('Resident registration rejected.', 'success');
@@ -284,6 +302,26 @@ try {
             from { width: 100%; }
             to { width: 0%; }
         }
+        .notification-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.25rem;
+            height: 1.25rem;
+            padding: 0 0.375rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-radius: 9999px;
+            margin-left: auto;
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-badge {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
@@ -313,7 +351,10 @@ try {
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                 </svg>
-                Medicine Requests
+                <span style="flex: 1;">Medicine Requests</span>
+                <?php if ($notification_counts['pending_requests'] > 0): ?>
+                    <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
+                <?php endif; ?>
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -331,7 +372,19 @@ try {
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-                Pending Registrations
+                <span style="flex: 1;">Pending Registrations</span>
+                <?php if ($notification_counts['pending_registrations'] > 0): ?>
+                    <span class="notification-badge"><?php echo $notification_counts['pending_registrations']; ?></span>
+                <?php endif; ?>
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_family_additions.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <span style="flex: 1;">Pending Family Additions</span>
+                <?php if (!empty($notification_counts['pending_family_additions'])): ?>
+                    <span class="notification-badge"><?php echo (int)$notification_counts['pending_family_additions']; ?></span>
+                <?php endif; ?>
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,26 +863,46 @@ try {
         }
 
         function showRejectModal(pendingId) {
+            console.log('Showing reject modal for pending ID:', pendingId);
             document.getElementById('rejectPendingId').value = pendingId;
             const modal = document.getElementById('rejectModal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            
-            // Focus on textarea
-            setTimeout(() => {
-                const textarea = modal.querySelector('textarea');
-                if (textarea) textarea.focus();
-            }, 100);
+            if (modal) {
+                // Remove any conflicting classes and ensure proper display
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100%';
+                modal.style.height = '100%';
+                modal.style.zIndex = '9999';
+                modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                
+                console.log('Reject modal shown');
+                
+                // Focus on textarea
+                setTimeout(() => {
+                    const textarea = modal.querySelector('textarea');
+                    if (textarea) textarea.focus();
+                }, 100);
+            } else {
+                console.error('Reject modal not found!');
+                alert('Reject modal not found!');
+            }
         }
         
         function hideRejectModal() {
             const modal = document.getElementById('rejectModal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            
-            // Clear form
-            const form = document.getElementById('rejectForm');
-            if (form) form.reset();
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+                
+                // Clear form
+                const form = document.getElementById('rejectForm');
+                if (form) form.reset();
+            }
         }
         
         // Close modal when clicking outside
@@ -851,8 +924,10 @@ try {
             const forms = document.querySelectorAll('form');
             forms.forEach(form => {
                 form.addEventListener('submit', function(e) {
+                    console.log('Form submission detected');
                     const submitBtn = form.querySelector('button[type="submit"]');
                     const action = form.querySelector('input[name="action"]').value;
+                    console.log('Form action:', action);
                     
                     if (action === 'approve') {
                         e.preventDefault();

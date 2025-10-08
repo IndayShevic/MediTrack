@@ -54,6 +54,7 @@ function mailer(): PHPMailer {
 
 function send_email(string $toEmail, string $toName, string $subject, string $html): bool {
     try {
+        // First try SMTP
         $mail = mailer();
         if ((getenv('SMTP_DEBUG') ?: '') === '1') {
             $mail->SMTPDebug = 2; // verbose debug output in server logs
@@ -66,14 +67,33 @@ function send_email(string $toEmail, string $toName, string $subject, string $ht
         $ok = $mail->send();
         if ($ok) {
             log_email($toEmail, $subject, $html, 'sent', null);
+            return true;
         } else {
             log_email($toEmail, $subject, $html, 'failed', $mail->ErrorInfo ?: 'send() returned false');
         }
-        return $ok;
     } catch (Throwable $e) {
         log_email($toEmail, $subject, $html, 'failed', $e->getMessage());
-        return false;
     }
+    
+    // Fallback: Try PHP's built-in mail() function
+    try {
+        $headers = "MIME-Version: 1.0\r\n";
+        $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $headers .= "From: MediTrack <noreply@meditrack.local>\r\n";
+        $headers .= "Reply-To: noreply@meditrack.local\r\n";
+        
+        $success = mail($toEmail, $subject, $html, $headers);
+        if ($success) {
+            log_email($toEmail, $subject, $html, 'sent (fallback)', null);
+            return true;
+        } else {
+            log_email($toEmail, $subject, $html, 'failed (fallback)', 'PHP mail() function failed');
+        }
+    } catch (Throwable $e) {
+        log_email($toEmail, $subject, $html, 'failed (fallback)', $e->getMessage());
+    }
+    
+    return false;
 }
 
 function log_email(string $recipient, string $subject, string $body, string $status, ?string $error): void {

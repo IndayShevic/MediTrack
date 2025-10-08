@@ -5,16 +5,27 @@ require_auth(['resident']);
 $user = current_user();
 
 // Get medicines with their stock and expiry information
+// Only show medicines that have at least one batch (even if expired or out of stock)
+// Calculate available stock (excluding expired/out of stock batches)
 $meds = db()->query('
     SELECT 
         m.id, 
         m.name, 
         m.description, 
         m.image_path,
-        COALESCE(SUM(mb.quantity_available), 0) as total_stock,
-        MIN(mb.expiry_date) as earliest_expiry
+        COALESCE(SUM(CASE 
+            WHEN mb.quantity_available > 0 AND mb.expiry_date > CURDATE() 
+            THEN mb.quantity_available 
+            ELSE 0 
+        END), 0) as total_stock,
+        MIN(CASE 
+            WHEN mb.quantity_available > 0 AND mb.expiry_date > CURDATE() 
+            THEN mb.expiry_date 
+            ELSE NULL 
+        END) as earliest_expiry,
+        COUNT(mb.id) as total_batches
     FROM medicines m 
-    LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id AND mb.quantity_available > 0 AND mb.expiry_date > CURDATE()
+    INNER JOIN medicine_batches mb ON m.id = mb.medicine_id
     WHERE m.is_active = 1 
     GROUP BY m.id, m.name, m.description, m.image_path
     ORDER BY m.name
@@ -30,6 +41,7 @@ $meds = db()->query('
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -199,6 +211,18 @@ $meds = db()->query('
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                 </svg>
                 Allocations
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/family_members.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Family Members
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                Profile
             </a>
             <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -407,20 +431,21 @@ $meds = db()->query('
                         <!-- Action Button -->
                             <div class="flex justify-end">
                             <?php if ($isAvailable): ?>
-                                <a href="<?php echo htmlspecialchars(base_url('resident/request_new.php?medicine_id=' . (int)$m['id'])); ?>" 
-                                   class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <button onclick="openRequestModal(<?php echo (int)$m['id']; ?>, '<?php echo htmlspecialchars($m['name']); ?>')" 
+                                        class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                     </svg>
                                     Request Medicine
-                                </a>
+                                </button>
                             <?php else: ?>
                                 <button class="inline-flex items-center px-6 py-3 bg-gray-300 text-gray-500 font-medium rounded-xl cursor-not-allowed opacity-60" 
-                                        disabled title="<?php echo (int)$m['total_stock'] === 0 ? 'Out of stock' : 'Expired'; ?>">
+                                        disabled 
+                                        title="Out of stock or all batches expired">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                     </svg>
-                                    <?php echo (int)$m['total_stock'] === 0 ? 'Out of Stock' : 'Expired'; ?>
+                                    Unavailable
                                 </button>
                             <?php endif; ?>
                         </div>
@@ -677,7 +702,484 @@ $meds = db()->query('
             background-size: 200px 100%;
             animation: shimmer 1.5s infinite;
         }
+
+        /* Ensure sidebar stays fixed when scrolling */
+        body {
+            overflow-x: hidden !important;
+        }
+        
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 1000 !important;
+            overflow-y: auto !important;
+            transform: none !important;
+        }
+
+        /* Ensure main content has proper margin and doesn't affect sidebar */
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+            position: relative !important;
+            min-height: 100vh !important;
+        }
+
+        /* Prevent any container from affecting sidebar position */
+        html, body {
+            position: relative !important;
+        }
+        
+        /* Ensure sidebar brand and nav stay in place */
+        .sidebar-brand {
+            position: relative !important;
+        }
+        
+        .sidebar-nav {
+            position: relative !important;
+        }
+
+        /* Toast Notification Styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100000;
+            min-width: 300px;
+            max-width: 400px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .toast.error {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .toast.warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+
+        .toast.info {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+        }
+
+        .toast-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin: 0 0 2px 0;
+        }
+
+        .toast-message {
+            font-size: 13px;
+            margin: 0;
+            opacity: 0.9;
+        }
     </style>
+
+    <!-- Request Medicine Modal -->
+    <div id="requestModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 99999; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px);">
+        <div style="background: white; border-radius: 24px; box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.25); max-width: 700px; width: 100%; max-height: 95vh; overflow-y: auto; border: 1px solid rgba(229, 231, 235, 0.8);">
+            <div style="padding: 40px;">
+                <!-- Modal Header -->
+                <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);">
+                            <svg style="width: 28px; height: 28px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 8px 0; letter-spacing: -0.025em;">Request Medicine</h3>
+                            <p style="color: #6b7280; margin: 0; font-size: 16px; line-height: 1.5;">Submit a request for medicine with proof of need</p>
+                        </div>
+                    </div>
+                    <button onclick="closeRequestModal()" style="color: #9ca3af; background: #f9fafb; border: none; cursor: pointer; padding: 12px; border-radius: 12px; transition: all 0.2s ease;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#6b7280';" onmouseout="this.style.background='#f9fafb'; this.style.color='#9ca3af';">
+                        <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Modal Content -->
+                <form id="requestForm" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 32px;">
+                    <input type="hidden" name="medicine_id" id="modalMedicineId" />
+                    
+                    <!-- Medicine Info -->
+                    <div style="padding: 20px; background: linear-gradient(135deg, #dbeafe, #e0e7ff); border: 1px solid #c7d2fe; border-radius: 16px;">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <svg style="width: 24px; height: 24px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 style="font-size: 20px; font-weight: 600; color: #1e40af; margin: 0 0 4px 0;" id="modalMedicineName">Medicine Name</h4>
+                                <p style="color: #3b82f6; margin: 0; font-size: 14px;">Request this medicine</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Requested For -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Requested For</label>
+                            <select name="requested_for" id="reqFor" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;" onchange="toggleFamilyFields()">
+                                <!-- Options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                        
+                        <div id="familyMemberSelect" style="display: none; flex-direction: column; gap: 12px;">
+                            <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Family Member</label>
+                            <select name="family_member_id" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;">
+                                <option value="">Choose a family member</option>
+                                <!-- Family members will be populated by JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Family Fields (hidden by default) -->
+                    <div id="familyFields" style="display: none; flex-direction: column; gap: 16px;">
+                        <h4 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0;">Patient Information</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Patient Name</label>
+                                <input name="patient_name" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" placeholder="Enter patient name" />
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Date of Birth</label>
+                                <input name="patient_date_of_birth" type="date" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" />
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Relationship</label>
+                                <input name="relationship" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" placeholder="e.g., Father, Mother" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reason for Request -->
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Reason for Request</label>
+                        <textarea name="reason" rows="4" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; resize: none; min-height: 100px;" placeholder="Please explain why you need this medicine..."></textarea>
+                    </div>
+
+                    <!-- Proof of Need -->
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">
+                            Proof of Need <span style="color: #ef4444;">*</span>
+                        </label>
+                        <div style="border: 2px dashed #d1d5db; border-radius: 16px; padding: 32px; text-align: center; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.borderColor='#3b82f6'; this.style.backgroundColor='#f8fafc';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='transparent';">
+                            <input type="file" name="proof" accept="image/*,application/pdf" required style="display: none;" id="proofFile" />
+                            <label for="proofFile" style="cursor: pointer;">
+                                <svg style="width: 48px; height: 48px; color: #9ca3af; margin: 0 auto 16px auto;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                                <p style="font-size: 16px; color: #6b7280; margin: 0 0 8px 0;">Click to upload or drag and drop</p>
+                                <p style="font-size: 14px; color: #9ca3af; margin: 0;">JPG, PNG, or PDF (Max 10MB)</p>
+                            </label>
+                        </div>
+                        <p style="font-size: 12px; color: #6b7280; margin: 0;">Upload temperature reading, medical certificate, or other proof of illness</p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="display: flex; justify-content: flex-end; gap: 16px; padding-top: 24px; border-top: 1px solid #f3f4f6; margin-top: 8px;">
+                        <button type="button" onclick="closeRequestModal()" style="padding: 16px 32px; border: 2px solid #e5e7eb; color: #6b7280; font-weight: 600; border-radius: 16px; background: white; cursor: pointer; transition: all 0.2s ease; font-size: 16px;">
+                            Cancel
+                        </button>
+                        <button type="submit" style="padding: 16px 32px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; font-weight: 600; border-radius: 16px; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 16px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); display: flex; align-items: center; gap: 8px;">
+                            <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Submit Request
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Resident and family members data (will be populated from PHP)
+        const residentData = <?php 
+            $residentData = ['resident' => null, 'familyMembers' => []];
+            try {
+                $residentRow = db()->prepare('SELECT id, first_name, middle_initial, last_name FROM residents WHERE user_id = ? LIMIT 1');
+                $residentRow->execute([$user['id']]);
+                $resident = $residentRow->fetch();
+                if ($resident) {
+                    $residentData['resident'] = $resident;
+                    $stmt = db()->prepare('SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth FROM family_members WHERE resident_id = ? ORDER BY first_name');
+                    $stmt->execute([$resident['id']]);
+                    $residentData['familyMembers'] = $stmt->fetchAll();
+                }
+            } catch (Throwable $e) {
+                $residentData = ['resident' => null, 'familyMembers' => []];
+            }
+            echo json_encode($residentData);
+        ?>;
+
+        function openRequestModal(medicineId, medicineName) {
+            const modal = document.getElementById('requestModal');
+            const medicineNameElement = document.getElementById('modalMedicineName');
+            const medicineIdInput = document.getElementById('modalMedicineId');
+            
+            // Set medicine info
+            medicineNameElement.textContent = medicineName;
+            medicineIdInput.value = medicineId;
+            
+            // Populate "Requested For" dropdown with resident and family member names
+            const requestedForSelect = document.getElementById('reqFor');
+            requestedForSelect.innerHTML = '';
+            
+            // Add resident (self) as first option
+            if (residentData.resident) {
+                const residentName = `${residentData.resident.first_name} ${residentData.resident.middle_initial ? residentData.resident.middle_initial + '. ' : ''}${residentData.resident.last_name}`;
+                const residentOption = document.createElement('option');
+                residentOption.value = 'self';
+                residentOption.textContent = residentName;
+                requestedForSelect.appendChild(residentOption);
+            }
+            
+            // Add family members
+            residentData.familyMembers.forEach(member => {
+                const fullName = `${member.first_name} ${member.middle_initial ? member.middle_initial + '. ' : ''}${member.last_name}`;
+                const option = document.createElement('option');
+                option.value = `family_${member.id}`;
+                option.textContent = fullName;
+                requestedForSelect.appendChild(option);
+            });
+            
+            // Populate family members dropdown (for the separate family member select)
+            const familySelect = document.querySelector('#familyMemberSelect select');
+            familySelect.innerHTML = '<option value="">Choose a family member</option>';
+            
+            residentData.familyMembers.forEach(member => {
+                const fullName = `${member.first_name} ${member.middle_initial ? member.middle_initial + '. ' : ''}${member.last_name}`;
+                const option = document.createElement('option');
+                option.value = member.id;
+                option.textContent = `${fullName} (${member.relationship}, DOB: ${member.date_of_birth})`;
+                familySelect.appendChild(option);
+            });
+            
+            // Show modal
+            modal.style.display = 'flex';
+        }
+
+        function closeRequestModal() {
+            const modal = document.getElementById('requestModal');
+            modal.style.display = 'none';
+            
+            // Reset form
+            document.getElementById('requestForm').reset();
+            document.getElementById('familyFields').style.display = 'none';
+            document.getElementById('familyMemberSelect').style.display = 'none';
+        }
+
+        function toggleFamilyFields() {
+            const reqFor = document.getElementById('reqFor').value;
+            const familyFields = document.getElementById('familyFields');
+            const familyMemberSelect = document.getElementById('familyMemberSelect');
+            
+            if (reqFor.startsWith('family_')) {
+                // Family member selected - show family fields
+                familyFields.style.display = 'flex';
+                familyMemberSelect.style.display = 'flex';
+                
+                // Set the family member ID in the hidden field
+                const familyMemberId = reqFor.replace('family_', '');
+                const familySelect = document.querySelector('#familyMemberSelect select');
+                familySelect.value = familyMemberId;
+            } else {
+                // Self selected - hide family fields
+                familyFields.style.display = 'none';
+                familyMemberSelect.style.display = 'none';
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('requestModal');
+            if (e.target === modal) {
+                closeRequestModal();
+            }
+        });
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+                error: '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+                warning: '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>',
+                info: '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+            };
+            
+            const titles = {
+                success: 'Success!',
+                error: 'Error!',
+                warning: 'Warning!',
+                info: 'Info'
+            };
+            
+            toast.innerHTML = `
+                ${icons[type]}
+                <div class="toast-content">
+                    <div class="toast-title">${titles[type]}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Show toast
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+            
+            // Hide toast after 4 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 4000);
+        }
+
+        // Handle form submission
+        document.getElementById('requestForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('Form submission started');
+            
+            const formData = new FormData(this);
+            const submitButton = this.querySelector('button[type="submit"]');
+            
+            // Fix the requested_for value for the server
+            const requestedFor = formData.get('requested_for');
+            console.log('Original requested_for value:', requestedFor);
+            
+            if (requestedFor && requestedFor.startsWith('family_')) {
+                // Extract family member ID and set correct values
+                const familyMemberId = requestedFor.replace('family_', '');
+                formData.set('requested_for', 'family');
+                formData.set('family_member_id', familyMemberId);
+                console.log('Set requested_for to family, family_member_id to:', familyMemberId);
+            } else {
+                // Self request
+                formData.set('requested_for', 'self');
+                formData.delete('family_member_id');
+                console.log('Set requested_for to self');
+            }
+            
+            // Show loading state
+            submitButton.innerHTML = '<svg style="width: 20px; height: 20px;" class="animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Processing...';
+            submitButton.disabled = true;
+            
+            console.log('Final form data:', Object.fromEntries(formData));
+            
+            fetch('<?php echo htmlspecialchars(base_url('resident/request_new.php')); ?>', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return response.text();
+            })
+            .then(data => {
+                console.log('Raw response data:', data);
+                
+                // Check if response contains success or error indicators
+                if (data.includes('SUCCESS:') || data.trim() === 'SUCCESS: Request submitted successfully') {
+                    // Close modal
+                    closeRequestModal();
+                    
+                    // Show success toast
+                    showToast('Medicine request submitted successfully!', 'success');
+                    
+                    // Reload page to show updated data
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else if (data.includes('ERROR:') || data.includes('Fatal error') || data.includes('Exception')) {
+                    // Show error toast
+                    let errorMessage = 'Error submitting request. Please try again.';
+                    if (data.includes('ERROR:')) {
+                        errorMessage = data.replace('ERROR:', '').trim();
+                    } else if (data.includes('Fatal error')) {
+                        errorMessage = 'Server error occurred. Please try again.';
+                    }
+                    
+                    showToast(errorMessage, 'error');
+                    
+                    // Reset button
+                    submitButton.innerHTML = '<svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> Submit Request';
+                    submitButton.disabled = false;
+                } else {
+                    // If we get here without errors, assume success
+                    console.log('Assuming success based on no error indicators');
+                    
+                    // Close modal
+                    closeRequestModal();
+                    
+                    // Show success toast
+                    showToast('Medicine request submitted successfully!', 'success');
+                    
+                    // Reload page to show updated data
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Error submitting request. Please try again.', 'error');
+                
+                // Reset button
+                submitButton.innerHTML = '<svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> Submit Request';
+                submitButton.disabled = false;
+            });
+        });
+    </script>
+
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

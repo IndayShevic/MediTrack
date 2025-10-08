@@ -12,9 +12,13 @@ if (!is_dir($medicineDir)) { @mkdir($medicineDir, 0777, true); }
 
 // Handle create / update / delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    error_log('POST data received: ' . print_r($_POST, true));
     $action = $_POST['action'] ?? 'create';
     $name = trim($_POST['name'] ?? '');
     $description = trim($_POST['description'] ?? '');
+    $category_id = (int)($_POST['category_id'] ?? 0);
+    
+    error_log("Action: $action, Name: $name, Description: $description, Category ID: $category_id");
 
     // Handle optional image upload
     $imagePath = null;
@@ -38,28 +42,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'create' && $name !== '') {
-        $stmt = db()->prepare('INSERT INTO medicines(name, description, image_path) VALUES(?,?,?)');
+        $stmt = db()->prepare('INSERT INTO medicines(name, description, image_path, category_id) VALUES(?,?,?,?)');
         try {
-            $stmt->execute([$name, $description, $imagePath]);
-            // Email all BHW users
-            $bhws = db()->query("SELECT email, CONCAT(IFNULL(first_name,''),' ',IFNULL(last_name,'')) AS name FROM users WHERE role='bhw'")->fetchAll();
-            $sent = 0; $attempts = 0;
-            foreach ($bhws as $b) {
-                if (!empty($b['email'])) {
-                    $attempts++;
-                    $html = email_template(
-                        'New medicine available',
-                        'A new medicine has been added to the inventory.',
-                        '<p>Medicine: <b>' . htmlspecialchars($name) . '</b></p><p>Please review batches and availability.</p>',
-                        'Open BHW Panel',
-                        base_url('bhw/dashboard.php')
-                    );
-                    if (send_email($b['email'], $b['name'] ?? 'BHW', 'New medicine added', $html)) { $sent++; }
+            $result = $stmt->execute([$name, $description, $imagePath, $category_id > 0 ? $category_id : null]);
+            if ($result) {
+                // Medicine saved successfully
+                $emailSuccess = true;
+                $emailError = '';
+                
+                // Try to email all BHW users (but don't fail if email fails)
+                try {
+                    $bhws = db()->query("SELECT email, CONCAT(IFNULL(first_name,''),' ',IFNULL(last_name,'')) AS name FROM users WHERE role='bhw'")->fetchAll();
+                    $sent = 0; $attempts = 0;
+                    
+                    // Only try to send emails if there are BHW users
+                    if (!empty($bhws)) {
+                        foreach ($bhws as $b) {
+                            if (!empty($b['email'])) {
+                                $attempts++;
+                                $html = email_template(
+                                    'New medicine available',
+                                    'A new medicine has been added to the inventory.',
+                                    '<p>Medicine: <b>' . htmlspecialchars($name) . '</b></p><p>Please review batches and availability.</p>',
+                                    'Open BHW Panel',
+                                    base_url('bhw/dashboard.php')
+                                );
+                                if (send_email($b['email'], $b['name'] ?? 'BHW', 'New medicine added', $html)) { 
+                                    $sent++; 
+                                }
+                            }
+                        }
+                        
+                        if ($attempts > 0 && $sent === 0) {
+                            $emailSuccess = false;
+                            $emailError = 'Email sending failed. Check SMTP settings.';
+                        } elseif ($attempts > 0 && $sent < $attempts) {
+                            $emailSuccess = false;
+                            $emailError = 'Some emails failed to send (' . $sent . '/' . $attempts . ' sent).';
+                        }
+                    } else {
+                        // No BHW users to notify, so email is not needed
+                        $emailSuccess = true;
+                    }
+                } catch (Exception $e) {
+                    $emailSuccess = false;
+                    $emailError = 'Email sending failed: ' . $e->getMessage();
                 }
+                
+                // Show appropriate message based on email success
+                if ($emailSuccess) {
+                    set_flash('Medicine created successfully!', 'success');
+                } else {
+                    set_flash('Medicine saved, but ' . $emailError, 'error');
+                }
+            } else {
+                set_flash('Failed to create medicine. Please try again.', 'error');
             }
-            set_flash('Medicine saved. Email notifications: ' . $sent . '/' . $attempts . ' sent.', $sent === $attempts ? 'success' : 'info');
         } catch (Throwable $e) {
-            set_flash('Medicine saved, but email sending failed. Check SMTP settings.', 'error');
+            set_flash('Failed to create medicine: ' . $e->getMessage(), 'error');
         }
         redirect_to('super_admin/medicines.php');
     }
@@ -68,11 +108,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0 && $name !== '') {
             if ($imagePath) {
-                $stmt = db()->prepare('UPDATE medicines SET name=?, description=?, image_path=? WHERE id=?');
-                try { $stmt->execute([$name, $description, $imagePath, $id]); } catch (Throwable $e) {}
+                $stmt = db()->prepare('UPDATE medicines SET name=?, description=?, image_path=?, category_id=? WHERE id=?');
+                try { $stmt->execute([$name, $description, $imagePath, $category_id > 0 ? $category_id : null, $id]); } catch (Throwable $e) {}
             } else {
-                $stmt = db()->prepare('UPDATE medicines SET name=?, description=? WHERE id=?');
-                try { $stmt->execute([$name, $description, $id]); } catch (Throwable $e) {}
+                $stmt = db()->prepare('UPDATE medicines SET name=?, description=?, category_id=? WHERE id=?');
+                try { $stmt->execute([$name, $description, $category_id > 0 ? $category_id : null, $id]); } catch (Throwable $e) {}
             }
         }
         redirect_to('super_admin/medicines.php');
@@ -96,7 +136,8 @@ if ($editingId > 0) {
     $editing = $s->fetch();
 }
 
-$meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDER BY name ASC')->fetchAll();
+$meds = db()->query('SELECT m.id, m.name, m.image_path, m.created_at, c.name as category_name FROM medicines m LEFT JOIN categories c ON m.category_id = c.id ORDER BY m.name ASC')->fetchAll();
+$categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,6 +190,12 @@ $meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDE
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
                 </svg>
                 Medicines
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/categories.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                </svg>
+                Categories
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/batches.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -311,6 +358,16 @@ $meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDE
                                 <!-- Medicine Info -->
                                 <div class="mb-4">
                                     <h4 class="text-lg font-bold text-gray-900 mb-2"><?php echo htmlspecialchars($m['name']); ?></h4>
+                                    <?php if (!empty($m['category_name'])): ?>
+                                        <div class="mb-2">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                                </svg>
+                                                <?php echo htmlspecialchars($m['category_name']); ?>
+                                            </span>
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="flex items-center space-x-2 text-sm text-gray-500">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -344,61 +401,89 @@ $meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDE
             </div>
 
             <!-- Add Medicine Modal -->
-            <div id="addModal" class="fixed inset-0 flex items-center justify-center z-50 p-4 hidden pointer-events-none">
-                <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
-                    <div class="p-8">
-                        <div class="flex items-center justify-between mb-8">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            <div id="addModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 99999; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px);">
+                <div style="background: white; border-radius: 24px; box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1); max-width: 700px; width: 100%; max-height: 95vh; overflow-y: auto; border: 1px solid rgba(229, 231, 235, 0.8);">
+                    <div style="padding: 40px;">
+                        <!-- Enhanced Header -->
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
+                            <div style="display: flex; align-items: center; gap: 20px;">
+                                <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);">
+                                    <svg style="width: 28px; height: 28px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 class="text-2xl font-bold text-gray-900">Add New Medicine</h3>
-                                    <p class="text-gray-600">Add a new medicine to your inventory catalog</p>
+                                    <h3 style="font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 8px 0; letter-spacing: -0.025em;">Add New Medicine</h3>
+                                    <p style="color: #6b7280; margin: 0; font-size: 16px; line-height: 1.5;">Add a new medicine to your inventory catalog</p>
                                 </div>
                             </div>
-                            <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button onclick="closeAddModal()" style="color: #9ca3af; background: #f9fafb; border: none; cursor: pointer; padding: 12px; border-radius: 12px; transition: all 0.2s ease;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#6b7280';" onmouseout="this.style.background='#f9fafb'; this.style.color='#9ca3af';">
+                                <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
                             </button>
                         </div>
                         
-                        <form method="post" enctype="multipart/form-data" class="space-y-6">
+                        <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 32px;">
                             <input type="hidden" name="action" value="create" />
                             
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div class="space-y-2">
-                                    <label class="block text-sm font-semibold text-gray-700">Medicine Name</label>
+                            <!-- First Row - Medicine Name and Category -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Medicine Name</label>
                                     <input name="name" required 
-                                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                           placeholder="Enter medicine name" />
+                                           style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" 
+                                           placeholder="Enter medicine name"
+                                           onfocus="this.style.borderColor='#3b82f6'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.1)';"
+                                           onblur="this.style.borderColor='#e5e7eb'; this.style.background='#fafafa'; this.style.boxShadow='none';" />
                                 </div>
                                 
-                                <div class="space-y-2">
-                                    <label class="block text-sm font-semibold text-gray-700">Medicine Image</label>
-                                    <input type="file" name="image" accept="image/*" 
-                                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Category</label>
+                                    <select name="category_id" 
+                                            style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;"
+                                            onfocus="this.style.borderColor='#3b82f6'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.1)';"
+                                            onblur="this.style.borderColor='#e5e7eb'; this.style.background='#fafafa'; this.style.boxShadow='none';">
+                                        <option value="">Select Category (Optional)</option>
+                                        <?php foreach ($categories as $category): ?>
+                                            <option value="<?php echo (int)$category['id']; ?>"><?php echo htmlspecialchars($category['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
                             </div>
                             
-                            <div class="space-y-2">
-                                <label class="block text-sm font-semibold text-gray-700">Description</label>
-                                <textarea name="description" rows="4"
-                                          class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm resize-none" 
-                                          placeholder="Enter medicine description"></textarea>
+                            <!-- Medicine Image Field -->
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Medicine Image</label>
+                                <input type="file" name="image" accept="image/*" 
+                                       style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;"
+                                       onfocus="this.style.borderColor='#3b82f6'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.1)';"
+                                       onblur="this.style.borderColor='#e5e7eb'; this.style.background='#fafafa'; this.style.boxShadow='none';" />
                             </div>
                             
-                            <div class="flex justify-end space-x-3 pt-4">
+                            <!-- Description Field -->
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Description</label>
+                                <textarea name="description" rows="5"
+                                          style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; resize: none; min-height: 120px;" 
+                                          placeholder="Enter medicine description"
+                                          onfocus="this.style.borderColor='#3b82f6'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(59, 130, 246, 0.1)';"
+                                          onblur="this.style.borderColor='#e5e7eb'; this.style.background='#fafafa'; this.style.boxShadow='none';"></textarea>
+                            </div>
+                            
+                            <!-- Enhanced Action Buttons -->
+                            <div style="display: flex; justify-content: flex-end; gap: 16px; padding-top: 24px; border-top: 1px solid #f3f4f6; margin-top: 8px;">
                                 <button type="button" onclick="closeAddModal()" 
-                                        class="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all duration-200">
+                                        style="padding: 16px 32px; border: 2px solid #e5e7eb; color: #6b7280; font-weight: 600; border-radius: 16px; background: white; cursor: pointer; transition: all 0.2s ease; font-size: 16px;"
+                                        onmouseover="this.style.borderColor='#d1d5db'; this.style.backgroundColor='#f9fafb'; this.style.color='#374151';"
+                                        onmouseout="this.style.borderColor='#e5e7eb'; this.style.backgroundColor='white'; this.style.color='#6b7280';">
                                     Cancel
                                 </button>
                                 <button type="submit" 
-                                        class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl">
-                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        style="padding: 16px 32px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; font-weight: 600; border-radius: 16px; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 16px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); display: flex; align-items: center; gap: 8px;"
+                                        onmouseover="this.style.background='linear-gradient(135deg, #2563eb, #1e40af)'; this.style.boxShadow='0 6px 16px rgba(59, 130, 246, 0.4)'; this.style.transform='translateY(-1px)';"
+                                        onmouseout="this.style.background='linear-gradient(135deg, #3b82f6, #1d4ed8)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.3)'; this.style.transform='translateY(0)';">
+                                    <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                     </svg>
                                     Add Medicine
@@ -437,12 +522,22 @@ $meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDE
                             <input type="hidden" name="action" value="update" />
                             <input type="hidden" name="id" value="<?php echo (int)$editing['id']; ?>" />
                             
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div class="space-y-2">
                                     <label class="block text-sm font-semibold text-gray-700">Medicine Name</label>
                                     <input name="name" value="<?php echo htmlspecialchars($editing['name']); ?>" required 
                                            class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
                                            placeholder="Enter medicine name" />
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    <label class="block text-sm font-semibold text-gray-700">Category</label>
+                                    <select name="category_id" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
+                                        <option value="">Select Category (Optional)</option>
+                                        <?php foreach ($categories as $category): ?>
+                                            <option value="<?php echo (int)$category['id']; ?>" <?php echo ($editing['category_id'] == $category['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($category['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
                                 
                                 <div class="space-y-2">
@@ -482,14 +577,31 @@ $meds = db()->query('SELECT id, name, image_path, created_at FROM medicines ORDE
 
     <script>
         function openAddModal() {
-            document.getElementById('addModal').classList.remove('hidden');
-            document.getElementById('addModal').classList.add('flex');
+            console.log('Opening add modal...');
+            const modal = document.getElementById('addModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                console.log('Modal opened successfully');
+            } else {
+                console.error('Modal element not found!');
+            }
         }
 
         function closeAddModal() {
-            document.getElementById('addModal').classList.add('hidden');
-            document.getElementById('addModal').classList.remove('flex');
+            const modal = document.getElementById('addModal');
+            if (modal) {
+                modal.style.display = 'none';
+                console.log('Modal closed');
+            }
         }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('addModal');
+            if (e.target === modal) {
+                closeAddModal();
+            }
+        });
 
         function closeEditModal() {
             window.location.href = '<?php echo htmlspecialchars(base_url('super_admin/medicines.php')); ?>';

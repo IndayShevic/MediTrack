@@ -34,6 +34,10 @@ $proofDir = __DIR__ . '/../uploads/proofs';
 if (!is_dir($proofDir)) { @mkdir($proofDir, 0777, true); }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Debug logging
+    error_log('POST data received: ' . print_r($_POST, true));
+    error_log('FILES data received: ' . print_r($_FILES, true));
+    
     $medicine_id = (int)($_POST['medicine_id'] ?? 0);
     $requested_for = $_POST['requested_for'] ?? 'self';
     $family_member_id = ($_POST['family_member_id'] ?? null) ? (int)$_POST['family_member_id'] : null;
@@ -42,6 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $relationship = trim($_POST['relationship'] ?? '');
     $reason = trim($_POST['reason'] ?? '');
     $proof_path = null;
+    
+    error_log("Processing request - Medicine ID: $medicine_id, Requested for: $requested_for, Family member ID: $family_member_id, Reason: $reason");
     
     // Handle proof upload
     if (!empty($_FILES['proof']['name'])) {
@@ -58,35 +64,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // If family member is selected, get their details from the database
     if ($requested_for === 'family' && $family_member_id) {
-        $familyMember = db()->prepare('SELECT full_name, relationship, date_of_birth FROM family_members WHERE id = ? AND resident_id = ?');
+        $familyMember = db()->prepare('SELECT CONCAT(IFNULL(first_name, ""), " ", IFNULL(middle_initial, ""), " ", IFNULL(last_name, "")) as full_name, relationship, date_of_birth FROM family_members WHERE id = ? AND resident_id = ?');
         $familyMember->execute([$family_member_id, $residentId]);
         $member = $familyMember->fetch();
         
         if ($member) {
-            $patient_name = $member['full_name'];
+            $patient_name = trim($member['full_name']);
             $patient_date_of_birth = $member['date_of_birth'];
             $relationship = $member['relationship'];
+            error_log("Family member found: $patient_name, DOB: $patient_date_of_birth, Relationship: $relationship");
+        } else {
+            error_log("Family member not found with ID: $family_member_id for resident: $residentId");
         }
     }
     
     $bhwId = getAssignedBhwIdForResident($residentId);
-    $stmt = db()->prepare('INSERT INTO requests (resident_id, medicine_id, requested_for, family_member_id, patient_name, patient_date_of_birth, relationship, reason, proof_image_path, status, bhw_id) VALUES (?,?,?,?,?,?,?,?,?,"submitted",?)');
-    $stmt->execute([$residentId, $medicine_id, $requested_for, $family_member_id, $patient_name, $patient_date_of_birth, $relationship, $reason, $proof_path, $bhwId]);
-    // Notify assigned BHW
-    if ($bhwId) {
-        $b = db()->prepare('SELECT email, CONCAT(IFNULL(first_name,\'\'),\' \',IFNULL(last_name,\'\')) AS name FROM users WHERE id=?');
-        $b->execute([$bhwId]);
-        $bhw = $b->fetch();
-        if ($bhw && !empty($bhw['email'])) {
-            $residentName = $user['name'] ?? 'Resident';
-            $medicineName = $m['name'] ?? 'Unknown Medicine';
-            $success = send_medicine_request_notification_to_bhw($bhw['email'], $bhw['name'] ?? 'BHW', $residentName, $medicineName);
-            log_email_notification($bhwId, 'medicine_request', 'New Medicine Request', 'New medicine request notification sent to BHW', $success);
+    error_log("BHW ID: $bhwId, Resident ID: $residentId");
+    
+    try {
+        $stmt = db()->prepare('INSERT INTO requests (resident_id, medicine_id, requested_for, family_member_id, patient_name, patient_date_of_birth, relationship, reason, proof_image_path, status, bhw_id) VALUES (?,?,?,?,?,?,?,?,?,"submitted",?)');
+        $result = $stmt->execute([$residentId, $medicine_id, $requested_for, $family_member_id, $patient_name, $patient_date_of_birth, $relationship, $reason, $proof_path, $bhwId]);
+        
+        if ($result) {
+            $requestId = db()->lastInsertId();
+            error_log("Request inserted successfully with ID: " . $requestId);
+            
+            // Notify assigned BHW
+            if ($bhwId) {
+                $b = db()->prepare('SELECT email, CONCAT(IFNULL(first_name,\'\'),\' \',IFNULL(last_name,\'\')) AS name FROM users WHERE id=?');
+                $b->execute([$bhwId]);
+                $bhw = $b->fetch();
+                if ($bhw && !empty($bhw['email'])) {
+                    $residentName = $user['name'] ?? 'Resident';
+                    $medicineName = $m['name'] ?? 'Unknown Medicine';
+                    $success = send_medicine_request_notification_to_bhw($bhw['email'], $bhw['name'] ?? 'BHW', $residentName, $medicineName);
+                    log_email_notification($bhwId, 'medicine_request', 'New Medicine Request', 'New medicine request notification sent to BHW', $success);
+                }
+            }
+            
+            // Send success response
+            http_response_code(200);
+            echo "SUCCESS: Request submitted successfully";
+            exit;
+        } else {
+            error_log("Failed to insert request");
+            http_response_code(500);
+            echo "ERROR: Failed to submit request";
+            exit;
         }
+    } catch (Exception $e) {
+        error_log("Database error: " . $e->getMessage());
+        http_response_code(500);
+        echo "ERROR: " . $e->getMessage();
+        exit;
     }
-    set_flash('Request submitted.','success');
-    redirect_to('resident/requests.php');
-}
+} // Close the POST method check
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -98,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -151,6 +184,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                 </svg>
                 Allocations
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/family_members.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Family Members
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                Profile
             </a>
             <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,6 +396,7 @@ function clearFamilyData() {
   document.querySelector('input[name="relationship"]').readOnly = false;
 }
 </script>
+<script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

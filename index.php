@@ -584,159 +584,254 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .testimonial-card:hover {
             transform: scale(1.05) rotate(1deg);
         }
+        
+        /* Aurora mesh + dotted grid + premium glass */
+        .aurora { pointer-events:none; position:absolute; inset:0; background:
+          radial-gradient(1200px 600px at 10% -10%, rgba(59,130,246,.25), transparent 60%),
+          radial-gradient(900px 500px at 110% 10%, rgba(99,102,241,.25), transparent 60%),
+          radial-gradient(800px 400px at 50% 120%, rgba(236,72,153,.18), transparent 60%);
+          filter: saturate(120%); animation: auroraShift 14s ease-in-out infinite alternate;
+        }
+        @keyframes auroraShift { 0%{ transform: translateY(0) } 100%{ transform: translateY(-20px) } }
+        .dot-grid::before { content:''; position:absolute; inset:0; background-image:
+          radial-gradient(rgba(17,24,39,.08) 1px, transparent 1px);
+          background-size:24px 24px; mask-image:linear-gradient(to bottom, rgba(0,0,0,.6), rgba(0,0,0,0));
+        }
+        .orb { position:absolute; width:28rem; height:28rem; border-radius:9999px; filter: blur(60px); opacity:.35; }
+        .orb--blue { background:#60a5fa; top:-6rem; right:-6rem; animation: float 12s ease-in-out infinite; }
+        .orb--violet { background:#a78bfa; bottom:-8rem; left:-6rem; animation: float 16s ease-in-out infinite reverse; }
+        .glass-card-xl { backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+          background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.74));
+          border:1px solid rgba(255,255,255,.45); border-radius:1.5rem;
+          box-shadow: 0 30px 80px -20px rgba(59,130,246,.25), 0 12px 30px rgba(2,6,23,.08);
+        }
+        .tilt { transform-style: preserve-3d; transition: transform .35s ease, box-shadow .35s ease; }
+        .tilt:hover { transform: translateY(-6px) rotateX(2deg) rotateY(-3deg); box-shadow: 0 30px 60px rgba(0,0,0,.12); }
+        .badge-pill { background: linear-gradient(90deg, #22c55e, #16a34a); color:#fff; padding:.5rem .9rem;
+          border-radius:9999px; display:inline-flex; align-items:center; gap:.5rem;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 8px 20px rgba(22,163,74,.25);
+        }
+        .cta-primary { background: linear-gradient(135deg,#2563eb,#7c3aed 60%,#ec4899); color:#fff }
+        .cta-primary:hover { filter: brightness(1.05); }
+        .cta-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(148,163,184,.35); }
+        
+        /* Animated gradient text */
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animate-gradient {
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+        }
+        
+        /* Scroll reveal animations */
+        .scroll-reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .scroll-reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .scroll-reveal-left {
+            opacity: 0;
+            transform: translateX(-30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .scroll-reveal-left.active {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .scroll-reveal-right {
+            opacity: 0;
+            transform: translateX(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .scroll-reveal-right.active {
+            opacity: 1;
+            transform: translateX(0);
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative overflow-x-hidden">
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 glass-effect border-b border-white/20">
+    <nav class="fixed top-0 w-full z-50 border-b border-gray-200 bg-white shadow-sm">
         <div class="max-w-7xl mx-auto px-6 py-4">
             <div class="flex items-center justify-between">
+                <!-- Logo Left -->
                 <div class="flex items-center space-x-3">
                     <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name', 'MediTrack'); ?>
                     <?php if ($logo): ?>
-                        <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" alt="Logo" class="h-10 w-10 rounded-xl shadow-glow" />
+                        <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" alt="Logo" class="h-11 w-11 rounded-lg shadow-md" />
                     <?php else: ?>
-                        <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg">
+                        <div class="w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                             </svg>
                         </div>
                     <?php endif; ?>
-                    <span class="text-2xl font-bold text-gradient"><?php echo htmlspecialchars($brand); ?></span>
+                    <div class="flex flex-col leading-tight">
+                        <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 animate-gradient">
+                            <?php echo htmlspecialchars($brand); ?>.
+                        </span>
+                        <span class="text-[10px] text-gray-500 font-semibold tracking-widest uppercase">Barangay Loon</span>
+                    </div>
+                </div>
+
+                <!-- Nav Links Center -->
+                <div class="hidden md:flex items-center gap-10 absolute left-1/2 transform -translate-x-1/2">
+                    <a href="#home" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Home</a>
+                    <a href="#features" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Features</a>
+                    <a href="#about" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">About</a>
+                    <a href="#contact" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Contact</a>
                 </div>
                 
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#home" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">Home</a>
-                    <a href="#features" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">Features</a>
-                    <a href="#about" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">About</a>
-                    <a href="#contact" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200">Contact</a>
-                </div>
-                
-                <div class="flex items-center space-x-4">
-                    <button onclick="openLoginModal()" class="btn btn-primary shadow-glow hidden md:inline-flex">
+                <!-- CTA Right -->
+                <div class="flex items-center gap-3">
+                    <button onclick="openRegisterModal()" class="hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 hover:border-gray-400 transition-all duration-300 hover:shadow-md hover:scale-105 active:scale-95">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
                         </svg>
-                        Login
+                        Register
                     </button>
+                    <button onclick="openLoginModal()" class="hidden md:inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 relative overflow-hidden group">
+                        <span class="relative z-10">Sign in</span>
+                        <svg class="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                        <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                    </button>
+                    
+                    <!-- Mobile Menu Button -->
+                    <button id="mobileMenuBtn" class="md:hidden p-2 text-gray-700 hover:text-blue-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mobile Menu -->
+            <div id="mobileMenu" class="hidden md:hidden border-t border-gray-200 bg-white">
+                <div class="px-4 py-4 space-y-3">
+                    <a href="#home" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Home</a>
+                    <a href="#features" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Features</a>
+                    <a href="#about" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">About</a>
+                    <a href="#contact" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Contact</a>
+                    <div class="pt-3 space-y-2 border-t border-gray-200">
+                        <button onclick="openRegisterModal()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 transition-all">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                            </svg>
+                            Register
+                        </button>
+                        <button onclick="openLoginModal()" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium shadow-lg">
+                            Sign in
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- Animated Background Orbs -->
-    <div class="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div class="absolute -top-24 -right-32 w-96 h-96 rounded-full bg-blue-300 blur-3xl opacity-30 animate-pulse-slow"></div>
-        <div class="absolute -bottom-24 -left-32 w-96 h-96 rounded-full bg-indigo-300 blur-3xl opacity-30 animate-pulse-slow" style="animation-delay: 1.5s;"></div>
-        <div class="absolute top-1/2 left-1/2 w-96 h-96 rounded-full bg-purple-200 blur-3xl opacity-20 animate-float"></div>
-    </div>
-
     <!-- Hero Section -->
-    <section id="home" class="pt-32 pb-24 relative overflow-hidden z-10">
-        <div class="max-w-7xl mx-auto px-6">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div class="animate-slide-in-left">
-                    <div class="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium mb-6 shadow-sm animate-scale-in hover:shadow-md transition-all duration-300">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+    <section id="home" class="relative overflow-hidden z-10 pt-40 pb-20">
+        <!-- Unique layered background -->
+        <div class="aurora"></div>
+        <div class="dot-grid absolute inset-0"></div>
+        <div class="orb orb--blue"></div>
+        <div class="orb orb--violet"></div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center">
+                <!-- Left content -->
+                <div class="space-y-4 sm:space-y-6 animate-slide-in-left text-center lg:text-left">
+                    <div class="badge-pill w-max mx-auto lg:mx-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 13l4 4L19 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        Trusted by 100+ Barangays
+                        Barangay-first healthcare
                     </div>
-                    <h1 class="text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-                        Medicine Access
-                        <span class="text-gradient block">Simplified</span>
+
+                    <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-gray-900">
+                        Protecting your Health,
+                        <span class="block bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">
+                            Our Priority
+                        </span>
                     </h1>
-                    <p class="text-lg lg:text-xl text-gray-600 mb-8 leading-relaxed max-w-xl">
-                        Streamline medicine requests, inventory management, and healthcare delivery with our comprehensive barangay health management platform.
+
+                    <p class="text-base sm:text-lg lg:text-xl text-gray-600 max-w-xl mx-auto lg:mx-0">
+                    Track and distribute medicines efficiently at the barangay level—connecting residents, BHWs, and admins in one smart system for faster service, accurate inventory, and healthier communities.
                     </p>
-                    <div class="flex flex-col sm:flex-row gap-4">
-                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg shadow-glow animate-scale-in delay-200 relative z-10">
-                            Get Started
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+
+                    <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center lg:justify-start">
+                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-6 sm:px-7 py-3 shadow-glow hover:scale-105 transition-transform flex items-center justify-center gap-2 group">
+                            <span>Get started</span>
+                            <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                             </svg>
                         </button>
-                        <button onclick="openRegisterModal()" class="btn btn-secondary btn-lg animate-scale-in delay-300 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-green-600 hover:border-green-700">
-                            Register Now
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-                            </svg>
-                        </button>
-                        <a href="#features" class="btn btn-secondary btn-lg animate-scale-in delay-300">
-                            Learn More
+                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-6 sm:px-7 py-3 hover:scale-105 transition-transform flex items-center justify-center">
+                            Learn more
                         </a>
                     </div>
                     
-                    <!-- Scroll indicator -->
-                    <div class="mt-12 flex items-center gap-2 text-gray-500 text-sm scroll-indicator">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-                        </svg>
-                        <span>Scroll to explore</span>
+                    <div class="flex items-center gap-4 pt-3 text-sm text-gray-600 justify-center lg:justify-start">
+                        <div class="flex -space-x-2">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white grid place-items-center font-semibold shadow-md">B</div>
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white grid place-items-center font-semibold shadow-md">H</div>
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white grid place-items-center font-semibold shadow-md">W</div>
+                        </div>
+                        <span class="hidden sm:inline">Trusted by barangays and healthcare workers</span>
+                        <span class="sm:hidden text-xs">Trusted by barangays</span>
+                    </div>
                 </div>
-                </div>
-                <div class="animate-slide-in-right relative">
-                    <div class="relative animate-float">
-                        <div class="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-3xl transform rotate-3 opacity-20 blur-xl"></div>
-                        <div class="relative bg-white rounded-3xl shadow-2xl p-8 overflow-hidden hover:shadow-3xl transition-all duration-500">
-                            <!-- Healthcare Illustration (SVG) -->
-                            <svg viewBox="0 0 400 260" class="w-full h-auto">
-                                <defs>
-                                    <linearGradient id="pill" x1="0" x2="1">
-                                        <stop offset="0%" stop-color="#60a5fa"/>
-                                        <stop offset="100%" stop-color="#1d4ed8"/>
-                                    </linearGradient>
-                                    <linearGradient id="card" x1="0" x2="1">
-                                        <stop offset="0%" stop-color="#dbeafe"/>
-                                        <stop offset="100%" stop-color="#bfdbfe"/>
-                                    </linearGradient>
-                                </defs>
-                                <!-- Card -->
-                                <rect x="24" y="24" rx="16" ry="16" width="352" height="212" fill="url(#card)" stroke="#93c5fd"/>
-                                <!-- Cross -->
-                                <rect x="176" y="64" width="48" height="128" rx="8" fill="#2563eb" opacity="0.9"/>
-                                <rect x="144" y="96" width="112" height="48" rx="8" fill="#2563eb" opacity="0.9"/>
-                                <!-- Pills -->
-                                <g transform="translate(64,180) rotate(-15)">
-                                    <rect x="0" y="0" rx="14" ry="14" width="110" height="28" fill="url(#pill)"/>
-                                    <line x1="54" y1="0" x2="54" y2="28" stroke="#fff" stroke-width="2"/>
-                                </g>
-                                <g transform="translate(260,180) rotate(10)">
-                                    <rect x="0" y="0" rx="14" ry="14" width="110" height="28" fill="#f59e0b"/>
-                                    <line x1="54" y1="0" x2="54" y2="28" stroke="#fff" stroke-width="2"/>
-                                </g>
-                                <!-- Text lines -->
-                                <rect x="56" y="40" width="96" height="10" rx="5" fill="#3b82f6"/>
-                                <rect x="56" y="56" width="64" height="8" rx="4" fill="#60a5fa"/>
-                            </svg>
-                            <!-- Labels under illustration -->
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                                <div class="flex items-center space-x-3">
-                                    <span class="w-3 h-3 bg-green-500 rounded-full"></span>
-                                    <span class="text-sm text-gray-700">Request Approved</span>
+
+                <!-- Right visual -->
+                <div class="relative animate-slide-in-right">
+                    <div class="glass-card-xl p-6 tilt">
+                        <div class="relative rounded-2xl overflow-hidden">
+                            <div class="absolute -inset-8 bg-gradient-to-tr from-blue-400/20 via-indigo-400/20 to-fuchsia-400/20 blur-2xl"></div>
+                            <img class="relative rounded-xl shadow-2xl w-full"
+                                 src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=1200&auto=format&fit=crop"
+                                 alt="MediTrack preview" />
                                 </div>
-                                <div class="flex items-center space-x-3">
-                                    <span class="w-3 h-3 bg-blue-500 rounded-full"></span>
-                                    <span class="text-sm text-gray-700">Inventory Updated</span>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                            <div class="card p-4">
+                                <div class="text-xs text-gray-500">Status</div>
+                                <div class="mt-1 font-semibold text-gray-900">Request approved</div>
                                 </div>
-                                <div class="flex items-center space-x-3">
-                                    <span class="w-3 h-3 bg-purple-500 rounded-full"></span>
-                                    <span class="text-sm text-gray-700">Senior Allocation</span>
-                                </div>
+                            <div class="card p-4">
+                                <div class="text-xs text-gray-500">Inventory</div>
+                                <div class="mt-1 font-semibold text-gray-900">FEFO applied</div>
+                            </div>
+                            <div class="card p-4">
+                                <div class="text-xs text-gray-500">Allocation</div>
+                                <div class="mt-1 font-semibold text-gray-900">Seniors updated</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Subtle bottom divider -->
+        <div class="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white/80 to-transparent"></div>
     </section>
 
         <!-- Features Section -->
-        <section id="features" class="py-20 bg-white/60">
-            <div class="max-w-7xl mx-auto px-6">
-                <h2 class="text-3xl font-bold text-gray-900 mb-8">Powerful Features</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="card animate-fade-in">
+        <section id="features" class="py-12 sm:py-16 lg:py-20 bg-white/60">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left">Powerful Features</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                    <div class="card">
                         <div class="card-body flex items-start space-x-4">
                             <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                                 <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -747,7 +842,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                     </div>
-                    <div class="card animate-fade-in" style="animation-delay:0.05s">
+                    <div class="card">
                         <div class="card-body flex items-start space-x-4">
                             <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                                 <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -758,7 +853,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                     </div>
-                    <div class="card animate-fade-in" style="animation-delay:0.1s">
+                    <div class="card">
                         <div class="card-body flex items-start space-x-4">
                             <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                                 <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
@@ -774,23 +869,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- About Section -->
-        <section id="about" class="py-20">
-            <div class="max-w-7xl mx-auto px-6">
-                <h2 class="text-3xl font-bold text-gray-900 mb-4">About MediTrack</h2>
-                <p class="text-gray-600 max-w-3xl">A barangay-focused medicine inventory and request platform featuring FEFO batch handling, role-based dashboards (Super Admin, BHW, Resident), and a senior citizen maintenance allocation program. Built with PHP, MySQL, and TailwindCSS for reliability and speed.</p>
+        <section id="about" class="py-12 sm:py-16 lg:py-20">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6 text-center lg:text-left">About MediTrack</h2>
+                <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-3xl text-center lg:text-left mx-auto lg:mx-0">A barangay-focused medicine inventory and request platform featuring FEFO batch handling, role-based dashboards (Super Admin, BHW, Resident), and a senior citizen maintenance allocation program. Built with PHP, MySQL, and TailwindCSS for reliability and speed.</p>
             </div>
         </section>
 
         <!-- Contact CTA -->
-        <section id="contact" class="py-16 bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div class="max-w-7xl mx-auto px-6">
+        <section id="contact" class="py-12 sm:py-16 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="card">
-                    <div class="card-body flex items-center justify-between flex-col md:flex-row gap-4">
+                    <div class="card-body flex items-center justify-between flex-col md:flex-row gap-4 text-center md:text-left">
                         <div>
-                            <h3 class="text-xl font-semibold text-gray-900">Need help getting started?</h3>
-                            <p class="text-gray-600">Visit your barangay health center or sign in below.</p>
+                            <h3 class="text-lg sm:text-xl font-semibold text-gray-900">Need help getting started?</h3>
+                            <p class="text-sm sm:text-base text-gray-600">Visit your barangay health center or sign in below.</p>
                         </div>
-                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg">Sign in</button>
+                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg whitespace-nowrap">Sign in</button>
                     </div>
                 </div>
             </div>
@@ -798,14 +893,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
         <!-- Testimonials -->
-        <section id="testimonials" class="py-20 bg-white/60 relative overflow-hidden">
-            <div class="absolute top-10 right-10 w-64 h-64 bg-blue-200 rounded-full blur-3xl opacity-20 animate-pulse-slow"></div>
-            <div class="max-w-7xl mx-auto px-6 relative z-10">
-                <div class="text-center mb-12 animate-fade-in-up">
-                    <h2 class="text-4xl font-bold text-gray-900 mb-3">What users say</h2>
-                    <p class="text-gray-600">Real feedback from real users</p>
+        <section id="testimonials" class="py-12 sm:py-16 lg:py-20 bg-white/60 relative overflow-hidden">
+            <div class="absolute top-10 right-10 w-64 h-64 bg-blue-200 rounded-full blur-3xl opacity-20 animate-pulse-slow hidden sm:block"></div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                <div class="text-center mb-8 sm:mb-12 animate-fade-in-up">
+                    <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 sm:mb-3">What users say</h2>
+                    <p class="text-sm sm:text-base text-gray-600">Real feedback from real users</p>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     <div class="card testimonial-card animate-fade-in-up delay-100">
                         <div class="card-body">
                             <div class="flex mb-3">
@@ -898,9 +993,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- FAQ -->
-        <section id="faq" class="py-20">
-            <div class="max-w-5xl mx-auto px-6">
-                <h2 class="text-3xl font-bold text-gray-900 mb-8">Frequently Asked Questions</h2>
+        <section id="faq" class="py-12 sm:py-16 lg:py-20">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left">Frequently Asked Questions</h2>
                 <div class="space-y-4">
                     <details class="card animate-fade-in">
                         <summary class="card-body cursor-pointer font-medium text-gray-900">How do residents request medicines?</summary>
@@ -2110,6 +2205,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
         
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                
+                // Toggle icon
+                const icon = mobileMenuBtn.querySelector('svg');
+                if (mobileMenu.classList.contains('hidden')) {
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>';
+                } else {
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+                }
+            });
+            
+            // Close mobile menu when clicking nav links
+            mobileMenu.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => {
+                    mobileMenu.classList.add('hidden');
+                    const icon = mobileMenuBtn.querySelector('svg');
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>';
+                });
+            });
+        }
+        
         // Handle URL parameters and modals
         const urlParams = new URLSearchParams(window.location.search);
         
@@ -2206,6 +2328,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Observe all cards and sections
         document.querySelectorAll('.card, section').forEach((el) => {
             observer.observe(el);
+        });
+        
+        // Scroll reveal animations
+        const scrollRevealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    // Optionally unobserve after revealing
+                    scrollRevealObserver.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        });
+        
+        // Observe all scroll-reveal elements
+        document.querySelectorAll('.scroll-reveal, .scroll-reveal-left, .scroll-reveal-right').forEach(el => {
+            scrollRevealObserver.observe(el);
         });
     </script>
 </body>

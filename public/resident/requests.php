@@ -24,10 +24,12 @@ $rows = db()->prepare('
         r.created_at,
         r.updated_at,
         bhw.first_name AS bhw_first_name,
-        bhw.last_name AS bhw_last_name
+        bhw.last_name AS bhw_last_name,
+        CONCAT(res.first_name, \' \', COALESCE(res.middle_initial, \'\'), CASE WHEN res.middle_initial IS NOT NULL THEN \' \' ELSE \'\' END, res.last_name) AS resident_full_name
     FROM requests r 
     JOIN medicines m ON m.id = r.medicine_id 
     LEFT JOIN users bhw ON bhw.id = r.bhw_id
+    LEFT JOIN residents res ON res.id = r.resident_id
     WHERE r.resident_id = ? 
     ORDER BY r.id DESC
 ');
@@ -46,6 +48,115 @@ $requests = $rows->fetchAll();
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CRITICAL: Override mobile menu CSS that's breaking sidebar */
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 1000 !important;
+            transform: none !important;
+        }
+        
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+        }
+        
+        /* Override mobile media queries */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                transform: none !important;
+                width: 280px !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+    </style>
+    <style>
+        /* CRITICAL: Override design-system.css sidebar styles - MUST be after design-system.css */
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 9999 !important;
+            overflow-y: auto !important;
+            transform: none !important;
+            background: white !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+            transition: none !important;
+        }
+        
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+        }
+        
+        /* Override all media queries */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        /* Remove hover effects */
+        .sidebar-nav a:hover {
+            background: transparent !important;
+            color: inherit !important;
+        }
+        
+        .sidebar-nav a {
+            transition: none !important;
+        }
+        
+        /* CRITICAL: Override mobile menu transforms */
+        .sidebar.open {
+            transform: none !important;
+        }
+        
+        /* Ensure sidebar never transforms */
+        .sidebar {
+            transform: none !important;
+        }
+    </style>
     <script>
         tailwind.config = {
             theme: {
@@ -95,6 +206,114 @@ $requests = $rows->fetchAll();
         }
     </script>
     <style>
+        /* Remove hover effects for sidebar navigation */
+        * {
+            box-sizing: border-box !important;
+        }
+        
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow-x: hidden !important;
+            height: 100% !important;
+        }
+        
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 9999 !important;
+            overflow-y: auto !important;
+            transform: none !important;
+            background: white !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+            transition: none !important;
+        }
+        
+        /* Override all media queries */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+
+        /* Ensure main content has proper margin and doesn't affect sidebar */
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+            position: relative !important;
+            min-height: 100vh !important;
+            background: #f9fafb !important;
+        }
+
+        /* Prevent any container from affecting sidebar position */
+        .container, .wrapper, .page-wrapper {
+            position: relative !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Ensure sidebar brand and nav stay in place */
+        .sidebar-brand {
+            position: relative !important;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+            color: white !important;
+            padding: 1.5rem !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            font-weight: 700 !important;
+            font-size: 1.25rem !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
+        }
+        
+        .sidebar-nav {
+            position: relative !important;
+            padding: 1rem !important;
+        }
+        
+        .sidebar-nav a {
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
+            padding: 0.75rem 1rem !important;
+            margin-bottom: 0.25rem !important;
+            border-radius: 0.5rem !important;
+            color: #374151 !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+            transition: none !important;
+        }
+        
+        /* Removed hover effects for sidebar navigation */
+        
+        .sidebar-nav a.active {
+            background: #dbeafe !important;
+            color: #1d4ed8 !important;
+            font-weight: 600 !important;
+        }
+
         .glass-effect {
             background: rgba(255, 255, 255, 0.25);
             backdrop-filter: blur(10px);
@@ -175,16 +394,6 @@ $requests = $rows->fetchAll();
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-        </svg>
-    </button>
-    
-    <!-- Mobile Overlay -->
-    <div class="mobile-overlay" onclick="closeMobileMenu()"></div>
-    
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -219,6 +428,12 @@ $requests = $rows->fetchAll();
                 </svg>
                 My Requests
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/medicine_history.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Medicine History
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('resident/allocations.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -231,9 +446,10 @@ $requests = $rows->fetchAll();
                 </svg>
                 Family Members
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+            <a href="<?php echo htmlspecialchars(base_url('resident/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
                 </svg>
                 Profile
             </a>
@@ -377,7 +593,7 @@ $requests = $rows->fetchAll();
                                                 <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                                 </svg>
-                                                <span class="text-sm text-gray-900">Self</span>
+                                                <span class="text-sm text-gray-900"><?php echo htmlspecialchars($r['resident_full_name'] ?? 'Self'); ?></span>
                                             <?php else: ?>
                                                 <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
@@ -790,7 +1006,7 @@ $requests = $rows->fetchAll();
                             </div>
                             <div class="text-lg font-semibold">
                                 ${request.requested_for === 'self' ? 
-                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>Self</span>' : 
+                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' + (request.resident_full_name || 'Self') + '</span>' : 
                                     '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Family Member</span>'
                                 }
                             </div>
@@ -1028,61 +1244,8 @@ $requests = $rows->fetchAll();
             }
         }
 
-        .skeleton {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200px 100%;
-            animation: shimmer 1.5s infinite;
-        }
-    </style>
     
-    <script>
-        // Mobile menu functionality
-        function toggleMobileMenu() {
-            const sidebar = document.querySelector('.sidebar');
-            const overlay = document.querySelector('.mobile-overlay');
-            
-            sidebar.classList.toggle('open');
-            overlay.classList.toggle('active');
-            
-            // Prevent body scroll when menu is open
-            if (sidebar.classList.contains('open')) {
-                document.body.style.overflow = 'hidden';
-            } else {
-                document.body.style.overflow = '';
-            }
-        }
-        
-        function closeMobileMenu() {
-            const sidebar = document.querySelector('.sidebar');
-            const overlay = document.querySelector('.mobile-overlay');
-            
-            sidebar.classList.remove('open');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-        
-        // Close mobile menu when clicking on sidebar links
-        document.addEventListener('DOMContentLoaded', function() {
-            const sidebarLinks = document.querySelectorAll('.sidebar-nav a');
-            sidebarLinks.forEach(link => {
-                link.addEventListener('click', function() {
-                    // Only close on mobile
-                    if (window.innerWidth <= 768) {
-                        closeMobileMenu();
-                    }
-                });
-            });
-            
-            // Close mobile menu on window resize
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768) {
-                    closeMobileMenu();
-                }
-            });
-        });
-    </script>
     
-    <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

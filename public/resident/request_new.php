@@ -132,6 +132,224 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CRITICAL: Override mobile menu CSS that's breaking sidebar */
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 1000 !important;
+            transform: none !important;
+        }
+        
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+        }
+        
+        /* Override mobile media queries */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                transform: none !important;
+                width: 280px !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+    </style>
+    <style>
+        /* CRITICAL: Override design-system.css sidebar styles - MUST be after design-system.css */
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 9999 !important;
+            overflow-y: auto !important;
+            transform: none !important;
+            background: white !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+            transition: none !important;
+        }
+        
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+        }
+        
+        /* Override all media queries */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+        
+        /* Remove hover effects */
+        .sidebar-nav a:hover {
+            background: transparent !important;
+            color: inherit !important;
+        }
+        
+        .sidebar-nav a {
+            transition: none !important;
+        }
+        
+        /* CRITICAL: Override mobile menu transforms */
+        .sidebar.open {
+            transform: none !important;
+        }
+        
+        /* Ensure sidebar never transforms */
+        .sidebar {
+            transform: none !important;
+        }
+    </style>
+    <style>
+        /* FORCE SIDEBAR TO STAY FIXED - OVERRIDE ALL OTHER STYLES */
+        * {
+            box-sizing: border-box !important;
+        }
+        
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow-x: hidden !important;
+            height: 100% !important;
+        }
+        
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 9999 !important;
+            overflow-y: auto !important;
+            transform: none !important;
+            background: white !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+            transition: none !important;
+        }
+        
+        /* Override all media queries */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+
+        /* Ensure main content has proper margin and doesn't affect sidebar */
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+            position: relative !important;
+            min-height: 100vh !important;
+            background: #f9fafb !important;
+        }
+
+        /* Prevent any container from affecting sidebar position */
+        .container, .wrapper, .page-wrapper {
+            position: relative !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Ensure sidebar brand and nav stay in place */
+        .sidebar-brand {
+            position: relative !important;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+            color: white !important;
+            padding: 1.5rem !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            font-weight: 700 !important;
+            font-size: 1.25rem !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
+        }
+        
+        .sidebar-nav {
+            position: relative !important;
+            padding: 1rem !important;
+        }
+        
+        .sidebar-nav a {
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
+            padding: 0.75rem 1rem !important;
+            margin-bottom: 0.25rem !important;
+            border-radius: 0.5rem !important;
+            color: #374151 !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+            transition: none !important;
+        }
+        
+        /* Removed hover effects for sidebar navigation */
+        
+        .sidebar-nav a.active {
+            background: #dbeafe !important;
+            color: #1d4ed8 !important;
+            font-weight: 600 !important;
+        }
+    </style>
     <script>
         tailwind.config = {
             theme: {
@@ -179,6 +397,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </svg>
                 My Requests
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/medicine_history.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Medicine History
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('resident/allocations.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -191,9 +415,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </svg>
                 Family Members
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+            <a href="<?php echo htmlspecialchars(base_url('resident/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
                 </svg>
                 Profile
             </a>
@@ -234,89 +459,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <input type="hidden" name="medicine_id" value="<?php echo (int)($m['id'] ?? 0); ?>" />
                         
                         <!-- Medicine Info -->
-                        <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div class="flex items-center space-x-3">
-                                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                </svg>
+                        <div class="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl shadow-lg">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                    </svg>
+                                </div>
                                 <div>
-                                    <h3 class="text-lg font-semibold text-blue-900"><?php echo htmlspecialchars($m['name'] ?? 'Medicine'); ?></h3>
-                                    <p class="text-sm text-blue-700">Request this medicine</p>
+                                    <h3 class="text-xl font-bold text-blue-900"><?php echo htmlspecialchars($m['name'] ?? 'Medicine'); ?></h3>
+                                    <p class="text-sm text-blue-700 font-medium">Request this medicine</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Requested For</label>
-                                <select name="requested_for" class="form-input" id="reqFor">
-                                    <option value="self">Self</option>
-                                    <option value="family">Family Member</option>
-                                </select>
-                            </div>
+                        <!-- Request Recipient Section -->
+                        <div class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-2xl">
+                            <h4 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                                Request Recipient
+                            </h4>
                             
-                            <?php if (!empty($familyMembers)): ?>
-                            <div id="familyMemberSelect" style="display:none">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Select Family Member</label>
-                                <select name="family_member_id" class="form-input">
-                                    <option value="">Choose a family member</option>
-                                    <?php foreach ($familyMembers as $member): ?>
-                                        <option value="<?php echo (int)$member['id']; ?>"><?php echo htmlspecialchars($member['full_name'] . ' (' . $member['relationship'] . ', DOB: ' . $member['date_of_birth'] . ')'); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <div class="md:col-span-2 mt-6" id="familyFields" style="display:none">
-                            <h4 class="text-lg font-medium text-gray-900 mb-4">Patient Information</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Patient Name</label>
-                                    <input name="patient_name" class="form-input" placeholder="Enter patient name" />
+                                    <label class="block text-sm font-semibold text-gray-700 mb-3">Requested For</label>
+                                    <select name="requested_for" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 bg-white shadow-sm" id="reqFor">
+                                        <option value="self">Self</option>
+                                        <option value="family">Family Member</option>
+                                    </select>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
-                                    <input name="patient_date_of_birth" type="date" class="form-input" />
+                                
+                                <?php if (!empty($familyMembers)): ?>
+                                <div id="familyMemberSelect" style="display:none">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-3">Select Family Member</label>
+                                    <select name="family_member_id" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 bg-white shadow-sm">
+                                        <option value="">Choose a family member</option>
+                                        <?php foreach ($familyMembers as $member): ?>
+                                            <option value="<?php echo (int)$member['id']; ?>"><?php echo htmlspecialchars($member['full_name'] . ' (' . $member['relationship'] . ', DOB: ' . $member['date_of_birth'] . ')'); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
-                                    <input name="relationship" class="form-input" placeholder="e.g., Father, Mother" />
-                                </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                         
-                        <div class="mt-6">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Reason for Request</label>
-                            <textarea name="reason" class="form-input" rows="4" placeholder="Please explain why you need this medicine..."></textarea>
+                        <!-- Patient Information Section -->
+                        <div class="mb-8 p-6 bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-2xl" id="familyFields" style="display:none">
+                            <h4 class="text-lg font-bold text-amber-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                                </svg>
+                                Patient Information
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label class="block text-sm font-semibold text-amber-800 mb-3">Patient Name</label>
+                                    <input name="patient_name" class="w-full px-4 py-3 border-2 border-amber-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all duration-200 bg-white shadow-sm" placeholder="Enter patient name" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-amber-800 mb-3">Date of Birth</label>
+                                    <input name="patient_date_of_birth" type="date" class="w-full px-4 py-3 border-2 border-amber-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all duration-200 bg-white shadow-sm" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-amber-800 mb-3">Relationship</label>
+                                    <input name="relationship" class="w-full px-4 py-3 border-2 border-amber-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all duration-200 bg-white shadow-sm" placeholder="e.g., Father, Mother" />
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="mt-6">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">
-                                Proof of Need <span class="text-red-500">*</span>
-                            </label>
-                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                        <!-- Reason for Request Section -->
+                        <div class="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-2xl">
+                            <h4 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Reason for Request
+                            </h4>
+                            <textarea name="reason" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 bg-white shadow-sm resize-none" rows="4" placeholder="Please explain why you need this medicine..."></textarea>
+                            <p class="text-sm text-gray-600 mt-3 italic">Provide detailed information about your medical condition or symptoms</p>
+                        </div>
+                        
+                        <!-- Proof of Need Section -->
+                        <div class="mb-8 p-6 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-2xl">
+                            <h4 class="text-lg font-bold text-red-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                </svg>
+                                Proof of Need <span class="text-red-600 text-lg">*</span>
+                            </h4>
+                            <div class="border-3 border-dashed border-red-300 rounded-2xl p-8 text-center hover:border-red-400 hover:bg-red-50 transition-all duration-300 cursor-pointer bg-white shadow-sm">
                                 <input type="file" name="proof" accept="image/*,application/pdf" required class="hidden" id="proofFile" />
-                                <label for="proofFile" class="cursor-pointer">
-                                    <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                                    </svg>
-                                    <p class="text-sm text-gray-600 mb-1">Click to upload or drag and drop</p>
-                                    <p class="text-xs text-gray-500">JPG, PNG, or PDF (Max 10MB)</p>
+                                <label for="proofFile" class="cursor-pointer block">
+                                    <div class="w-16 h-16 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                        </svg>
+                                    </div>
+                                    <p class="text-lg font-semibold text-red-900 mb-2">Click to upload or drag and drop</p>
+                                    <p class="text-sm text-red-700">JPG, PNG, or PDF (Max 10MB)</p>
                                 </label>
                             </div>
-                            <p class="text-xs text-gray-500 mt-2">Upload temperature reading, medical certificate, or other proof of illness</p>
+                            <p class="text-sm text-red-800 mt-4 italic">Upload temperature reading, medical certificate, or other proof of illness</p>
                         </div>
                         
-                        <div class="mt-8 flex justify-end space-x-4">
-                            <a href="<?php echo htmlspecialchars(base_url('resident/browse.php')); ?>" class="btn btn-secondary">
+                        <!-- Action Buttons -->
+                        <div class="mt-8 flex justify-end space-x-6 pt-6 border-t-2 border-gray-200">
+                            <a href="<?php echo htmlspecialchars(base_url('resident/browse.php')); ?>" class="px-8 py-3 border-2 border-gray-300 text-gray-600 font-semibold rounded-xl hover:border-gray-400 hover:text-gray-700 transition-all duration-200 shadow-sm hover:shadow-md">
                                 Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button type="submit" class="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                 </svg>
-                                Submit Request
+                                <span>Submit Request</span>
                             </button>
                         </div>
                     </div>
@@ -396,7 +653,6 @@ function clearFamilyData() {
   document.querySelector('input[name="relationship"]').readOnly = false;
 }
 </script>
-<script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

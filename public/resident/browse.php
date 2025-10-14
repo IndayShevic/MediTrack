@@ -43,6 +43,61 @@ $meds = db()->query('
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CRITICAL: Override mobile menu CSS that's breaking sidebar */
+        .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 1000 !important;
+            transform: none !important;
+        }
+        
+        .main-content {
+            margin-left: 280px !important;
+            width: calc(100% - 280px) !important;
+        }
+        
+        /* Override mobile media queries */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                transform: none !important;
+                width: 280px !important;
+            }
+            .main-content {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+            }
+        }
+
+        /* Custom scrollbar styling for modal */
+        #requestModal::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #requestModal::-webkit-scrollbar-track {
+            background: #f9fafb;
+            border-radius: 4px;
+        }
+        
+        #requestModal::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+        
+        #requestModal::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+        
+        /* Firefox scrollbar styling */
+        #requestModal {
+            scrollbar-width: thin;
+            scrollbar-color: #d1d5db #f9fafb;
+        }
+    </style>
     <script>
         tailwind.config = {
             theme: {
@@ -299,16 +354,6 @@ $meds = db()->query('
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-        </svg>
-    </button>
-    
-    <!-- Mobile Overlay -->
-    <div class="mobile-overlay" onclick="closeMobileMenu()"></div>
-    
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -343,6 +388,12 @@ $meds = db()->query('
                 </svg>
                 My Requests
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/medicine_history.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Medicine History
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('resident/allocations.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -355,9 +406,10 @@ $meds = db()->query('
                 </svg>
                 Family Members
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('resident/dashboard.php#profile')); ?>">
+            <a href="<?php echo htmlspecialchars(base_url('resident/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
                 </svg>
                 Profile
             </a>
@@ -568,7 +620,7 @@ $meds = db()->query('
                         <!-- Action Button -->
                             <div class="flex justify-end">
                             <?php if ($isAvailable): ?>
-                                <button onclick="openRequestModal(<?php echo (int)$m['id']; ?>, '<?php echo htmlspecialchars($m['name']); ?>')" 
+                                <button onclick="openRequestModal(<?php echo (int)$m['id']; ?>, '<?php echo htmlspecialchars($m['name']); ?>', '<?php echo htmlspecialchars($m['image_path'] ? base_url($m['image_path']) : ''); ?>')" 
                                         class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -840,9 +892,16 @@ $meds = db()->query('
             animation: shimmer 1.5s infinite;
         }
 
-        /* Ensure sidebar stays fixed when scrolling */
-        body {
+        /* FORCE SIDEBAR TO STAY FIXED - OVERRIDE ALL OTHER STYLES */
+        * {
+            box-sizing: border-box !important;
+        }
+        
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
             overflow-x: hidden !important;
+            height: 100% !important;
         }
         
         .sidebar {
@@ -851,9 +910,38 @@ $meds = db()->query('
             left: 0 !important;
             height: 100vh !important;
             width: 280px !important;
-            z-index: 1000 !important;
+            z-index: 9999 !important;
             overflow-y: auto !important;
             transform: none !important;
+            background: white !important;
+            border-right: 1px solid #e5e7eb !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+            transition: none !important;
+        }
+        
+        /* Override all media queries */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed !important;
+                width: 280px !important;
+                transform: none !important;
+            }
         }
 
         /* Ensure main content has proper margin and doesn't affect sidebar */
@@ -862,20 +950,54 @@ $meds = db()->query('
             width: calc(100% - 280px) !important;
             position: relative !important;
             min-height: 100vh !important;
+            background: #f9fafb !important;
         }
 
         /* Prevent any container from affecting sidebar position */
-        html, body {
+        .container, .wrapper, .page-wrapper {
             position: relative !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         
         /* Ensure sidebar brand and nav stay in place */
         .sidebar-brand {
             position: relative !important;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+            color: white !important;
+            padding: 1.5rem !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            font-weight: 700 !important;
+            font-size: 1.25rem !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
         }
         
         .sidebar-nav {
             position: relative !important;
+            padding: 1rem !important;
+        }
+        
+        .sidebar-nav a {
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.75rem !important;
+            padding: 0.75rem 1rem !important;
+            margin-bottom: 0.25rem !important;
+            border-radius: 0.5rem !important;
+            color: #374151 !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+            transition: none !important;
+        }
+        
+        /* Removed hover effects for sidebar navigation */
+        
+        .sidebar-nav a.active {
+            background: #dbeafe !important;
+            color: #1d4ed8 !important;
+            font-weight: 600 !important;
         }
 
         /* Toast Notification Styles */
@@ -941,119 +1063,171 @@ $meds = db()->query('
             margin: 0;
             opacity: 0.9;
         }
+
+        /* Enhanced Modal Animations */
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+                max-height: 500px;
+            }
+        }
+        
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        .shimmer:hover {
+            animation: shimmer 0.5s ease-in-out;
+        }
+
+        /* Enhanced form styles */
+        .form-section {
+            transition: all 0.3s ease;
+        }
+        .form-section:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        .input-focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+        }
+        .file-upload-area {
+            transition: all 0.3s ease;
+        }
+        .file-upload-area:hover {
+            transform: scale(1.02);
+        }
+        .file-upload-area.dragover {
+            border-color: #3b82f6;
+            background-color: #f0f9ff;
+            transform: scale(1.05);
+        }
     </style>
 
     <!-- Request Medicine Modal -->
-    <div id="requestModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 99999; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px);">
-        <div style="background: white; border-radius: 24px; box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.25); max-width: 700px; width: 100%; max-height: 95vh; overflow-y: auto; border: 1px solid rgba(229, 231, 235, 0.8);">
-            <div style="padding: 40px;">
-                <!-- Modal Header -->
-                <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
-                    <div style="display: flex; align-items: center; gap: 20px;">
-                        <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);">
-                            <svg style="width: 28px; height: 28px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 8px 0; letter-spacing: -0.025em;">Request Medicine</h3>
-                            <p style="color: #6b7280; margin: 0; font-size: 16px; line-height: 1.5;">Submit a request for medicine with proof of need</p>
-                        </div>
+    <div id="requestModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 99999; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(8px);">
+        <div style="background: white; border-radius: 16px; box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.2); max-width: 600px; width: 100%; max-height: 95vh; overflow-y: auto; position: relative; animation: modalSlideIn 0.3s ease-out;">
+            <!-- Modal Header -->
+            <div style="background: white; padding: 24px 24px 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <h3 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 4px 0;">Request Medicine</h3>
+                        <p style="color: #6b7280; margin: 0; font-size: 14px;">Submit a request for medicine</p>
                     </div>
-                    <button onclick="closeRequestModal()" style="color: #9ca3af; background: #f9fafb; border: none; cursor: pointer; padding: 12px; border-radius: 12px; transition: all 0.2s ease;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#6b7280';" onmouseout="this.style.background='#f9fafb'; this.style.color='#9ca3af';">
-                        <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onclick="closeRequestModal()" style="color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; cursor: pointer; padding: 8px; border-radius: 8px; transition: all 0.2s ease;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#374151';" onmouseout="this.style.background='#f9fafb'; this.style.color='#6b7280';">
+                        <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
+            </div>
+            
+            <div style="padding: 24px;">
 
                 <!-- Modal Content -->
-                <form id="requestForm" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 32px;">
+                <form id="requestForm" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 24px;">
                     <input type="hidden" name="medicine_id" id="modalMedicineId" />
                     
                     <!-- Medicine Info -->
-                    <div style="padding: 20px; background: linear-gradient(135deg, #dbeafe, #e0e7ff); border: 1px solid #c7d2fe; border-radius: 16px;">
-                        <div style="display: flex; align-items: center; gap: 16px;">
-                            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                                <svg style="width: 24px; height: 24px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div style="padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div id="modalMedicineImage" style="width: 60px; height: 60px; background: #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                                <svg style="width: 24px; height: 24px; color: #9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
                                 </svg>
                             </div>
                             <div>
-                                <h4 style="font-size: 20px; font-weight: 600; color: #1e40af; margin: 0 0 4px 0;" id="modalMedicineName">Medicine Name</h4>
-                                <p style="color: #3b82f6; margin: 0; font-size: 14px;">Request this medicine</p>
+                                <h4 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 2px 0;" id="modalMedicineName">Medicine Name</h4>
+                                <p style="color: #6b7280; margin: 0; font-size: 14px;">Request this medicine</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Requested For -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Requested For</label>
-                            <select name="requested_for" id="reqFor" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;" onchange="toggleFamilyFields()">
-                                <!-- Options will be populated by JavaScript -->
-                            </select>
-                        </div>
-                        
-                        <div id="familyMemberSelect" style="display: none; flex-direction: column; gap: 12px;">
-                            <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Family Member</label>
-                            <select name="family_member_id" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; cursor: pointer;">
-                                <option value="">Choose a family member</option>
-                                <!-- Family members will be populated by JavaScript -->
-                            </select>
-                        </div>
+                    <div>
+                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Requested For</label>
+                        <select name="requested_for" id="reqFor" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white; cursor: pointer;" onchange="toggleFamilyFields()" onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';">
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                    </div>
+                    
+                    <div id="familyMemberSelect" style="display: none;">
+                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Family Member</label>
+                        <select name="family_member_id" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white; cursor: pointer;" onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';">
+                            <option value="">Choose a family member</option>
+                            <!-- Family members will be populated by JavaScript -->
+                        </select>
                     </div>
 
                     <!-- Family Fields (hidden by default) -->
-                    <div id="familyFields" style="display: none; flex-direction: column; gap: 16px;">
-                        <h4 style="font-size: 18px; font-weight: 600; color: #111827; margin: 0;">Patient Information</h4>
+                    <div id="familyFields" style="display: none;">
                         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Patient Name</label>
-                                <input name="patient_name" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" placeholder="Enter patient name" />
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Patient Name</label>
+                                <input name="patient_name" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white;" placeholder="Enter patient name" onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';" />
                             </div>
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Date of Birth</label>
-                                <input name="patient_date_of_birth" type="date" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" />
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Date of Birth</label>
+                                <input name="patient_date_of_birth" type="date" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white;" onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';" />
                             </div>
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151;">Relationship</label>
-                                <input name="relationship" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 16px; transition: all 0.2s ease; background: #fafafa;" placeholder="e.g., Father, Mother" />
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Relationship</label>
+                                <input name="relationship" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white;" placeholder="e.g., Father, Mother" onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';" />
                             </div>
                         </div>
                     </div>
 
                     <!-- Reason for Request -->
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
                         <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Reason for Request</label>
-                        <textarea name="reason" rows="4" style="width: 100%; padding: 16px 20px; border: 2px solid #e5e7eb; border-radius: 16px; font-size: 16px; transition: all 0.2s ease; background: #fafafa; resize: none; min-height: 100px;" placeholder="Please explain why you need this medicine..."></textarea>
+                        <textarea name="reason" rows="4" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; background: white; resize: none; min-height: 100px; font-family: inherit; line-height: 1.5;" placeholder="Please explain why you need this medicine..." onfocus="this.style.borderColor='#6b7280'; this.style.outline='none';" onblur="this.style.borderColor='#d1d5db';"></textarea>
+                        <p style="font-size: 12px; color: #6b7280; margin: 8px 0 0 0;">Provide detailed information about your medical condition or symptoms</p>
                     </div>
 
                     <!-- Proof of Need -->
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">
-                            Proof of Need <span style="color: #ef4444;">*</span>
-                        </label>
-                        <div style="border: 2px dashed #d1d5db; border-radius: 16px; padding: 32px; text-align: center; transition: all 0.2s ease; cursor: pointer;" onmouseover="this.style.borderColor='#3b82f6'; this.style.backgroundColor='#f8fafc';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='transparent';">
+                    <div>
+                        <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Proof of Need <span style="color: #ef4444;">*</span></label>
+                        <div style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; background: #f9fafb;" onmouseover="this.style.borderColor='#6b7280'; this.style.backgroundColor='#f3f4f6';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='#f9fafb';">
                             <input type="file" name="proof" accept="image/*,application/pdf" required style="display: none;" id="proofFile" />
-                            <label for="proofFile" style="cursor: pointer;">
-                                <svg style="width: 48px; height: 48px; color: #9ca3af; margin: 0 auto 16px auto;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                                </svg>
-                                <p style="font-size: 16px; color: #6b7280; margin: 0 0 8px 0;">Click to upload or drag and drop</p>
-                                <p style="font-size: 14px; color: #9ca3af; margin: 0;">JPG, PNG, or PDF (Max 10MB)</p>
+                            <label for="proofFile" style="cursor: pointer; display: block;">
+                                <div style="width: 48px; height: 48px; background: #6b7280; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
+                                    <svg style="width: 24px; height: 24px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    </svg>
+                                </div>
+                                <p style="font-size: 16px; color: #374151; margin: 0 0 4px 0; font-weight: 500;">Click to upload or drag and drop</p>
+                                <p style="font-size: 12px; color: #6b7280; margin: 0;">JPG, PNG, or PDF (Max 10MB)</p>
                             </label>
                         </div>
-                        <p style="font-size: 12px; color: #6b7280; margin: 0;">Upload temperature reading, medical certificate, or other proof of illness</p>
+                        <p style="font-size: 12px; color: #6b7280; margin: 8px 0 0 0;">Upload temperature reading, medical certificate, or other proof of illness</p>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div style="display: flex; justify-content: flex-end; gap: 16px; padding-top: 24px; border-top: 1px solid #f3f4f6; margin-top: 8px;">
-                        <button type="button" onclick="closeRequestModal()" style="padding: 16px 32px; border: 2px solid #e5e7eb; color: #6b7280; font-weight: 600; border-radius: 16px; background: white; cursor: pointer; transition: all 0.2s ease; font-size: 16px;">
+                    <div style="display: flex; justify-content: flex-end; gap: 12px; padding-top: 24px; border-top: 1px solid #e5e7eb; margin-top: 24px;">
+                        <button type="button" onclick="closeRequestModal()" style="padding: 12px 24px; border: 1px solid #d1d5db; color: #374151; font-weight: 500; border-radius: 8px; background: white; cursor: pointer; transition: all 0.2s ease; font-size: 14px;" onmouseover="this.style.borderColor='#6b7280'; this.style.backgroundColor='#f9fafb';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='white';">
                             Cancel
                         </button>
-                        <button type="submit" style="padding: 16px 32px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; font-weight: 600; border-radius: 16px; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 16px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); display: flex; align-items: center; gap: 8px;">
-                            <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button type="submit" style="padding: 12px 24px; background: #374151; color: white; font-weight: 500; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 14px; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.backgroundColor='#1f2937';" onmouseout="this.style.backgroundColor='#374151';">
+                            <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                             </svg>
                             Submit Request
@@ -1084,14 +1258,24 @@ $meds = db()->query('
             echo json_encode($residentData);
         ?>;
 
-        function openRequestModal(medicineId, medicineName) {
+        function openRequestModal(medicineId, medicineName, medicineImage) {
             const modal = document.getElementById('requestModal');
             const medicineNameElement = document.getElementById('modalMedicineName');
             const medicineIdInput = document.getElementById('modalMedicineId');
+            const medicineImageElement = document.getElementById('modalMedicineImage');
             
             // Set medicine info
             medicineNameElement.textContent = medicineName;
             medicineIdInput.value = medicineId;
+            
+            // Set medicine image
+            if (medicineImage && medicineImage.trim() !== '') {
+                medicineImageElement.innerHTML = `<img src="${medicineImage}" alt="${medicineName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" />`;
+            } else {
+                medicineImageElement.innerHTML = `<svg style="width: 24px; height: 24px; color: #9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                </svg>`;
+            }
             
             // Populate "Requested For" dropdown with resident and family member names
             const requestedForSelect = document.getElementById('reqFor');
@@ -1147,18 +1331,147 @@ $meds = db()->query('
             const familyMemberSelect = document.getElementById('familyMemberSelect');
             
             if (reqFor.startsWith('family_')) {
-                // Family member selected - show family fields
+                // Family member selected - show family fields with animation
                 familyFields.style.display = 'flex';
                 familyMemberSelect.style.display = 'flex';
+                
+                // Add animation class
+                familyFields.style.animation = 'slideDown 0.3s ease-out';
                 
                 // Set the family member ID in the hidden field
                 const familyMemberId = reqFor.replace('family_', '');
                 const familySelect = document.querySelector('#familyMemberSelect select');
                 familySelect.value = familyMemberId;
+                
+                // Auto-populate family member data
+                populateFamilyData(familyMemberId);
             } else {
                 // Self selected - hide family fields
                 familyFields.style.display = 'none';
                 familyMemberSelect.style.display = 'none';
+                
+                // Clear family data
+                clearFamilyData();
+            }
+        }
+
+        function populateFamilyData(familyMemberId) {
+            const familyMember = residentData.familyMembers.find(member => member.id == familyMemberId);
+            if (familyMember) {
+                const fullName = `${familyMember.first_name} ${familyMember.middle_initial ? familyMember.middle_initial + '. ' : ''}${familyMember.last_name}`;
+                
+                // Populate the form fields
+                document.querySelector('input[name="patient_name"]').value = fullName;
+                document.querySelector('input[name="patient_date_of_birth"]').value = familyMember.date_of_birth;
+                document.querySelector('input[name="relationship"]').value = familyMember.relationship;
+                
+                // Disable the fields since they're auto-populated
+                document.querySelector('input[name="patient_name"]').readOnly = true;
+                document.querySelector('input[name="patient_date_of_birth"]').readOnly = true;
+                document.querySelector('input[name="relationship"]').readOnly = true;
+                
+                // Add visual feedback
+                const inputs = document.querySelectorAll('#familyFields input');
+                inputs.forEach(input => {
+                    input.style.backgroundColor = '#fef3c7';
+                    input.style.borderColor = '#f59e0b';
+                });
+            }
+        }
+
+        function clearFamilyData() {
+            // Clear the form fields
+            document.querySelector('input[name="patient_name"]').value = '';
+            document.querySelector('input[name="patient_date_of_birth"]').value = '';
+            document.querySelector('input[name="relationship"]').value = '';
+            
+            // Enable the fields
+            document.querySelector('input[name="patient_name"]').readOnly = false;
+            document.querySelector('input[name="patient_date_of_birth"]').readOnly = false;
+            document.querySelector('input[name="relationship"]').readOnly = false;
+            
+            // Reset visual styling
+            const inputs = document.querySelectorAll('#familyFields input');
+            inputs.forEach(input => {
+                input.style.backgroundColor = 'white';
+                input.style.borderColor = '#fbbf24';
+            });
+        }
+
+        // Enhanced file upload with drag and drop
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileUploadArea = document.querySelector('#requestModal [style*="border: 3px dashed"]');
+            const fileInput = document.getElementById('proofFile');
+            
+            if (fileUploadArea && fileInput) {
+                // Drag and drop functionality
+                fileUploadArea.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    fileUploadArea.classList.add('dragover');
+                    fileUploadArea.style.borderColor = '#3b82f6';
+                    fileUploadArea.style.backgroundColor = '#f0f9ff';
+                    fileUploadArea.style.transform = 'scale(1.05)';
+                });
+                
+                fileUploadArea.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    fileUploadArea.classList.remove('dragover');
+                    fileUploadArea.style.borderColor = '#f87171';
+                    fileUploadArea.style.backgroundColor = 'white';
+                    fileUploadArea.style.transform = 'scale(1)';
+                });
+                
+                fileUploadArea.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    fileUploadArea.classList.remove('dragover');
+                    fileUploadArea.style.borderColor = '#f87171';
+                    fileUploadArea.style.backgroundColor = 'white';
+                    fileUploadArea.style.transform = 'scale(1)';
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        fileInput.files = files;
+                        updateFileDisplay(files[0]);
+                    }
+                });
+                
+                // File input change handler
+                fileInput.addEventListener('change', function(e) {
+                    if (e.target.files.length > 0) {
+                        updateFileDisplay(e.target.files[0]);
+                    }
+                });
+            }
+        });
+
+        function updateFileDisplay(file) {
+            const fileUploadArea = document.querySelector('#requestModal [style*="border: 3px dashed"]');
+            if (fileUploadArea) {
+                // Update the display to show selected file
+                const label = fileUploadArea.querySelector('label');
+                if (label) {
+                    const icon = label.querySelector('div');
+                    const title = label.querySelector('p:first-of-type');
+                    const subtitle = label.querySelector('p:last-of-type');
+                    
+                    if (icon && title && subtitle) {
+                        // Change icon to checkmark
+                        icon.innerHTML = `
+                            <svg style="width: 32px; height: 32px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        `;
+                        
+                        // Update text
+                        title.textContent = `File selected: ${file.name}`;
+                        subtitle.textContent = `Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+                        
+                        // Change colors to success
+                        icon.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                        title.style.color = '#065f46';
+                        subtitle.style.color = '#047857';
+                    }
+                }
             }
         }
 
@@ -1167,6 +1480,109 @@ $meds = db()->query('
             const modal = document.getElementById('requestModal');
             if (e.target === modal) {
                 closeRequestModal();
+            }
+        });
+
+        // Form validation
+        function validateForm() {
+            const form = document.getElementById('requestForm');
+            const requiredFields = form.querySelectorAll('[required]');
+            let isValid = true;
+            let firstErrorField = null;
+
+            // Clear previous error states
+            form.querySelectorAll('.error-state').forEach(el => {
+                el.classList.remove('error-state');
+            });
+
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    isValid = false;
+                    if (!firstErrorField) firstErrorField = field;
+                    
+                    // Add error styling
+                    field.style.borderColor = '#ef4444';
+                    field.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                    field.classList.add('error-state');
+                    
+                    // Add error message if not exists
+                    if (!field.nextElementSibling || !field.nextElementSibling.classList.contains('error-message')) {
+                        const errorMsg = document.createElement('p');
+                        errorMsg.className = 'error-message';
+                        errorMsg.style.color = '#ef4444';
+                        errorMsg.style.fontSize = '12px';
+                        errorMsg.style.margin = '4px 0 0 0';
+                        errorMsg.textContent = 'This field is required';
+                        field.parentNode.appendChild(errorMsg);
+                    }
+                } else {
+                    // Remove error styling
+                    field.style.borderColor = '';
+                    field.style.boxShadow = '';
+                    field.classList.remove('error-state');
+                    
+                    // Remove error message
+                    const errorMsg = field.parentNode.querySelector('.error-message');
+                    if (errorMsg) {
+                        errorMsg.remove();
+                    }
+                }
+            });
+
+            // Validate file upload
+            const fileInput = document.getElementById('proofFile');
+            if (fileInput && !fileInput.files.length) {
+                isValid = false;
+                const fileUploadArea = document.querySelector('#requestModal [style*="border: 3px dashed"]');
+                if (fileUploadArea) {
+                    fileUploadArea.style.borderColor = '#ef4444';
+                    fileUploadArea.style.backgroundColor = '#fef2f2';
+                }
+            }
+
+            return { isValid, firstErrorField };
+        }
+
+        // Real-time validation
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('requestForm');
+            if (form) {
+                // Add validation on form submit
+                form.addEventListener('submit', function(e) {
+                    const validation = validateForm();
+                    if (!validation.isValid) {
+                        e.preventDefault();
+                        
+                        // Focus on first error field
+                        if (validation.firstErrorField) {
+                            validation.firstErrorField.focus();
+                        }
+                        
+                        // Show error toast
+                        showToast('Please fill in all required fields', 'error');
+                        return false;
+                    }
+                });
+
+                // Real-time validation on input
+                form.querySelectorAll('input, textarea, select').forEach(field => {
+                    field.addEventListener('blur', function() {
+                        if (this.hasAttribute('required') && !this.value.trim()) {
+                            this.style.borderColor = '#ef4444';
+                            this.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                        } else {
+                            this.style.borderColor = '';
+                            this.style.boxShadow = '';
+                        }
+                    });
+                    
+                    field.addEventListener('input', function() {
+                        if (this.style.borderColor === 'rgb(239, 68, 68)' && this.value.trim()) {
+                            this.style.borderColor = '';
+                            this.style.boxShadow = '';
+                        }
+                    });
+                });
             }
         });
 
@@ -1316,54 +1732,7 @@ $meds = db()->query('
         });
     </script>
     
-    <script>
-        // Mobile menu functionality
-        function toggleMobileMenu() {
-            const sidebar = document.querySelector('.sidebar');
-            const overlay = document.querySelector('.mobile-overlay');
-            
-            sidebar.classList.toggle('open');
-            overlay.classList.toggle('active');
-            
-            // Prevent body scroll when menu is open
-            if (sidebar.classList.contains('open')) {
-                document.body.style.overflow = 'hidden';
-            } else {
-                document.body.style.overflow = '';
-            }
-        }
-        
-        function closeMobileMenu() {
-            const sidebar = document.querySelector('.sidebar');
-            const overlay = document.querySelector('.mobile-overlay');
-            
-            sidebar.classList.remove('open');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-        
-        // Close mobile menu when clicking on sidebar links
-        document.addEventListener('DOMContentLoaded', function() {
-            const sidebarLinks = document.querySelectorAll('.sidebar-nav a');
-            sidebarLinks.forEach(link => {
-                link.addEventListener('click', function() {
-                    // Only close on mobile
-                    if (window.innerWidth <= 768) {
-                        closeMobileMenu();
-                    }
-                });
-            });
-            
-            // Close mobile menu on window resize
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768) {
-                    closeMobileMenu();
-                }
-            });
-        });
-    </script>
 
-    <script src="<?php echo htmlspecialchars(base_url('assets/js/resident-enhance.js')); ?>"></script>
 </body>
 </html>
 

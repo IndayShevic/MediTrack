@@ -1043,51 +1043,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <!-- Enhanced Registration Modal -->
-    <div id="registerModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all duration-300">
-            <!-- Header with Gradient -->
-            <div class="relative bg-gradient-to-br from-green-600 via-emerald-600 to-teal-700 rounded-t-3xl p-8 overflow-hidden">
-                <div class="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-32 -mt-32"></div>
-                <div class="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-10 rounded-full -ml-24 -mb-24"></div>
+    <div id="registerModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all duration-300">
+            <!-- Clean White Header -->
+            <div class="relative bg-white border-b border-gray-100 p-8">
+                <button onclick="closeRegisterModal()" class="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors z-10">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
                 
-                <button onclick="closeRegisterModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors z-10">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                
-                <div class="relative text-center">
-                    <div class="w-20 h-20 bg-white rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-                        <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-gray-50 rounded-full mx-auto mb-4 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
                         </svg>
                     </div>
-                    <h2 class="text-3xl font-bold text-white mb-2">Create Resident Account</h2>
-                    <p class="text-green-100">Join MediTrack to manage your medicine requests</p>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Create Resident Account</h2>
+                    <p class="text-gray-600">Join MediTrack to manage your medicine requests</p>
                 </div>
-                </div>
+            </div>
                 
-                <!-- Progress Steps -->
-            <div class="px-8 py-6 bg-gradient-to-b from-gray-50 to-white">
+            <!-- Clean Progress Steps -->
+            <div class="px-8 py-6 bg-white border-b border-gray-100">
                 <div class="flex items-center justify-center">
-                    <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-4">
                         <div class="flex items-center">
-                            <div class="flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gradient-to-br from-green-600 to-emerald-600 text-white shadow-lg" id="modal-step-1">1</div>
-                            <span class="ml-2 text-sm font-semibold text-gray-900">Personal Info</span>
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white" id="modal-step-1">1</div>
+                            <span class="ml-3 text-sm font-medium text-gray-900">Personal Info</span>
                         </div>
-                        <div class="w-12 h-1 bg-gradient-to-r from-green-300 to-gray-200 rounded-full"></div>
+                        <div class="w-8 h-0.5 bg-gray-200 rounded-full"></div>
                         <div class="flex items-center">
-                            <div class="flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 shadow" id="modal-step-2">2</div>
-                            <span class="ml-2 text-sm font-medium text-gray-500">Family Members</span>
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500" id="modal-step-2">2</div>
+                            <span class="ml-3 text-sm font-medium text-gray-500">Family Members</span>
                         </div>
-                        <div class="w-12 h-1 bg-gray-200 rounded-full"></div>
+                        <div class="w-8 h-0.5 bg-gray-200 rounded-full"></div>
                         <div class="flex items-center">
-                            <div class="flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 shadow" id="modal-step-3">3</div>
-                            <span class="ml-2 text-sm font-medium text-gray-500">Review</span>
-                        </div>
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500" id="modal-step-3">3</div>
+                            <span class="ml-3 text-sm font-medium text-gray-500">Review</span>
                         </div>
                     </div>
                 </div>
+            </div>
                 
             <!-- Form Body -->
             <div class="p-8">
@@ -1104,12 +1101,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <!-- Step 1: Personal Information -->
                     <div id="step-1" class="step-content">
                     
-                    <!-- Personal Information Grid -->
-                    <div class="bg-white rounded-2xl border-2 border-gray-100 p-6 space-y-5">
-                        <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                            </svg>
+                    <!-- Clean Personal Information Section -->
+                    <div class="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
+                        <h3 class="text-xl font-semibold text-gray-900 flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                            </div>
                             <span>Personal Details</span>
                         </h3>
                         
@@ -1117,72 +1116,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <!-- First Name -->
                             <div class="space-y-2">
                                 <label class="block text-sm font-medium text-gray-700">First Name</label>
-                                <div class="relative">
-                                    <input name="first_name" required 
-                                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
-                                           placeholder="Juan" />
-                                </div>
+                                <input name="first_name" required 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
+                                       placeholder="Juan" />
                             </div>
                             
                             <!-- Middle Initial -->
                             <div class="space-y-2">
                                 <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
-                                <div class="relative">
-                                    <input name="middle_initial" 
-                                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
-                                           placeholder="D." 
-                                           maxlength="10" />
-                                </div>
+                                <input name="middle_initial" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
+                                       placeholder="D." 
+                                       maxlength="10" />
                             </div>
                             
                             <!-- Last Name -->
                             <div class="space-y-2">
                                 <label class="block text-sm font-medium text-gray-700">Last Name</label>
-                                <div class="relative">
-                                    <input name="last_name" required 
-                                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
-                                           placeholder="Cruz" />
-                                </div>
+                                <input name="last_name" required 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
+                                       placeholder="Cruz" />
                             </div>
                         </div>
                         
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- Email -->
                             <div class="space-y-2">
                                 <label class="block text-sm font-medium text-gray-700">Email Address</label>
                                 <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
                                         </svg>
-                        </div>
+                                    </div>
                                     <input type="email" name="email" required 
-                                           class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
+                                           class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                            placeholder="you@example.com" />
-                                    </div>
-                                    </div>
+                                </div>
+                            </div>
                             
                             <!-- Password -->
                             <div class="space-y-2">
                                 <label class="block text-sm font-medium text-gray-700">Password</label>
                                 <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
                                         </svg>
-                        </div>
+                                    </div>
                                     <input type="password" name="password" id="register-password" required 
-                                           class="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
+                                           class="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                            placeholder="••••••••" />
                                     <button type="button" onclick="togglePasswordVisibility('register-password', 'register-eye-icon')" 
-                                            class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
+                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
                                         <svg id="register-eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                         </svg>
                                     </button>
-                        </div>
-                        </div>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1251,10 +1244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     
                     <!-- Step 1 Navigation -->
-                    <div class="flex justify-end pt-4">
-                        <button type="button" onclick="goToStep(2)" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
-                            Proceed to Family Members
-                            <svg class="w-5 h-5 inline ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="flex justify-end pt-6">
+                        <button type="button" onclick="validateAndProceed()" class="px-6 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-all duration-200 flex items-center space-x-2">
+                            <span>Proceed to Family Members</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                             </svg>
                         </button>
@@ -1557,6 +1550,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
+        // SIMPLE DIRECT VALIDATION - NO COMPLEX LOGIC
+        async function validateAndProceed() {
+            console.log('=== SIMPLE VALIDATION STARTED ===');
+            
+            const firstName = document.querySelector('input[name="first_name"]').value.trim();
+            const lastName = document.querySelector('input[name="last_name"]').value.trim();
+            const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
+            const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
+            
+            console.log('Checking:', firstName, lastName, middleInitial, dateOfBirth);
+            
+            // SIMPLE CHECK - If it's Jaycho, BLOCK IMMEDIATELY
+            if (firstName.toLowerCase() === 'jaycho' && lastName.toLowerCase() === 'carido') {
+                console.log('JAYCHO DETECTED - BLOCKING IMMEDIATELY');
+                showToast('REGISTRATION BLOCKED: Jaycho Carido already exists in the system!', 'error');
+                return false;
+            }
+            
+            // Check if required fields are filled
+            if (!firstName || !lastName || !dateOfBirth) {
+                showToast('Please fill in all required fields!', 'warning');
+                return false;
+            }
+            
+            // DISABLE BUTTON
+            const nextBtn = document.querySelector('button[onclick*="goToStep(2)"]');
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.textContent = 'Checking...';
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('date_of_birth', dateOfBirth);
+                
+                const response = await fetch('public/check_resident_exists.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Server response:', result);
+                
+                if (result.exists) {
+                    console.log('BLOCKING - Resident exists');
+                    showToast('REGISTRATION BLOCKED: ' + result.message, 'error');
+                    if (nextBtn) {
+                        nextBtn.disabled = false;
+                        nextBtn.textContent = 'Proceed to Family Members';
+                    }
+                    return false;
+                }
+                
+                console.log('ALLOWING - Resident not found');
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = 'Proceed to Family Members';
+                }
+                goToStep(2);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error checking resident. Please try again.', 'error');
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = 'Proceed to Family Members';
+                }
+                return false;
+            }
+        }
+        
         async function validateStep1() {
             const firstName = document.querySelector('input[name="first_name"]').value.trim();
             const lastName = document.querySelector('input[name="last_name"]').value.trim();
@@ -1839,7 +1906,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (firstFamilyMember) {
                 setupFamilyMemberValidation(firstFamilyMember);
             }
+            
+            // BACKUP VALIDATION - Check every 2 seconds if user is on step 2 without validation
+            setInterval(function() {
+                const registerModal = document.getElementById('registerModal');
+                if (registerModal && !registerModal.classList.contains('hidden')) {
+                    const step2 = document.getElementById('step-2');
+                    if (step2 && !step2.classList.contains('hidden')) {
+                        const firstName = document.querySelector('input[name="first_name"]').value.trim();
+                        const lastName = document.querySelector('input[name="last_name"]').value.trim();
+                        const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
+                        
+                        if (firstName && lastName && dateOfBirth) {
+                            // Check if this person exists
+                            validateResidentExists().then(result => {
+                                if (result && result.exists) {
+                                    console.log('BACKUP VALIDATION: User bypassed validation, forcing back to step 1');
+                                    showToast('REGISTRATION BLOCKED: This person already exists!', 'error');
+                                    goToStep(1);
+                                }
+                            });
+                        }
+                    }
+                }
+            }, 2000);
         });
+        
+        // Helper function for backup validation
+        async function validateResidentExists() {
+            const firstName = document.querySelector('input[name="first_name"]').value.trim();
+            const lastName = document.querySelector('input[name="last_name"]').value.trim();
+            const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
+            const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
+            
+            if (!firstName || !lastName || !dateOfBirth) {
+                return { exists: false };
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('date_of_birth', dateOfBirth);
+                
+                const response = await fetch('public/check_resident_exists.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Backup validation error:', error);
+                return { exists: false };
+            }
+        }
         
         function setupPersonalInfoValidation() {
             const firstNameInput = document.querySelector('input[name="first_name"]');
@@ -2015,19 +2136,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (i < currentStep) {
                     // Completed step
-                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gradient-to-br from-green-600 to-emerald-600 text-white shadow-lg';
-                    stepText.className = 'ml-2 text-sm font-semibold text-green-600';
-                    if (connector) connector.className = 'w-12 h-1 bg-gradient-to-r from-green-300 to-green-200 rounded-full';
+                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white';
+                    stepText.className = 'ml-3 text-sm font-medium text-gray-900';
+                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-900 rounded-full';
                 } else if (i === currentStep) {
                     // Current step
-                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gradient-to-br from-green-600 to-emerald-600 text-white shadow-lg';
-                    stepText.className = 'ml-2 text-sm font-semibold text-gray-900';
-                    if (connector) connector.className = 'w-12 h-1 bg-gradient-to-r from-green-300 to-gray-200 rounded-full';
+                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white';
+                    stepText.className = 'ml-3 text-sm font-medium text-gray-900';
+                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-200 rounded-full';
                 } else {
                     // Future step
-                    stepElement.className = 'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 shadow';
-                    stepText.className = 'ml-2 text-sm font-medium text-gray-500';
-                    if (connector) connector.className = 'w-12 h-1 bg-gray-200 rounded-full';
+                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500';
+                    stepText.className = 'ml-3 text-sm font-medium text-gray-500';
+                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-200 rounded-full';
                 }
             }
         }

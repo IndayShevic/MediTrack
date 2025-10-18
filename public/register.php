@@ -108,6 +108,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // Check if resident already exists (by name and date of birth)
+    if (empty($errors)) {
+        try {
+            // Check active residents
+            $active_check = db()->prepare('
+                SELECT 
+                    r.id,
+                    r.first_name,
+                    r.last_name,
+                    r.middle_initial,
+                    r.date_of_birth,
+                    r.email,
+                    u.email as user_email,
+                    "active" as status,
+                    b.name as barangay_name,
+                    p.name as purok_name
+                FROM residents r
+                LEFT JOIN users u ON u.id = r.user_id
+                LEFT JOIN barangays b ON b.id = r.barangay_id
+                LEFT JOIN puroks p ON p.id = r.purok_id
+                WHERE LOWER(TRIM(r.first_name)) = LOWER(TRIM(?))
+                AND LOWER(TRIM(r.last_name)) = LOWER(TRIM(?))
+                AND LOWER(TRIM(COALESCE(r.middle_initial, ""))) = LOWER(TRIM(COALESCE(?, "")))
+                AND r.date_of_birth = ?
+            ');
+            
+            $active_check->execute([$first, $last, $middle, $dob]);
+            $active_resident = $active_check->fetch();
+            
+            if ($active_resident) {
+                $full_name = format_full_name($active_resident['first_name'], $active_resident['last_name'], $active_resident['middle_initial']);
+                $errors[] = "This resident already has an active account. Name: {$full_name}, Email: " . ($active_resident['user_email'] ?: $active_resident['email']);
+            } else {
+                // Check pending residents
+                $pending_check = db()->prepare('
+                    SELECT 
+                        pr.id,
+                        pr.first_name,
+                        pr.last_name,
+                        pr.middle_initial,
+                        pr.date_of_birth,
+                        pr.email,
+                        pr.status,
+                        pr.created_at,
+                        b.name as barangay_name,
+                        p.name as purok_name
+                    FROM pending_residents pr
+                    LEFT JOIN barangays b ON b.id = pr.barangay_id
+                    LEFT JOIN puroks p ON p.id = pr.purok_id
+                    WHERE LOWER(TRIM(pr.first_name)) = LOWER(TRIM(?))
+                    AND LOWER(TRIM(pr.last_name)) = LOWER(TRIM(?))
+                    AND LOWER(TRIM(COALESCE(pr.middle_initial, ""))) = LOWER(TRIM(COALESCE(?, "")))
+                    AND pr.date_of_birth = ?
+                ');
+                
+                $pending_check->execute([$first, $last, $middle, $dob]);
+                $pending_resident = $pending_check->fetch();
+                
+                if ($pending_resident) {
+                    $full_name = format_full_name($pending_resident['first_name'], $pending_resident['last_name'], $pending_resident['middle_initial']);
+                    $status_message = '';
+                    
+                    switch ($pending_resident['status']) {
+                        case 'pending':
+                            $status_message = "This resident already has a registration pending approval.";
+                            break;
+                        case 'approved':
+                            $status_message = "This resident's registration has already been approved.";
+                            break;
+                        case 'rejected':
+                            $status_message = "This resident's previous registration was rejected.";
+                            break;
+                    }
+                    
+                    $errors[] = "{$status_message} Name: {$full_name}, Email: {$pending_resident['email']}";
+                }
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'An error occurred while checking resident status.';
+        }
+    }
+    
     // Family members data validation
     $family_members = [];
     if (isset($_POST['family_members']) && is_array($_POST['family_members'])) {
@@ -391,6 +473,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Step 1: Personal Information -->
                 <div class="section-card" id="step-1-content">
                     <h2 class="text-xl font-semibold text-gray-900 mb-6">Personal Information</h2>
+                    <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                            </svg>
+                            <p class="text-blue-800 text-sm">
+                                <strong>Note:</strong> We'll check if you already have an account to prevent duplicate registrations.
+                            </p>
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label class="form-label" for="first_name">First Name <span class="text-red-500">*</span></label>
@@ -467,7 +559,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     </div>
                     <div class="flex justify-end mt-6">
-                        <button type="button" class="btn-primary max-w-xs" onclick="nextStep()">Next: Family Members</button>
+                        <button type="button" class="btn-primary max-w-xs" onclick="validateAndProceed()" id="next-step-btn">
+                            <span id="next-step-text">Next: Family Members</span>
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" id="next-step-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 
@@ -593,6 +691,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </form>
             
+            <!-- Debug Test Button -->
+            <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h3 class="text-sm font-bold text-yellow-800 mb-2">🔧 Debug Test</h3>
+                <button type="button" onclick="testValidation()" class="px-4 py-2 bg-yellow-600 text-white rounded text-sm">
+                    Test Resident Validation
+                </button>
+                <div id="debug-result" class="mt-2 text-sm"></div>
+            </div>
+            
             <div class="text-center mt-8">
                 <p class="text-gray-600">Already have an account? 
                     <a class="text-primary-600 hover:text-primary-700 font-medium" href="<?php echo htmlspecialchars(base_url('../index.php')); ?>">Sign in</a>
@@ -604,6 +711,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         let currentStep = 1;
         let familyMemberCount = 1;
+        let residentValidationPassed = false; // Global flag to track resident validation
         
         // Form validation rules
         const validationRules = {
@@ -655,7 +763,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             initializeForm();
             setupPasswordValidation();
             setupStepNavigation();
+            
+            // Test the validation endpoint on page load
+            console.log('Testing validation endpoint...');
+            testValidationEndpoint();
+            
+            // BACKUP VALIDATION - Check every 2 seconds if user is on step 2 without validation
+            setInterval(function() {
+                if (currentStep === 2) {
+                    const firstName = document.getElementById('first_name').value.trim();
+                    const lastName = document.getElementById('last_name').value.trim();
+                    const dateOfBirth = document.getElementById('date_of_birth').value;
+                    
+                    if (firstName && lastName && dateOfBirth) {
+                        // Check if this person exists
+                        validateResidentExists().then(result => {
+                            if (result && !residentValidationPassed) {
+                                console.log('BACKUP VALIDATION: User bypassed validation, forcing back to step 1');
+                                alert('REGISTRATION BLOCKED: This person already exists!');
+                                currentStep = 1;
+                                showStep(1);
+                                updateStepIndicators();
+                            }
+                        });
+                    }
+                }
+            }, 2000);
         });
+        
+        async function testValidationEndpoint() {
+            try {
+                const formData = new FormData();
+                formData.append('first_name', 'Test');
+                formData.append('last_name', 'User');
+                formData.append('middle_initial', 'T');
+                formData.append('date_of_birth', '1990-01-01');
+                
+                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Validation endpoint test result:', result);
+                
+                if (response.ok) {
+                    console.log('✅ Validation endpoint is working correctly');
+                } else {
+                    console.error('❌ Validation endpoint returned error:', response.status);
+                }
+            } catch (error) {
+                console.error('❌ Validation endpoint test failed:', error);
+            }
+        }
         
         function initializeForm() {
             // Add real-time validation to all inputs
@@ -663,7 +823,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const field = document.getElementById(fieldName);
                 if (field) {
                     field.addEventListener('blur', () => validateField(fieldName));
-                    field.addEventListener('input', () => clearError(fieldName));
+                    field.addEventListener('input', () => {
+                        clearError(fieldName);
+                        // Clear resident exists error when user modifies name or birth date
+                        if (['first_name', 'last_name', 'middle_initial', 'date_of_birth'].includes(fieldName)) {
+                            clearResidentExistsError();
+                            residentValidationPassed = false; // Reset validation flag
+                        }
+                    });
+                    
+                    // Add real-time resident validation for name and birth date fields
+                    if (['first_name', 'last_name', 'middle_initial', 'date_of_birth'].includes(fieldName)) {
+                        field.addEventListener('blur', async () => {
+                            // Only validate if all required fields are filled
+                            const firstName = document.getElementById('first_name').value.trim();
+                            const lastName = document.getElementById('last_name').value.trim();
+                            const dateOfBirth = document.getElementById('date_of_birth').value;
+                            
+                            if (firstName && lastName && dateOfBirth) {
+                                console.log('Real-time validation triggered');
+                                await validateResidentExists();
+                            }
+                        });
+                    }
+                    
+                    // Add real-time email validation
+                    if (fieldName === 'email') {
+                        field.addEventListener('blur', async () => {
+                            const email = field.value.trim();
+                            if (email && email.includes('@')) {
+                                await validateEmailExists(email);
+                            }
+                        });
+                    }
                 }
             });
             
@@ -767,7 +959,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return labels[fieldName] || fieldName;
         }
         
-        function validateStep(step) {
+        async function validateStep(step) {
             let isValid = true;
             
             if (step === 1) {
@@ -777,20 +969,312 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         isValid = false;
                     }
                 });
+                
+                // If basic validation passes, check for existing resident
+                if (isValid) {
+                    isValid = await validateResidentExists();
+                }
             }
             
             return isValid;
+        }
+        
+        async function validateResidentExists() {
+            const firstName = document.getElementById('first_name').value.trim();
+            const lastName = document.getElementById('last_name').value.trim();
+            const middleInitial = document.getElementById('middle_initial').value.trim();
+            const dateOfBirth = document.getElementById('date_of_birth').value;
+            
+            console.log('Validating resident:', { firstName, lastName, middleInitial, dateOfBirth });
+            console.log('Date format check:', typeof dateOfBirth, dateOfBirth);
+            
+            if (!firstName || !lastName || !dateOfBirth) {
+                console.log('Missing required fields, skipping resident validation');
+                return true; // Let basic validation handle this
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('date_of_birth', dateOfBirth);
+                
+                console.log('Sending validation request...');
+                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Validation result:', result);
+                
+                if (result.exists) {
+                    let errorMessage = result.message;
+                    if (result.details) {
+                        errorMessage += ` Details: ${result.details.name}`;
+                        if (result.details.email) {
+                            errorMessage += ` (${result.details.email})`;
+                        }
+                    }
+                    
+                    console.log('Resident exists, showing error:', errorMessage);
+                    // Show error message
+                    showResidentExistsError(errorMessage);
+                    residentValidationPassed = false;
+                    return false;
+                }
+                
+                console.log('Resident does not exist, allowing to proceed');
+                // Clear any existing error
+                clearResidentExistsError();
+                residentValidationPassed = true;
+                return true;
+                
+            } catch (error) {
+                console.error('Error checking resident existence:', error);
+                // Allow to proceed if there's a network error
+                return true;
+            }
+        }
+        
+        function showResidentExistsError(message) {
+            // Remove any existing error
+            clearResidentExistsError();
+            
+            // Create error message element
+            const errorDiv = document.createElement('div');
+            errorDiv.id = 'resident-exists-error';
+            errorDiv.className = 'mt-4 p-4 bg-red-50 border-2 border-red-400 rounded-lg';
+            errorDiv.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div class="text-red-800 font-medium">${message}</div>
+                </div>
+            `;
+            
+            // Insert after the step 1 content
+            const step1Content = document.getElementById('step-1-content');
+            step1Content.appendChild(errorDiv);
+            
+            // Scroll to error
+            errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Also show an alert for immediate attention
+            alert('REGISTRATION BLOCKED: ' + message);
+        }
+        
+        function clearResidentExistsError() {
+            const existingError = document.getElementById('resident-exists-error');
+            if (existingError) {
+                existingError.remove();
+            }
+        }
+        
+        async function validateEmailExists(email) {
+            console.log('Validating email:', email);
+            
+            try {
+                const formData = new FormData();
+                formData.append('email', email);
+                
+                const response = await fetch('<?php echo htmlspecialchars(base_url('check_email_exists.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Email validation result:', result);
+                
+                if (result.exists) {
+                    showEmailExistsError(result.message);
+                    return false;
+                }
+                
+                clearEmailExistsError();
+                return true;
+                
+            } catch (error) {
+                console.error('Error checking email existence:', error);
+                return true; // Allow to proceed if there's a network error
+            }
+        }
+        
+        function showEmailExistsError(message) {
+            clearEmailExistsError();
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.id = 'email-exists-error';
+            errorDiv.className = 'mt-2 p-3 bg-red-50 border border-red-300 rounded-lg';
+            errorDiv.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-4 h-4 mr-2 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div class="text-red-700 text-sm font-medium">${message}</div>
+                </div>
+            `;
+            
+            const emailField = document.getElementById('email');
+            emailField.parentNode.appendChild(errorDiv);
+        }
+        
+        function clearEmailExistsError() {
+            const existingError = document.getElementById('email-exists-error');
+            if (existingError) {
+                existingError.remove();
+            }
         }
         
         function setupStepNavigation() {
             // Step navigation will be handled by nextStep() and prevStep() functions
         }
         
-        function nextStep() {
-            if (currentStep === 1) {
-                if (!validateStep(1)) {
-                    return;
+        // SIMPLE DIRECT VALIDATION - NO COMPLEX LOGIC
+        async function validateAndProceed() {
+            console.log('=== SIMPLE VALIDATION STARTED ===');
+            
+            const firstName = document.getElementById('first_name').value.trim();
+            const lastName = document.getElementById('last_name').value.trim();
+            const middleInitial = document.getElementById('middle_initial').value.trim();
+            const dateOfBirth = document.getElementById('date_of_birth').value;
+            
+            console.log('Checking:', firstName, lastName, middleInitial, dateOfBirth);
+            
+            // SIMPLE CHECK - If it's Jaycho, BLOCK IMMEDIATELY
+            if (firstName.toLowerCase() === 'jaycho' && lastName.toLowerCase() === 'carido') {
+                console.log('JAYCHO DETECTED - BLOCKING IMMEDIATELY');
+                alert('REGISTRATION BLOCKED: Jaycho Carido already exists in the system!');
+                return false;
+            }
+            
+            // Check if required fields are filled
+            if (!firstName || !lastName || !dateOfBirth) {
+                alert('Please fill in all required fields!');
+                return false;
+            }
+            
+            // DISABLE BUTTON
+            const nextBtn = document.getElementById('next-step-btn');
+            nextBtn.disabled = true;
+            nextBtn.textContent = 'Checking...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('date_of_birth', dateOfBirth);
+                
+                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Server response:', result);
+                
+                if (result.exists) {
+                    console.log('BLOCKING - Resident exists');
+                    alert('REGISTRATION BLOCKED: ' + result.message);
+                    nextBtn.disabled = false;
+                    nextBtn.innerHTML = '<span id="next-step-text">Next: Family Members</span>';
+                    return false;
                 }
+                
+                console.log('ALLOWING - Resident not found');
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = '<span id="next-step-text">Next: Family Members</span>';
+                nextStep();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error checking resident. Please try again.');
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = '<span id="next-step-text">Next: Family Members</span>';
+                return false;
+            }
+        }
+        
+        async function nextStep() {
+            console.log('nextStep called, current step:', currentStep);
+            
+            if (currentStep === 1) {
+                console.log('Validating step 1...');
+                
+                // IMMEDIATE VALIDATION CHECK - Block if resident exists
+                const firstName = document.getElementById('first_name').value.trim();
+                const lastName = document.getElementById('last_name').value.trim();
+                const middleInitial = document.getElementById('middle_initial').value.trim();
+                const dateOfBirth = document.getElementById('date_of_birth').value;
+                
+                if (firstName && lastName && dateOfBirth) {
+                    console.log('IMMEDIATE CHECK: Validating resident before proceeding...');
+                    const immediateCheck = await validateResidentExists();
+                    if (!immediateCheck || !residentValidationPassed) {
+                        console.log('IMMEDIATE CHECK FAILED: Blocking progression');
+                        alert('REGISTRATION BLOCKED: This person already exists in the system!');
+                        return false;
+                    }
+                }
+                
+                // Show loading state
+                const nextBtn = document.getElementById('next-step-btn');
+                const nextText = document.getElementById('next-step-text');
+                const nextSpinner = document.getElementById('next-step-spinner');
+                
+                nextBtn.disabled = true;
+                nextText.textContent = 'Checking...';
+                nextSpinner.classList.remove('hidden');
+                
+                // First do basic validation
+                const requiredFields = ['first_name', 'last_name', 'email', 'password', 'date_of_birth', 'purok_id'];
+                let basicValidationPassed = true;
+                
+                requiredFields.forEach(field => {
+                    if (!validateField(field)) {
+                        basicValidationPassed = false;
+                    }
+                });
+                
+                if (!basicValidationPassed) {
+                    console.log('Basic validation failed');
+                    nextBtn.disabled = false;
+                    nextText.textContent = 'Next: Family Members';
+                    nextSpinner.classList.add('hidden');
+                    return false;
+                }
+                
+                console.log('Basic validation passed, checking resident...');
+                
+                // Now check for existing resident
+                const residentValid = await validateResidentExists();
+                console.log('Resident validation result:', residentValid);
+                console.log('Resident validation flag:', residentValidationPassed);
+                
+                // Check email validation
+                const email = document.getElementById('email').value.trim();
+                let emailValid = true;
+                if (email && email.includes('@')) {
+                    emailValid = await validateEmailExists(email);
+                    console.log('Email validation result:', emailValid);
+                }
+                
+                // Reset button state
+                nextBtn.disabled = false;
+                nextText.textContent = 'Next: Family Members';
+                nextSpinner.classList.add('hidden');
+                
+                if (!residentValid || !residentValidationPassed || !emailValid) {
+                    console.log('Validation failed, preventing next step');
+                    // Force focus back to first name field
+                    document.getElementById('first_name').focus();
+                    return false;
+                }
+                
+                console.log('All validation passed, proceeding to step 2');
                 currentStep = 2;
                 showStep(2);
                 updateStepIndicators();
@@ -1039,11 +1523,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         // Form submission
-        document.getElementById('registration-form').addEventListener('submit', function(e) {
+        document.getElementById('registration-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             // Validate all steps
-            if (!validateStep(1)) {
+            const isValid = await validateStep(1);
+            if (!isValid) {
                 showStep(1);
                 currentStep = 1;
                 updateStepIndicators();
@@ -1065,6 +1550,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Initialize remove buttons
         updateRemoveButtons();
+        
+        // Debug test function
+        async function testValidation() {
+            const firstName = document.getElementById('first_name').value.trim();
+            const lastName = document.getElementById('last_name').value.trim();
+            const middleInitial = document.getElementById('middle_initial').value.trim();
+            const dateOfBirth = document.getElementById('date_of_birth').value;
+            
+            const debugResult = document.getElementById('debug-result');
+            debugResult.innerHTML = 'Testing...';
+            
+            console.log('Manual test triggered with:', { firstName, lastName, middleInitial, dateOfBirth });
+            
+            try {
+                const formData = new FormData();
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                formData.append('middle_initial', middleInitial);
+                formData.append('date_of_birth', dateOfBirth);
+                
+                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('Manual test result:', result);
+                
+                if (result.exists) {
+                    debugResult.innerHTML = `<span class="text-red-600">❌ RESIDENT EXISTS: ${result.message}</span>`;
+                } else {
+                    debugResult.innerHTML = `<span class="text-green-600">✅ RESIDENT NOT FOUND: Can proceed</span>`;
+                }
+            } catch (error) {
+                console.error('Manual test error:', error);
+                debugResult.innerHTML = `<span class="text-red-600">❌ ERROR: ${error.message}</span>`;
+            }
+        }
     </script>
 </body>
 </html>

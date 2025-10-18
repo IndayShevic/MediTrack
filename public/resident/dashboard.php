@@ -211,6 +211,12 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
                 </svg>
                 Medicine History
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('resident/announcements.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                </svg>
+                Announcements
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('resident/allocations.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -230,13 +236,17 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
                 </svg>
                 Profile
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
+        </nav>
+        
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
                 Logout
             </a>
-        </nav>
+        </div>
     </aside>
 
     <!-- Main Content -->
@@ -489,6 +499,17 @@ if ($resident_info && !empty($resident_info['date_of_birth'])) {
                                 <div>
                                     <p class="font-medium text-gray-900">My Requests</p>
                                     <p class="text-xs text-gray-600">Track your requests</p>
+                                </div>
+                            </a>
+                            <a href="<?php echo htmlspecialchars(base_url('resident/announcements.php')); ?>" class="flex items-center space-x-3 p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl hover:from-purple-100 hover:to-purple-200 transition-all duration-300 group">
+                                <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-gray-900">Announcements</p>
+                                    <p class="text-xs text-gray-600">Health center activities</p>
                                 </div>
                             </a>
                             <?php if ($is_senior): ?>

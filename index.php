@@ -1107,7 +1107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <!-- Phone -->
                             <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+                                <label class="block text-sm font-medium text-gray-700">Phone Number <span class="text-gray-400">(optional)</span></label>
                                 <div class="relative">
                                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1120,10 +1120,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                            pattern="09[0-9]{9}"
                                            maxlength="14"
                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
-                                           placeholder="0912 345 6789"
+                                           placeholder="0912 345 6789 (optional)"
                                            title="Phone number must start with 09 and be exactly 11 digits" />
                                 </div>
-                                <p class="text-xs text-gray-500 ml-1">Format: 09XX XXX XXXX (11 digits)</p>
+                                <p class="text-xs text-gray-500 ml-1">Format: 09XX XXX XXXX (11 digits) - Optional</p>
                             </div>
                         </div>
                         

@@ -97,6 +97,67 @@ function send_medicine_request_rejection_to_resident(string $resident_email, str
     return send_email($resident_email, $resident_name, $subject, $html);
 }
 
+function send_announcement_notification_to_all_users(string $title, string $description, string $start_date, string $end_date): array {
+    $results = ['sent' => 0, 'failed' => 0, 'errors' => []];
+    
+    try {
+        // Get all users (BHW and Residents) with email addresses
+        $users = db()->query('SELECT id, name, email, role FROM users WHERE email IS NOT NULL AND email != "" AND role IN ("bhw", "resident")')->fetchAll();
+        
+        foreach ($users as $user) {
+            $success = send_announcement_email($user['email'], $user['name'], $user['role'], $title, $description, $start_date, $end_date);
+            
+            if ($success) {
+                $results['sent']++;
+            } else {
+                $results['failed']++;
+                $results['errors'][] = "Failed to send to {$user['email']}";
+            }
+        }
+        
+    } catch (Throwable $e) {
+        $results['errors'][] = "Database error: " . $e->getMessage();
+    }
+    
+    return $results;
+}
+
+function send_announcement_email(string $email, string $name, string $role, string $title, string $description, string $start_date, string $end_date): bool {
+    $subject = 'New Health Center Announcement - MediTrack';
+    
+    // Format dates
+    $startFormatted = date('F j, Y', strtotime($start_date));
+    $endFormatted = date('F j, Y', strtotime($end_date));
+    $dateRange = $start_date === $end_date ? $startFormatted : "$startFormatted to $endFormatted";
+    
+    // Role-specific content
+    $roleGreeting = $role === 'bhw' ? 'Barangay Health Worker' : 'Resident';
+    $actionText = $role === 'bhw' ? 'Please inform residents in your area about this activity.' : 'Please mark your calendar and prepare any necessary requirements.';
+    
+    $html = email_template(
+        'New Health Center Announcement',
+        'Important health center activity announcement',
+        '<p>Hello ' . htmlspecialchars($name) . ',</p>
+        <p>We are pleased to inform you about an upcoming health center activity.</p>
+        
+        <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 16px; margin: 16px 0; border-radius: 4px;">
+            <h3 style="margin: 0 0 8px 0; color: #1f2937;">' . htmlspecialchars($title) . '</h3>
+            <p style="margin: 0 0 8px 0; color: #374151;">' . htmlspecialchars($description) . '</p>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">
+                <strong>Date:</strong> ' . $dateRange . '<br>
+                <strong>For:</strong> ' . $roleGreeting . 's
+            </p>
+        </div>
+        
+        <p>' . $actionText . '</p>
+        <p>For questions or clarifications, please contact your health center or Barangay Health Worker.</p>',
+        'View All Announcements',
+        base_url($role === 'bhw' ? 'bhw/announcements.php' : 'resident/announcements.php')
+    );
+    
+    return send_email($email, $name, $subject, $html);
+}
+
 function log_email_notification(int $user_id, string $type, string $subject, string $body, bool $success): void {
     try {
         $stmt = db()->prepare('INSERT INTO email_notifications (user_id, notification_type, subject, body, status) VALUES (?, ?, ?, ?, ?)');

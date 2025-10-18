@@ -26,18 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $u = db()->prepare('UPDATE requests SET status="approved" WHERE id=?');
                     $u->execute([$id]);
                     // notify resident
-                    $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id WHERE rq.id=?");
+                    $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name, m.name AS medicine_name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id JOIN medicines m ON m.id=rq.medicine_id WHERE rq.id=?");
                     $r->execute([$id]);
                     $rec = $r->fetch();
                     if ($rec && !empty($rec['email'])) {
-                        $html = email_template(
-                            'Request approved',
-                            'Your medicine request was approved.',
-                            '<p>Please proceed to your assigned barangay health center to claim.</p>',
-                            'View My Requests',
-                            base_url('resident/requests.php')
-                        );
-                        send_email($rec['email'], $rec['name'] ?? 'Resident', 'Request approved', $html);
+                        require_once __DIR__ . '/../../config/email_notifications.php';
+                        $success = send_medicine_request_approval_to_resident($rec['email'], $rec['name'] ?? 'Resident', $rec['medicine_name'] ?? 'Unknown Medicine');
+                        log_email_notification($user['id'], 'medicine_approval', 'Medicine Request Approved', 'Medicine request approval notification sent to resident', $success);
                     }
                 }
             }
@@ -50,21 +45,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $u->execute([$reason, $id, $user['id']]);
             
             // notify resident
-            $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id WHERE rq.id=?");
+            $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name, m.name AS medicine_name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id JOIN medicines m ON m.id=rq.medicine_id WHERE rq.id=?");
             $r->execute([$id]);
             $rec = $r->fetch();
             if ($rec && !empty($rec['email'])) {
                 error_log('BHW Medicine Rejection: Sending email to ' . $rec['email'] . ' with reason: ' . $reason);
                 file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Sending email to ' . $rec['email'] . ' with reason: ' . $reason . "\n", FILE_APPEND);
                 
-                $html = email_template(
-                    'Request rejected',
-                    'Your medicine request was rejected.',
-                    '<p>' . ($reason ? 'Reason: <b>' . htmlspecialchars($reason) . '</b>' : 'Please contact your BHW for details.') . '</p>',
-                    'View My Requests',
-                    base_url('resident/requests.php')
-                );
-                $success = send_email($rec['email'], $rec['name'] ?? 'Resident', 'Request rejected', $html);
+                require_once __DIR__ . '/../../config/email_notifications.php';
+                $success = send_medicine_request_rejection_to_resident($rec['email'], $rec['name'] ?? 'Resident', $rec['medicine_name'] ?? 'Unknown Medicine', $reason);
+                log_email_notification($user['id'], 'medicine_rejection', 'Medicine Request Rejected', 'Medicine request rejection notification sent to resident', $success);
+                
                 error_log('BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No'));
                 file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No') . "\n", FILE_APPEND);
             }
@@ -177,6 +168,12 @@ $reqs = $rows->fetchAll();
                     <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
                 <?php endif; ?>
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/walkin_dispensing.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Walk-in Dispensing
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
@@ -213,19 +210,29 @@ $reqs = $rows->fetchAll();
                 </svg>
                 Statistics
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/announcements.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                </svg>
+                Announcements
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
                 Profile
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
+        </nav>
+        
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
                 Logout
             </a>
-        </nav>
+        </div>
     </aside>
 
     <!-- Main Content -->
@@ -396,6 +403,20 @@ $reqs = $rows->fetchAll();
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                                     </svg>
                                                     Approved
+                                                </span>
+                                            <?php elseif ($r['status'] === 'claimed'): ?>
+                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                    Dispensed
+                                                </span>
+                                            <?php elseif ($r['status'] === 'rejected'): ?>
+                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                    </svg>
+                                                    Rejected
                                                 </span>
                                             <?php else: ?>
                                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
@@ -717,6 +738,10 @@ $reqs = $rows->fetchAll();
                 statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Pending</span>';
             } else if (request.status === 'approved') {
                 statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Approved</span>';
+            } else if (request.status === 'claimed') {
+                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Dispensed</span>';
+            } else if (request.status === 'rejected') {
+                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>Rejected</span>';
             } else {
                 statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>Rejected</span>';
             }

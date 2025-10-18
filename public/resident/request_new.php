@@ -95,8 +95,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $b->execute([$bhwId]);
                 $bhw = $b->fetch();
                 if ($bhw && !empty($bhw['email'])) {
+                    // Fetch medicine name for email notification
+                    $medicineQuery = db()->prepare('SELECT name FROM medicines WHERE id=?');
+                    $medicineQuery->execute([$medicine_id]);
+                    $medicineData = $medicineQuery->fetch();
+                    
                     $residentName = $user['name'] ?? 'Resident';
-                    $medicineName = $m['name'] ?? 'Unknown Medicine';
+                    $medicineName = $medicineData['name'] ?? 'Unknown Medicine';
                     $success = send_medicine_request_notification_to_bhw($bhw['email'], $bhw['name'] ?? 'BHW', $residentName, $medicineName);
                     log_email_notification($bhwId, 'medicine_request', 'New Medicine Request', 'New medicine request notification sent to BHW', $success);
                 }
@@ -422,13 +427,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </svg>
                 Profile
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
+        </nav>
+        
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
                 Logout
             </a>
-        </nav>
+        </div>
     </aside>
 
     <!-- Main Content -->

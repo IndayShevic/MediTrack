@@ -9,15 +9,19 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 require_once __DIR__ . '/includes/sidebar_counts.php';
 $notification_counts = get_bhw_notification_counts($bhw_purok_id);
 
-// Fetch residents with their family members
+// Fetch residents with their family members (including walk-in residents)
 $rows = db()->prepare('
     SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address,
-           COUNT(fm.id) as family_count
+           COUNT(fm.id) as family_count,
+           CASE 
+               WHEN r.last_name = "Walk-in" THEN "Walk-in"
+               ELSE "Registered"
+           END as resident_type
     FROM residents r 
     LEFT JOIN family_members fm ON r.id = fm.resident_id 
     WHERE r.purok_id = (SELECT purok_id FROM users WHERE id=?) 
     GROUP BY r.id 
-    ORDER BY r.last_name
+    ORDER BY r.last_name = "Walk-in", r.last_name, r.first_name
 ');
 $rows->execute([$user['id']]);
 $residents = $rows->fetchAll();
@@ -426,22 +430,37 @@ foreach ($family_members as $family) {
         </div>
         <nav class="sidebar-nav">
             <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"/></svg>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
+                </svg>
                 Dashboard
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/requests.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
                 <span style="flex: 1;">Medicine Requests</span>
                 <?php if ($notification_counts['pending_requests'] > 0): ?>
                     <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
                 <?php endif; ?>
             </a>
-            <a class="active" href="#">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"/></svg>
-                Residents
+            <a href="<?php echo htmlspecialchars(base_url('bhw/walkin_dispensing.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Walk-in Dispensing
+            </a>
+            <a class="active" href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                </svg>
+                Residents & Family
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/allocations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                </svg>
                 Allocations
             </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>">
@@ -462,17 +481,29 @@ foreach ($family_members as $family) {
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                 Statistics
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('bhw/announcements.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                </svg>
+                Announcements
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
                 Profile
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="text-red-600 hover:text-red-700">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </nav>
+        
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                </svg>
                 Logout
             </a>
-        </nav>
+        </div>
     </aside>
 
     <!-- Main Content -->
@@ -556,7 +587,24 @@ foreach ($family_members as $family) {
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 class="text-2xl font-bold text-gray-900 mb-2"><?php echo htmlspecialchars(format_full_name($r['first_name'], $r['last_name'], $r['middle_initial'] ?? null)); ?></h3>
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <h3 class="text-2xl font-bold text-gray-900"><?php echo htmlspecialchars(format_full_name($r['first_name'], $r['last_name'], $r['middle_initial'] ?? null)); ?></h3>
+                                        <?php if ($r['resident_type'] === 'Walk-in'): ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                </svg>
+                                                Walk-in
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                Registered
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div class="flex items-center space-x-6 mb-2">
                                         <div class="flex items-center space-x-2">
                                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -588,7 +636,7 @@ foreach ($family_members as $family) {
                                 <div class="text-center">
                                     <div class="text-sm text-gray-500 font-medium mb-1">Family Members</div>
                                     <div class="text-4xl font-bold text-blue-600"><?php echo (int)$r['family_count']; ?></div>
-                                    <div class="text-xs text-blue-500 mt-1">Registered</div>
+                                    <div class="text-xs text-blue-500 mt-1"><?php echo $r['resident_type']; ?></div>
                                 </div>
                                 <button onclick="toggleFamily(<?php echo (int)$r['id']; ?>)" class="btn-gradient ripple-effect inline-flex items-center px-6 py-3 text-white font-semibold rounded-2xl shadow-lg">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

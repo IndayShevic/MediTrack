@@ -180,22 +180,12 @@ $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM catego
                     </svg>
                     Email Logs
                 </a>
-                <a href="<?php echo htmlspecialchars(base_url('super_admin/profile.php')); ?>">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                    </svg>
-                    Profile
-                </a>
+                <!-- Profile link removed - accessible via header dropdown -->
         </nav>
         
         <!-- Sidebar Footer -->
         <div class="sidebar-footer">
-            <a href="../logout.php">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
-                Logout
-            </a>
+            <!-- Logout link removed - accessible via header dropdown -->
         </div>
     </aside>
 
@@ -247,86 +237,60 @@ $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM catego
 
             <!-- Add Category Button -->
             <div class="flex justify-end mb-8">
-                <button onclick="openAddModal()" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 animate-fade-in-up">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onclick="openAddModal()" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                     </svg>
                     Add Category
                 </button>
             </div>
 
-            <!-- Category Catalog -->
-            <div class="category-catalog-card hover-lift animate-fade-in-up p-8 rounded-2xl shadow-lg">
-                <div class="flex items-center space-x-3 mb-6">
-                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-2xl font-bold text-gray-900">Category Catalog</h3>
-                        <p class="text-gray-600">All categories in your system</p>
-                    </div>
-                </div>
+            <!-- Categories List -->
+            <div class="bg-white rounded-lg border border-gray-200">
 
                 <?php if (empty($categories)): ?>
-                    <div class="text-center py-12">
-                        <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="text-center py-16">
+                        <div class="w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
                             </svg>
                         </div>
-                        <h4 class="text-xl font-semibold text-gray-900 mb-2">No categories yet</h4>
-                        <p class="text-gray-600">Start by adding your first category to organize medicines.</p>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">No categories found</h3>
+                        <p class="text-gray-500 text-sm">Get started by creating your first category.</p>
                     </div>
                 <?php else: ?>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <?php foreach ($categories as $index => $category): ?>
-                            <div class="category-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg border border-gray-100 hover:border-blue-200 transition-all duration-300" 
-                                 style="animation-delay: <?php echo $index * 0.1; ?>s">
-                                
-                                <!-- Category Info -->
-                                <div class="mb-4">
-                                    <h4 class="text-lg font-bold text-gray-900 mb-2"><?php echo htmlspecialchars($category['name']); ?></h4>
-                                    <?php if (!empty($category['category_name'])): ?>
-                                        <div class="mb-2">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                                                </svg>
-                                                <?php echo htmlspecialchars($category['category_name']); ?>
+                    <div class="divide-y divide-gray-200">
+                        <?php foreach ($categories as $category): ?>
+                            <div class="p-6 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 transition-all duration-200">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3">
+                                            <h3 class="text-lg font-medium text-gray-900"><?php echo htmlspecialchars($category['name']); ?></h3>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 border border-purple-200">
+                                                <?php echo (int)$category['medicine_count']; ?> medicines
                                             </span>
                                         </div>
-                                    <?php endif; ?>
-                                    <p class="text-gray-600 text-sm mb-3"><?php echo htmlspecialchars($category['description'] ?? 'No description'); ?></p>
-                                    <div class="flex items-center space-x-2 text-sm text-gray-500">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                        </svg>
-                                        <span><?php echo (int)$category['medicine_count']; ?> medicines</span>
+                                        <?php if (!empty($category['description'])): ?>
+                                            <p class="mt-1 text-sm text-gray-600"><?php echo htmlspecialchars($category['description']); ?></p>
+                                        <?php endif; ?>
+                                        <p class="mt-2 text-xs text-gray-500">Created <?php echo date('M j, Y', strtotime($category['created_at'])); ?></p>
                                     </div>
-                                </div>
-
-                                <!-- Actions -->
-                                <div class="flex items-center space-x-2">
-                                    <button onclick="openEditModal(<?php echo (int)$category['id']; ?>, '<?php echo htmlspecialchars($category['name']); ?>', '<?php echo htmlspecialchars($category['description'] ?? ''); ?>')" 
-                                            class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium rounded-lg hover:from-blue-100 hover:to-blue-200 transition-all duration-200">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                        </svg>
-                                        Edit
-                                    </button>
-                                    <button onclick="deleteCategory(<?php echo (int)$category['id']; ?>, '<?php echo htmlspecialchars($category['name']); ?>')" 
-                                            class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 text-red-700 font-medium rounded-lg hover:from-red-100 hover:to-red-200 transition-all duration-200">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                        </svg>
-                                        Delete
-                                    </button>
-                                </div>
-                                
-                                <div class="text-xs text-gray-400 mt-3">
-                                    Created: <?php echo date('M j, Y', strtotime($category['created_at'])); ?>
+                                    <div class="flex items-center space-x-2">
+                                        <button onclick="openEditModal(<?php echo (int)$category['id']; ?>, '<?php echo htmlspecialchars($category['name']); ?>', '<?php echo htmlspecialchars($category['description'] ?? ''); ?>')" 
+                                                class="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                                                title="Edit">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                            </svg>
+                                        </button>
+                                        <button onclick="deleteCategory(<?php echo (int)$category['id']; ?>, '<?php echo htmlspecialchars($category['name']); ?>')" 
+                                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                                                title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -337,53 +301,52 @@ $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM catego
     </main>
 
     <!-- Add/Edit Modal -->
-    <div id="categoryModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl border border-gray-100 transform transition-all duration-300 scale-95 opacity-0" id="modalContent">
-            <div class="flex items-center justify-between mb-8">
-                <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                        </svg>
+    <div id="categoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full" id="modalContent">
+            <div class="p-6">
+                <!-- Header -->
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 id="modalTitle" class="text-lg font-semibold text-gray-900">Add Category</h2>
+                        <p class="text-sm text-gray-500">Create a new category for organizing medicines</p>
                     </div>
-                    <h2 id="modalTitle" class="text-2xl font-bold text-gray-900">Add Category</h2>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors duration-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
                 </div>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+                
+                <form id="categoryForm" method="post" class="space-y-6">
+                    <input type="hidden" name="action" id="formAction" value="create">
+                    <input type="hidden" name="category_id" id="categoryId">
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                        <input type="text" name="name" id="categoryName" required 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500" 
+                               placeholder="Enter category name">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea name="description" id="categoryDescription" rows="3" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none" 
+                                  placeholder="Enter category description (optional)"></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                        <button type="button" onclick="closeModal()" 
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200">
+                            Cancel
+                        </button>
+                        <button type="submit" id="submitBtn" 
+                                class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-blue-600 border border-transparent rounded-md hover:from-purple-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
+                            Add Category
+                        </button>
+                    </div>
+                </form>
             </div>
-            
-            <form id="categoryForm" method="post" class="space-y-6">
-                <input type="hidden" name="action" id="formAction" value="create">
-                <input type="hidden" name="category_id" id="categoryId">
-                
-                <div class="space-y-2">
-                    <label class="block text-sm font-semibold text-gray-700">Category Name</label>
-                    <input type="text" name="name" id="categoryName" required 
-                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50" 
-                           placeholder="Enter category name">
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="block text-sm font-semibold text-gray-700">Description</label>
-                    <textarea name="description" id="categoryDescription" rows="3" 
-                              class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 resize-none" 
-                              placeholder="Enter category description (optional)"></textarea>
-                </div>
-                
-                <div class="flex justify-end space-x-3 pt-6">
-                    <button type="button" onclick="closeModal()" 
-                            class="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-all duration-200 font-medium">
-                        Cancel
-                    </button>
-                    <button type="submit" id="submitBtn" 
-                            class="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:scale-105">
-                        Add Category
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 
@@ -397,17 +360,8 @@ $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM catego
             document.getElementById('submitBtn').textContent = 'Add Category';
             
             const modal = document.getElementById('categoryModal');
-            const modalContent = document.getElementById('modalContent');
-            
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            
-            // Trigger animation
-            setTimeout(() => {
-                modalContent.classList.remove('scale-95', 'opacity-0');
-                modalContent.classList.add('scale-100', 'opacity-100');
-            }, 10);
-            
             document.getElementById('categoryName').focus();
         }
 
@@ -420,32 +374,15 @@ $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM catego
             document.getElementById('submitBtn').textContent = 'Update Category';
             
             const modal = document.getElementById('categoryModal');
-            const modalContent = document.getElementById('modalContent');
-            
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            
-            // Trigger animation
-            setTimeout(() => {
-                modalContent.classList.remove('scale-95', 'opacity-0');
-                modalContent.classList.add('scale-100', 'opacity-100');
-            }, 10);
-            
             document.getElementById('categoryName').focus();
         }
 
         function closeModal() {
             const modal = document.getElementById('categoryModal');
-            const modalContent = document.getElementById('modalContent');
-            
-            // Trigger close animation
-            modalContent.classList.remove('scale-100', 'opacity-100');
-            modalContent.classList.add('scale-95', 'opacity-0');
-            
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }, 300);
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
         }
 
         function deleteCategory(id, name) {

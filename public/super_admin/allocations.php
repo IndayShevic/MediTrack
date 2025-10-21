@@ -3,26 +3,120 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
 
-$medicines = db()->query('SELECT id, name FROM medicines WHERE is_active=1 ORDER BY name')->fetchAll();
+// Create allocation_programs table if it doesn't exist
+try {
+    db()->exec('
+        CREATE TABLE IF NOT EXISTS allocation_programs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            program_name VARCHAR(255) NOT NULL,
+            medicine_id INT NOT NULL,
+            quantity_per_senior INT NOT NULL,
+            frequency ENUM("monthly", "quarterly") NOT NULL DEFAULT "monthly",
+            scope_type ENUM("barangay", "purok") NOT NULL DEFAULT "barangay",
+            barangay_id INT NULL,
+            purok_id INT NULL,
+            claim_window_days INT DEFAULT 14,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (medicine_id) REFERENCES medicines(id) ON DELETE CASCADE,
+            INDEX idx_active (is_active),
+            INDEX idx_frequency (frequency),
+            INDEX idx_scope (scope_type)
+        ) ENGINE=InnoDB
+    ');
+} catch (Exception $e) {
+    // Table might already exist
+}
+
+// Create allocation_distributions table for tracking
+try {
+    db()->exec('
+        CREATE TABLE IF NOT EXISTS allocation_distributions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            program_id INT NOT NULL,
+            resident_id INT NOT NULL,
+            medicine_id INT NOT NULL,
+            batch_id INT NULL,
+            quantity_allocated INT NOT NULL,
+            quantity_claimed INT DEFAULT 0,
+            distribution_month VARCHAR(7) NOT NULL,
+            status ENUM("pending", "claimed", "expired") DEFAULT "pending",
+            claim_deadline DATE NOT NULL,
+            claimed_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (program_id) REFERENCES allocation_programs(id) ON DELETE CASCADE,
+            FOREIGN KEY (resident_id) REFERENCES residents(id) ON DELETE CASCADE,
+            FOREIGN KEY (medicine_id) REFERENCES medicines(id) ON DELETE CASCADE,
+            FOREIGN KEY (batch_id) REFERENCES medicine_batches(id) ON DELETE SET NULL,
+            INDEX idx_status (status),
+            INDEX idx_resident (resident_id),
+            INDEX idx_month (distribution_month),
+            UNIQUE KEY unique_allocation (program_id, resident_id, distribution_month)
+        ) ENGINE=InnoDB
+    ');
+} catch (Exception $e) {
+    // Table might already exist
+}
+
+$medicines = db()->query('SELECT id, name FROM medicines ORDER BY name')->fetchAll();
 $barangays = db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll();
 
+$success_message = '';
+$error_message = '';
+
+// Handle DELETE action
+if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
+    $stmt = db()->prepare('DELETE FROM allocation_programs WHERE id = ?');
+    try {
+        $stmt->execute([$id]);
+        $success_message = 'Allocation program deleted successfully!';
+    } catch (Throwable $e) {
+        $error_message = 'Failed to delete program. It may have active distributions.';
+    }
+    header('Location: ' . base_url('super_admin/allocations.php'));
+    exit;
+}
+
+// Handle CREATE or UPDATE
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $program_id = isset($_POST['program_id']) ? (int)$_POST['program_id'] : 0;
     $program_name = trim($_POST['program_name'] ?? '');
     $medicine_id = (int)($_POST['medicine_id'] ?? 0);
     $quantity_per_senior = (int)($_POST['quantity_per_senior'] ?? 0);
     $frequency = $_POST['frequency'] ?? 'monthly';
     $scope_type = $_POST['scope_type'] ?? 'barangay';
-    $barangay_id = isset($_POST['barangay_id']) ? (int)$_POST['barangay_id'] : null;
-    $purok_id = isset($_POST['purok_id']) ? (int)$_POST['purok_id'] : null;
+    $barangay_id = isset($_POST['barangay_id']) && $_POST['barangay_id'] !== '' ? (int)$_POST['barangay_id'] : null;
+    $purok_id = isset($_POST['purok_id']) && $_POST['purok_id'] !== '' ? (int)$_POST['purok_id'] : null;
     $claim_window_days = (int)($_POST['claim_window_days'] ?? 14);
+    
     if ($program_name !== '' && $medicine_id > 0 && $quantity_per_senior > 0 && in_array($frequency, ['monthly','quarterly'], true) && in_array($scope_type, ['barangay','purok'], true)) {
-        $stmt = db()->prepare('INSERT INTO allocation_programs (program_name, medicine_id, quantity_per_senior, frequency, scope_type, barangay_id, purok_id, claim_window_days) VALUES (?,?,?,?,?,?,?,?)');
-        try { $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days]); } catch (Throwable $e) {}
-        redirect_to('super_admin/allocations.php');
+        if ($program_id > 0) {
+            // UPDATE existing program
+            $stmt = db()->prepare('UPDATE allocation_programs SET program_name=?, medicine_id=?, quantity_per_senior=?, frequency=?, scope_type=?, barangay_id=?, purok_id=?, claim_window_days=? WHERE id=?');
+            try { 
+                $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days, $program_id]);
+                $success_message = 'Allocation program updated successfully!';
+            } catch (Throwable $e) {
+                $error_message = 'Failed to update program. Please try again.';
+            }
+        } else {
+            // CREATE new program
+            $stmt = db()->prepare('INSERT INTO allocation_programs (program_name, medicine_id, quantity_per_senior, frequency, scope_type, barangay_id, purok_id, claim_window_days) VALUES (?,?,?,?,?,?,?,?)');
+            try { 
+                $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days]);
+                $success_message = 'Allocation program created successfully!';
+            } catch (Throwable $e) {
+                $error_message = 'Failed to create program. Please try again.';
+            }
+        }
+    } else {
+        $error_message = 'Please fill in all required fields correctly.';
     }
 }
 
-$programs = db()->query('SELECT ap.id, ap.program_name, m.name AS medicine, ap.frequency, ap.scope_type, ap.quantity_per_senior, ap.claim_window_days FROM allocation_programs ap JOIN medicines m ON m.id=ap.medicine_id ORDER BY ap.id DESC')->fetchAll();
+$programs = db()->query('SELECT ap.id, ap.program_name, ap.medicine_id, m.name AS medicine, ap.frequency, ap.scope_type, ap.barangay_id, ap.purok_id, ap.quantity_per_senior, ap.claim_window_days FROM allocation_programs ap JOIN medicines m ON m.id=ap.medicine_id ORDER BY ap.id DESC')->fetchAll();
 
 // Calculate statistics
 $total_programs = count($programs);
@@ -56,6 +150,18 @@ foreach ($programs as $program) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .content-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 50 !important;
+            background: white !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 2rem !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            margin-bottom: 2rem !important;
+        }
+    </style>
     <script>
         tailwind.config = {
             theme: {
@@ -163,34 +269,164 @@ foreach ($programs as $program) {
         
         <!-- Sidebar Footer -->
         <div class="sidebar-footer">
-            <!-- Logout removed - now accessible via profile dropdown -->
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                </svg>
+                Logout
+            </a>
         </div>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
+        <!-- Success/Error Notifications -->
+        <?php if ($success_message): ?>
+            <div id="successNotification" class="fixed top-4 right-4 z-[60] bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 animate-slide-in-right">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="font-semibold"><?php echo htmlspecialchars($success_message); ?></span>
+                <button onclick="this.parentElement.remove()" class="ml-4 hover:bg-white/20 p-1 rounded-lg transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <script>
+                setTimeout(() => {
+                    const notification = document.getElementById('successNotification');
+                    if (notification) {
+                        notification.style.animation = 'slideOutRight 0.3s ease-out';
+                        setTimeout(() => notification.remove(), 300);
+                    }
+                }, 5000);
+            </script>
+        <?php endif; ?>
+        
+        <?php if ($error_message): ?>
+            <div id="errorNotification" class="fixed top-4 right-4 z-[60] bg-gradient-to-r from-red-500 to-pink-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 animate-slide-in-right">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="font-semibold"><?php echo htmlspecialchars($error_message); ?></span>
+                <button onclick="this.parentElement.remove()" class="ml-4 hover:bg-white/20 p-1 rounded-lg transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <script>
+                setTimeout(() => {
+                    const notification = document.getElementById('errorNotification');
+                    if (notification) {
+                        notification.style.animation = 'slideOutRight 0.3s ease-out';
+                        setTimeout(() => notification.remove(), 5000);
+                    }
+                }, 5000);
+            </script>
+        <?php endif; ?>
+        
         <!-- Header -->
         <div class="content-header">
             <div class="flex items-center justify-between">
-                <div class="animate-fade-in-up">
-                    <div class="flex items-center space-x-3 mb-2">
-                        <h1 class="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
-                            Allocation Programs
-                        </h1>
-                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Allocation Programs</h1>
+                    <p class="text-gray-600 mt-1">Create and manage senior citizen medicine allocation programs</p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Current Time Display -->
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">Current Time</div>
+                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
                     </div>
-                    <p class="text-gray-600 text-lg">Create and manage senior citizen medicine allocation programs</p>
-                    <div class="flex items-center space-x-2 mt-2">
-                        <div class="w-1 h-1 bg-blue-400 rounded-full"></div>
-                        <div class="w-1 h-1 bg-purple-400 rounded-full"></div>
-                        <div class="w-1 h-1 bg-cyan-400 rounded-full"></div>
-                        <span class="text-sm text-gray-500 ml-2">Live program management</span>
+                    
+                    <!-- Night Mode Toggle -->
+                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Notifications -->
+                    <div class="relative">
+                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
+                            </svg>
+                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Profile Section -->
+                    <div class="relative" id="profile-dropdown">
+                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                <?php 
+                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                            <div class="text-left">
+                                <div class="text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
+                                </div>
+                                <div class="text-xs text-gray-500">Super Admin</div>
+                            </div>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
+                            <!-- User Info Section -->
+                            <div class="px-4 py-3 border-b border-gray-100">
+                                <div class="text-sm font-semibold text-gray-900">
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
+                                </div>
+                            </div>
+                            
+                            <!-- Menu Items -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('super_admin/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Edit Profile
+                                </a>
+                                <a href="<?php echo base_url('super_admin/settings_brand.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                    Account Settings
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Support
+                                </a>
+                    </div>
+                            
+                            <!-- Separator -->
+                            <div class="border-t border-gray-100 my-1"></div>
+                            
+                            <!-- Sign Out -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Sign Out
+                                </a>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4 animate-slide-in-right">
-                    <div class="text-right glass-effect px-4 py-2 rounded-xl">
-                        <div class="text-xs text-gray-500 uppercase tracking-wide">Total Programs</div>
-                        <div class="text-sm font-semibold text-gray-900" id="program-count"><?php echo $total_programs; ?></div>
                     </div>
                 </div>
             </div>
@@ -437,13 +673,13 @@ foreach ($programs as $program) {
 
                         <!-- Action Buttons -->
                         <div class="flex justify-end space-x-3">
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick='editProgram(<?php echo json_encode($p); ?>)' class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                 </svg>
                                 Edit
                             </button>
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick="deleteProgram(<?php echo (int)$p['id']; ?>, '<?php echo htmlspecialchars(addslashes($p['program_name'])); ?>')" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
@@ -486,118 +722,319 @@ foreach ($programs as $program) {
     </main>
 
     <!-- Add Program Modal -->
-    <div id="addProgramModal" class="fixed inset-0 flex items-center justify-center z-50 p-4 hidden pointer-events-none">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
-            <div class="p-8">
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+    <div id="addProgramModal" class="fixed inset-0 z-50 hidden backdrop-blur-sm" style="background-color: rgba(0, 0, 0, 0.6); animation: fadeIn 0.2s ease-out;">
+        <div class="flex items-center justify-center min-h-screen p-4" onclick="event.target === this && closeAddProgramModal()">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[95vh] overflow-hidden relative" style="animation: slideUp 0.3s ease-out;">
+                <!-- Header with Gradient -->
+                <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-8 relative overflow-hidden">
+                    <div class="absolute inset-0 opacity-20">
+                        <div class="absolute top-0 left-0 w-40 h-40 bg-white rounded-full -translate-x-20 -translate-y-20"></div>
+                        <div class="absolute bottom-0 right-0 w-60 h-60 bg-white rounded-full translate-x-20 translate-y-20"></div>
+                    </div>
+                    <div class="relative flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 id="modalTitle" class="text-3xl font-bold text-white">New Allocation Program</h3>
+                                <p class="text-blue-100 mt-1">Configure medicine distribution for seniors</p>
+                            </div>
+                        </div>
+                        <button onclick="closeAddProgramModal()" class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200">
+                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-2xl font-bold text-gray-900">Add New Program</h3>
-                            <p class="text-gray-600">Create a new senior citizen medicine allocation program</p>
-                        </div>
-                    </div>
-                    <button onclick="closeAddProgramModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-                
-                <form method="post" class="space-y-6">
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Program Name</label>
-                        <input name="program_name" required 
-                               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                               placeholder="Enter program name" />
-                    </div>
-                    
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Medicine</label>
-                        <select name="medicine_id" required 
-                                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                            <option value="">Select Medicine</option>
-                            <?php foreach ($medicines as $m): ?>
-                                <option value="<?php echo (int)$m['id']; ?>"><?php echo htmlspecialchars($m['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Quantity per Senior</label>
-                            <input type="number" min="1" name="quantity_per_senior" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter quantity" />
-                        </div>
-                        
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Claim Window (days)</label>
-                            <input type="number" min="1" name="claim_window_days" value="14" 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter days" />
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Frequency</label>
-                            <select name="frequency" 
-                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                                <option value="monthly">Monthly</option>
-                                <option value="quarterly">Quarterly</option>
-                            </select>
-                        </div>
-                        
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Scope</label>
-                            <select name="scope_type" 
-                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                                <option value="barangay">Barangay</option>
-                                <option value="purok">Purok</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Barangay (optional)</label>
-                        <select name="barangay_id" 
-                                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                            <option value="">All barangays</option>
-                            <?php foreach ($barangays as $b): ?>
-                                <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="flex justify-end">
-                        <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                            Create Program
                         </button>
                     </div>
-                </form>
+                </div>
+
+                <!-- Form Content -->
+                <div class="p-8 overflow-y-auto" style="max-height: calc(95vh - 180px);">
+                    <form method="post" id="programForm" class="space-y-6">
+                        <input type="hidden" name="program_id" id="programId" value="0">
+                        <!-- Program Name -->
+                        <div class="space-y-2">
+                            <label class="flex items-center text-sm font-semibold text-gray-700">
+                                <svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                </svg>
+                                Program Name
+                                <span class="text-red-500 ml-1">*</span>
+                            </label>
+                            <input name="program_name" required 
+                                   class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white" 
+                                   placeholder="e.g., Senior Citizen Medicine Assistance Program" />
+                            <p class="text-xs text-gray-500 flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                                Give your program a descriptive name
+                            </p>
+                        </div>
+
+                        <!-- Medicine Selection -->
+                        <div class="space-y-2">
+                            <label class="flex items-center text-sm font-semibold text-gray-700">
+                                <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                </svg>
+                                Medicine
+                                <span class="text-red-500 ml-1">*</span>
+                            </label>
+                            <select name="medicine_id" id="medicineSelect" required 
+                                    class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
+                                <option value="">Select a medicine to allocate</option>
+                                <?php foreach ($medicines as $m): ?>
+                                    <option value="<?php echo (int)$m['id']; ?>"><?php echo htmlspecialchars($m['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Grid Layout for Quantity and Claim Window -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="flex items-center text-sm font-semibold text-gray-700">
+                                    <svg class="w-4 h-4 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                                    </svg>
+                                    Quantity per Senior
+                                    <span class="text-red-500 ml-1">*</span>
+                                </label>
+                                <div class="relative">
+                                    <input type="number" min="1" max="1000" name="quantity_per_senior" id="quantityInput" required 
+                                           class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white" 
+                                           placeholder="0" />
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">units</span>
+                                </div>
+                                <p class="text-xs text-gray-500">Allocation amount per eligible senior</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="flex items-center text-sm font-semibold text-gray-700">
+                                    <svg class="w-4 h-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Claim Window
+                                </label>
+                                <div class="relative">
+                                    <input type="number" min="1" max="90" name="claim_window_days" value="14" 
+                                           class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white" 
+                                           placeholder="14" />
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">days</span>
+                                </div>
+                                <p class="text-xs text-gray-500">How long seniors can claim allocation</p>
+                            </div>
+                        </div>
+
+                        <!-- Frequency and Scope -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="flex items-center text-sm font-semibold text-gray-700">
+                                    <svg class="w-4 h-4 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Frequency
+                                </label>
+                                <select name="frequency" 
+                                        class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
+                                    <option value="monthly">📅 Monthly Distribution</option>
+                                    <option value="quarterly">📊 Quarterly Distribution</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="flex items-center text-sm font-semibold text-gray-700">
+                                    <svg class="w-4 h-4 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                    Scope
+                                </label>
+                                <select name="scope_type" id="scopeSelect"
+                                        class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
+                                    <option value="barangay">🏘️ Barangay-wide</option>
+                                    <option value="purok">🏠 Specific Purok</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Barangay Selection -->
+                        <div class="space-y-2">
+                            <label class="flex items-center text-sm font-semibold text-gray-700">
+                                <svg class="w-4 h-4 mr-2 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                </svg>
+                                Target Barangay
+                                <span class="text-xs text-gray-400 ml-2">(Optional)</span>
+                            </label>
+                            <select name="barangay_id" 
+                                    class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
+                                <option value="">🌐 All Barangays</option>
+                                <?php foreach ($barangays as $b): ?>
+                                    <option value="<?php echo (int)$b['id']; ?>">📍 <?php echo htmlspecialchars($b['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="text-xs text-gray-500">Leave empty to apply to all barangays</p>
+                        </div>
+
+                        <!-- Summary Box -->
+                        <div id="programSummary" class="hidden bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
+                            <h4 class="font-semibold text-gray-900 mb-3 flex items-center">
+                                <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                                Program Summary
+                            </h4>
+                            <div id="summaryContent" class="text-sm text-gray-700 space-y-1"></div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center justify-end space-x-4 pt-4 border-t">
+                            <button type="button" onclick="closeAddProgramModal()" 
+                                    class="px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all duration-200">
+                                Cancel
+                            </button>
+                            <button type="submit" 
+                                    class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Create Program
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+        .animate-slide-in-right {
+            animation: slideInRight 0.3s ease-out;
+        }
+    </style>
+
     <script>
         function openAddProgramModal() {
             document.getElementById('addProgramModal').classList.remove('hidden');
-            document.getElementById('addProgramModal').classList.add('flex');
+            document.getElementById('programForm').reset();
+            document.getElementById('programId').value = '0';
+            document.getElementById('modalTitle').textContent = 'New Allocation Program';
+            document.getElementById('programSummary').classList.add('hidden');
         }
 
         function closeAddProgramModal() {
             document.getElementById('addProgramModal').classList.add('hidden');
-            document.getElementById('addProgramModal').classList.remove('flex');
         }
-
+        
+        function editProgram(program) {
+            // Open modal
+            document.getElementById('addProgramModal').classList.remove('hidden');
+            
+            // Update title
+            document.getElementById('modalTitle').textContent = 'Edit Allocation Program';
+            
+            // Fill form with program data
+            document.getElementById('programId').value = program.id;
+            document.querySelector('[name="program_name"]').value = program.program_name;
+            document.querySelector('[name="medicine_id"]').value = program.medicine_id;
+            document.querySelector('[name="quantity_per_senior"]').value = program.quantity_per_senior;
+            document.querySelector('[name="claim_window_days"]').value = program.claim_window_days;
+            document.querySelector('[name="frequency"]').value = program.frequency;
+            document.querySelector('[name="scope_type"]').value = program.scope_type;
+            document.querySelector('[name="barangay_id"]').value = program.barangay_id || '';
+            
+            // Update summary
+            updateProgramSummary();
+        }
+        
+        function deleteProgram(id, name) {
+            if (confirm(`Are you sure you want to delete "${name}"?\n\nThis action cannot be undone. Any existing distributions will also be affected.`)) {
+                window.location.href = `allocations.php?action=delete&id=${id}`;
+            }
+        }
+        
+        // Live form preview and validation
+        function updateProgramSummary() {
+            const programName = document.querySelector('[name="program_name"]').value;
+            const medicineSelect = document.getElementById('medicineSelect');
+            const medicineName = medicineSelect.options[medicineSelect.selectedIndex]?.text;
+            const quantity = document.getElementById('quantityInput').value;
+            const claimWindow = document.querySelector('[name="claim_window_days"]').value;
+            const frequency = document.querySelector('[name="frequency"]').value;
+            const scope = document.querySelector('[name="scope_type"]').value;
+            
+            const summary = document.getElementById('programSummary');
+            const summaryContent = document.getElementById('summaryContent');
+            
+            if (programName || quantity) {
+                summary.classList.remove('hidden');
+                let html = '';
+                
+                if (programName) {
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">📋 Program:</span><span class="text-gray-800">${programName}</span></div>`;
+                }
+                if (medicineName && medicineName !== 'Select a medicine to allocate') {
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">💊 Medicine:</span><span class="text-gray-800">${medicineName}</span></div>`;
+                }
+                if (quantity) {
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">📦 Quantity:</span><span class="text-gray-800">${quantity} units per senior</span></div>`;
+                }
+                if (frequency) {
+                    const freqText = frequency === 'monthly' ? 'Monthly' : 'Quarterly';
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">📅 Frequency:</span><span class="text-gray-800">${freqText}</span></div>`;
+                }
+                if (scope) {
+                    const scopeText = scope === 'barangay' ? 'Barangay-wide' : 'Specific Purok';
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">🏘️ Scope:</span><span class="text-gray-800">${scopeText}</span></div>`;
+                }
+                if (claimWindow) {
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">⏰ Claim Window:</span><span class="text-gray-800">${claimWindow} days</span></div>`;
+                }
+                
+                summaryContent.innerHTML = html;
+            } else {
+                summary.classList.add('hidden');
+            }
+        }
+        
         function clearFilters() {
             document.getElementById('searchInput').value = '';
             document.querySelectorAll('.filter-chip').forEach(chip => {
@@ -608,6 +1045,40 @@ foreach ($programs as $program) {
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Close modal when clicking outside
+            const modal = document.getElementById('addProgramModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeAddProgramModal();
+                    }
+                });
+            }
+            
+            // ESC key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeAddProgramModal();
+                }
+            });
+            
+            // Live form summary update
+            const formInputs = document.querySelectorAll('#programForm input, #programForm select');
+            formInputs.forEach(input => {
+                input.addEventListener('input', updateProgramSummary);
+                input.addEventListener('change', updateProgramSummary);
+            });
+            
+            // Add input animations
+            formInputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.style.transform = 'scale(1.02)';
+                    this.style.transition = 'transform 0.2s ease';
+                });
+                input.addEventListener('blur', function() {
+                    this.style.transform = 'scale(1)';
+                });
+            });
             const searchInput = document.getElementById('searchInput');
             const filterChips = document.querySelectorAll('.filter-chip');
             const programCards = document.querySelectorAll('.program-card');

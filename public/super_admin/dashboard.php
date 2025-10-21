@@ -98,6 +98,17 @@ try {
             background: #1f2937 !important;
             border-bottom-color: #374151 !important;
         }
+        
+        .content-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 50 !important;
+            background: white !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 2rem !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            margin-bottom: 2rem !important;
+        }
         .dark .text-gray-900 {
             color: #f9fafb !important;
         }
@@ -277,7 +288,12 @@ try {
         
         <!-- Sidebar Footer -->
         <div class="sidebar-footer">
-            <!-- Logout removed - now accessible via profile dropdown -->
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                </svg>
+                Logout
+            </a>
         </div>
     </aside>
 

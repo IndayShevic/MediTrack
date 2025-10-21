@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             // CREATE new program
-            $stmt = db()->prepare('INSERT INTO allocation_programs (program_name, medicine_id, quantity_per_senior, frequency, scope_type, barangay_id, purok_id, claim_window_days) VALUES (?,?,?,?,?,?,?,?)');
+        $stmt = db()->prepare('INSERT INTO allocation_programs (program_name, medicine_id, quantity_per_senior, frequency, scope_type, barangay_id, purok_id, claim_window_days) VALUES (?,?,?,?,?,?,?,?)');
             try { 
                 $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days]);
                 $success_message = 'Allocation program created successfully!';
@@ -333,7 +333,7 @@ foreach ($programs as $program) {
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Allocation Programs</h1>
                     <p class="text-gray-600 mt-1">Create and manage senior citizen medicine allocation programs</p>
-                </div>
+                    </div>
                 <div class="flex items-center space-x-6">
                     <!-- Current Time Display -->
                     <div class="text-right">
@@ -356,7 +356,7 @@ foreach ($programs as $program) {
                             </svg>
                             <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
                         </button>
-                    </div>
+                </div>
                     
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
@@ -367,11 +367,11 @@ foreach ($programs as $program) {
                                 $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
                                 echo strtoupper($firstInitial . $lastInitial); 
                                 ?>
-                            </div>
+                    </div>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
-                                </div>
+                </div>
                                 <div class="text-xs text-gray-500">Super Admin</div>
                             </div>
                             <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -736,27 +736,27 @@ foreach ($programs as $program) {
                             <div class="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
                                 <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                </svg>
-                            </div>
-                            <div>
+                            </svg>
+                        </div>
+                        <div>
                                 <h3 id="modalTitle" class="text-3xl font-bold text-white">New Allocation Program</h3>
                                 <p class="text-blue-100 mt-1">Configure medicine distribution for seniors</p>
-                            </div>
                         </div>
+                    </div>
                         <button onclick="closeAddProgramModal()" class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-xl transition-all duration-200">
                             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </button>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
                     </div>
                 </div>
-
+                
                 <!-- Form Content -->
                 <div class="p-8 overflow-y-auto" style="max-height: calc(95vh - 180px);">
                     <form method="post" id="programForm" class="space-y-6">
                         <input type="hidden" name="program_id" id="programId" value="0">
                         <!-- Program Name -->
-                        <div class="space-y-2">
+                    <div class="space-y-2">
                             <label class="flex items-center text-sm font-semibold text-gray-700">
                                 <svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
@@ -764,7 +764,7 @@ foreach ($programs as $program) {
                                 Program Name
                                 <span class="text-red-500 ml-1">*</span>
                             </label>
-                            <input name="program_name" required 
+                        <input name="program_name" required 
                                    class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white" 
                                    placeholder="e.g., Senior Citizen Medicine Assistance Program" />
                             <p class="text-xs text-gray-500 flex items-center">
@@ -773,10 +773,10 @@ foreach ($programs as $program) {
                                 </svg>
                                 Give your program a descriptive name
                             </p>
-                        </div>
-
+                    </div>
+                    
                         <!-- Medicine Selection -->
-                        <div class="space-y-2">
+                    <div class="space-y-2">
                             <label class="flex items-center text-sm font-semibold text-gray-700">
                                 <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
@@ -787,15 +787,15 @@ foreach ($programs as $program) {
                             <select name="medicine_id" id="medicineSelect" required 
                                     class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
                                 <option value="">Select a medicine to allocate</option>
-                                <?php foreach ($medicines as $m): ?>
-                                    <option value="<?php echo (int)$m['id']; ?>"><?php echo htmlspecialchars($m['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
+                            <?php foreach ($medicines as $m): ?>
+                                <option value="<?php echo (int)$m['id']; ?>"><?php echo htmlspecialchars($m['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
                         <!-- Grid Layout for Quantity and Claim Window -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-2">
                                 <label class="flex items-center text-sm font-semibold text-gray-700">
                                     <svg class="w-4 h-4 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
@@ -810,9 +810,9 @@ foreach ($programs as $program) {
                                     <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">units</span>
                                 </div>
                                 <p class="text-xs text-gray-500">Allocation amount per eligible senior</p>
-                            </div>
-
-                            <div class="space-y-2">
+                        </div>
+                        
+                        <div class="space-y-2">
                                 <label class="flex items-center text-sm font-semibold text-gray-700">
                                     <svg class="w-4 h-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -826,26 +826,26 @@ foreach ($programs as $program) {
                                     <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">days</span>
                                 </div>
                                 <p class="text-xs text-gray-500">How long seniors can claim allocation</p>
-                            </div>
                         </div>
-
+                    </div>
+                    
                         <!-- Frequency and Scope -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-2">
                                 <label class="flex items-center text-sm font-semibold text-gray-700">
                                     <svg class="w-4 h-4 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
                                     Frequency
                                 </label>
-                                <select name="frequency" 
+                            <select name="frequency" 
                                         class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
                                     <option value="monthly">📅 Monthly Distribution</option>
                                     <option value="quarterly">📊 Quarterly Distribution</option>
-                                </select>
-                            </div>
-
-                            <div class="space-y-2">
+                            </select>
+                        </div>
+                        
+                        <div class="space-y-2">
                                 <label class="flex items-center text-sm font-semibold text-gray-700">
                                     <svg class="w-4 h-4 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
@@ -857,12 +857,12 @@ foreach ($programs as $program) {
                                         class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
                                     <option value="barangay">🏘️ Barangay-wide</option>
                                     <option value="purok">🏠 Specific Purok</option>
-                                </select>
-                            </div>
+                            </select>
                         </div>
-
+                    </div>
+                    
                         <!-- Barangay Selection -->
-                        <div class="space-y-2">
+                    <div class="space-y-2">
                             <label class="flex items-center text-sm font-semibold text-gray-700">
                                 <svg class="w-4 h-4 mr-2 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
@@ -870,16 +870,16 @@ foreach ($programs as $program) {
                                 Target Barangay
                                 <span class="text-xs text-gray-400 ml-2">(Optional)</span>
                             </label>
-                            <select name="barangay_id" 
+                        <select name="barangay_id" 
                                     class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
                                 <option value="">🌐 All Barangays</option>
-                                <?php foreach ($barangays as $b): ?>
+                            <?php foreach ($barangays as $b): ?>
                                     <option value="<?php echo (int)$b['id']; ?>">📍 <?php echo htmlspecialchars($b['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <?php endforeach; ?>
+                        </select>
                             <p class="text-xs text-gray-500">Leave empty to apply to all barangays</p>
-                        </div>
-
+                    </div>
+                    
                         <!-- Summary Box -->
                         <div id="programSummary" class="hidden bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
                             <h4 class="font-semibold text-gray-900 mb-3 flex items-center">
@@ -899,13 +899,13 @@ foreach ($programs as $program) {
                             </button>
                             <button type="submit" 
                                     class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                                Create Program
-                            </button>
-                        </div>
-                    </form>
+                            </svg>
+                            Create Program
+                        </button>
+                    </div>
+                </form>
                 </div>
             </div>
         </div>
@@ -1034,7 +1034,7 @@ foreach ($programs as $program) {
                 summary.classList.add('hidden');
             }
         }
-        
+
         function clearFilters() {
             document.getElementById('searchInput').value = '';
             document.querySelectorAll('.filter-chip').forEach(chip => {

@@ -273,7 +273,7 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                                 <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                     </svg>
-                            </div>
+                </div>
                             <span class="px-3 py-1 bg-blue-200 text-blue-700 text-xs font-bold rounded-full">ACTIVE</span>
                         </div>
                         <div>
@@ -317,7 +317,7 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                                 <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            </div>
+                        </div>
                             <span class="px-3 py-1 bg-green-200 text-green-700 text-xs font-bold rounded-full">COMPLETED</span>
                         </div>
                         <div>
@@ -346,7 +346,7 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                             <span class="text-sm font-semibold text-blue-700"><?php echo count($programs); ?> Program<?php echo count($programs) > 1 ? 's' : ''; ?></span>
                         </div>
                     <?php endif; ?>
-                </div>
+                    </div>
                 
                 <?php if (count($programs) > 0): ?>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -362,8 +362,8 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                                             <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                                </svg>
-                                            </div>
+                            </svg>
+                        </div>
                                             <div class="flex-1">
                                                 <h3 class="text-xl font-extrabold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
                                                     <?php echo htmlspecialchars($prog['program_name']); ?>
@@ -391,18 +391,18 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                                                 <p class="text-xs text-blue-700 font-bold uppercase tracking-wide">Per Senior</p>
                                             </div>
                                             <p class="text-2xl font-extrabold text-blue-900"><?php echo (int)$prog['quantity_per_senior']; ?> <span class="text-sm font-medium">units</span></p>
-                                        </div>
+                    </div>
                                         <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
                                             <div class="flex items-center space-x-2 mb-1">
                                                 <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                </svg>
+                            </svg>
                                                 <p class="text-xs text-purple-700 font-bold uppercase tracking-wide">Claim Window</p>
-                                            </div>
+                        </div>
                                             <p class="text-2xl font-extrabold text-purple-900"><?php echo (int)$prog['claim_window_days']; ?> <span class="text-sm font-medium">days</span></p>
-                                        </div>
-                                    </div>
-                                    
+                    </div>
+                </div>
+
                                     <!-- Stats Bar -->
                                     <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
                                         <p class="text-xs text-gray-600 font-semibold uppercase tracking-wide mb-3">Distribution Status</p>
@@ -410,8 +410,8 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                                             <div class="text-center">
                                                 <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2 border-2 border-orange-200">
                                                     <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
                                                 </div>
                                                 <p class="text-xs text-gray-600 font-medium mb-1">Pending</p>
                                                 <p class="text-xl font-extrabold text-orange-600"><?php echo (int)$prog['pending_claims']; ?></p>
@@ -475,8 +475,8 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                     <div class="flex items-center space-x-2 px-4 py-2 bg-orange-50 rounded-xl border border-orange-200">
                         <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
                         <span class="text-sm font-semibold text-orange-700"><?php echo count($recent_claims); ?> Pending</span>
+                        </div>
                     </div>
-                </div>
                 
                 <div class="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300">
                     <div class="overflow-x-auto">
@@ -576,8 +576,8 @@ $total_claimed = array_sum(array_column($programs, 'claimed_count'));
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                         </svg>
                                 Go to Medicine Requests
-                            </a>
-                        </div>
+                    </a>
+                </div>
                     </div>
                 </div>
             </div>

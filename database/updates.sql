@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS pending_residents (
   status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   bhw_id INT NULL,
   rejection_reason TEXT NULL,
+  -- Email verification fields
+  email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  email_verification_code VARCHAR(12) NULL,
+  email_verification_expires_at DATETIME NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_pending_resident_barangay FOREIGN KEY (barangay_id) REFERENCES barangays(id) ON DELETE CASCADE,
@@ -114,5 +118,8 @@ DEALLOCATE PREPARE stmt;
 -- Add index for better performance
 CREATE INDEX idx_pending_residents_purok ON pending_residents(purok_id);
 CREATE INDEX idx_pending_residents_status ON pending_residents(status);
+-- Add indexes to speed up verification lookups
+CREATE INDEX IF NOT EXISTS idx_pending_residents_email ON pending_residents(email);
+CREATE INDEX IF NOT EXISTS idx_pending_residents_verification ON pending_residents(email_verification_code);
 CREATE INDEX idx_requests_family_member ON requests(family_member_id);
 CREATE INDEX idx_users_purok ON users(purok_id);

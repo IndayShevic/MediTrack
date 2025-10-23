@@ -739,27 +739,20 @@ $requests = $rows->fetchAll();
     <!-- Request Details Modal -->
     <div id="requestDetailsModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
-            <!-- Header with gradient background -->
-            <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-t-3xl p-6 text-white">
+            <!-- Header with clean design -->
+            <div class="bg-white border-b border-gray-200 rounded-t-3xl p-6">
                 <div class="flex justify-between items-center">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-white/20 p-3 rounded-2xl">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">Request Details</h2>
-                            <p class="text-blue-100 text-sm">Medicine request information</p>
-                        </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Request Details</h2>
+                        <p class="text-gray-500 text-sm">Medicine request information</p>
                     </div>
-                    <button onclick="closeRequestDetails()" class="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all duration-200">
+                    <button onclick="closeRequestDetails()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg transition-colors duration-200">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-                </div>
+            </div>
             
             <!-- Content -->
             <div class="p-8">
@@ -955,216 +948,149 @@ $requests = $rows->fetchAll();
             modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
             
-            // Build the content with enhanced design
+            // Build the content with clean, simple design
             let html = `
-                <div class="space-y-8">
-                    <!-- Request Info Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Request ID Card -->
-                        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-100">
-                            <div class="flex items-center space-x-3 mb-3">
-                                <div class="bg-blue-500 p-2 rounded-xl">
-                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
-                                    </svg>
+                <div class="bg-white border border-gray-200 rounded-lg p-8">
+                    <!-- Header Section -->
+                    <div class="border-b border-gray-200 pb-6 mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-2xl font-bold text-gray-900">Request #${request.id}</h3>
+                            ${getStatusBadge(request.status)}
                         </div>
-                                <label class="text-sm font-semibold text-blue-700 uppercase tracking-wide">Request ID</label>
-                            </div>
-                            <div class="text-2xl font-bold text-blue-900 font-mono">#${request.id}</div>
-                        </div>
-
-                        <!-- Status Card -->
-                        <div class="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-2xl border border-orange-100">
-                            <div class="flex items-center space-x-3 mb-3">
-                                <div class="bg-orange-500 p-2 rounded-xl">
-                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                </div>
-                                <label class="text-sm font-semibold text-orange-700 uppercase tracking-wide">Status</label>
-                            </div>
-                            <div class="mt-1">
-                                ${getStatusBadge(request.status)}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Medicine Info Card -->
-                    <div class="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-2xl border border-purple-100">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-purple-500 p-3 rounded-xl">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                </svg>
-                            </div>
-                            <label class="text-sm font-semibold text-purple-700 uppercase tracking-wide">Medicine</label>
-                        </div>
-                        <div class="text-2xl font-bold text-purple-900">${request.medicine}</div>
-                    </div>
-
-                    <!-- Request Details Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Requested For Card -->
-                        <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-100">
-                            <div class="flex items-center space-x-3 mb-3">
-                                <div class="bg-green-500 p-2 rounded-xl">
-                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                </div>
-                                <label class="text-sm font-semibold text-green-700 uppercase tracking-wide">Requested For</label>
-                            </div>
-                            <div class="text-lg font-semibold">
-                                ${request.requested_for === 'self' ? 
-                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' + (request.resident_full_name || 'Self') + '</span>' : 
-                                    '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Family Member</span>'
-                                }
-                            </div>
-                        </div>
-
-                        <!-- Created Date Card -->
-                        <div class="bg-gradient-to-br from-gray-50 to-slate-50 p-6 rounded-2xl border border-gray-100">
-                            <div class="flex items-center space-x-3 mb-3">
-                                <div class="bg-gray-500 p-2 rounded-xl">
-                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                </div>
-                                <label class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Created</label>
-                            </div>
-                            <div class="text-lg font-semibold text-gray-900">${new Date(request.created_at).toLocaleDateString('en-US', { 
+                        <div class="text-sm text-gray-500">
+                            Created: ${new Date(request.created_at).toLocaleDateString('en-US', { 
                                 year: 'numeric', 
                                 month: 'short', 
                                 day: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
-                            })}</div>
+                            })}
                         </div>
                     </div>
 
-                    ${request.requested_for === 'family' && request.patient_name ? `
-                    <!-- Patient Info Card -->
-                    <div class="bg-gradient-to-br from-purple-50 to-violet-50 p-6 rounded-2xl border border-purple-100">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-purple-500 p-3 rounded-xl">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="text-xl font-bold text-purple-900">Patient Information</h3>
-                        </div>
-                        <div class="grid grid-cols-3 gap-4">
+                    <!-- Main Content Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Left Column -->
+                        <div class="space-y-6">
+                            <!-- Medicine Information -->
                             <div>
-                                <label class="block text-sm font-medium text-purple-700 mb-1">Name</label>
-                                <div class="text-purple-900">${request.patient_name || '-'}</div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-purple-700 mb-1">Age</label>
-                                <div class="text-purple-900">${request.patient_date_of_birth ? calculateAge(request.patient_date_of_birth) + ' years' : '-'}</div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-purple-700 mb-1">Relationship</label>
-                                <div class="text-purple-900">${request.relationship || '-'}</div>
-                            </div>
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    <!-- Reason Card -->
-                    <div class="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-2xl border border-indigo-100">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-indigo-500 p-3 rounded-xl">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                            </div>
-                            <label class="text-sm font-semibold text-indigo-700 uppercase tracking-wide">Reason for Request</label>
-                        </div>
-                        <div class="bg-white/60 border border-indigo-200 rounded-xl p-4">
-                            <p class="text-indigo-900 text-lg leading-relaxed">${request.reason || 'No reason provided'}</p>
-                        </div>
-                    </div>
-
-                    <!-- BHW Assignment Card -->
-                    <div class="bg-gradient-to-br from-teal-50 to-cyan-50 p-6 rounded-2xl border border-teal-100">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-teal-500 p-3 rounded-xl">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                </svg>
-                            </div>
-                            <label class="text-sm font-semibold text-teal-700 uppercase tracking-wide">Assigned BHW</label>
-                        </div>
-                        <div class="text-xl font-semibold text-teal-900">
-                            ${request.bhw_first_name && request.bhw_last_name ? 
-                                `<span class="inline-flex items-center px-4 py-2 bg-teal-100 text-teal-800 rounded-full"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>${request.bhw_first_name} ${request.bhw_last_name}</span>` : 
-                                '<span class="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-600 rounded-full"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Not assigned</span>'
-                            }
-                        </div>
-                    </div>
-
-                    ${request.status === 'approved' && request.approver_first_name ? `
-                    <!-- Approval Info Card -->
-                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-100">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-green-500 p-3 rounded-xl">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="text-xl font-bold text-green-900">Approval Information</h3>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-green-700 mb-1">Approved By</label>
-                                <div class="text-green-900 font-medium">${request.approver_first_name} ${request.approver_last_name}</div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-green-700 mb-1">Approved At</label>
-                                <div class="text-green-900">${request.approved_at ? new Date(request.approved_at).toLocaleDateString('en-US', { 
-                                    year: 'numeric', 
-                                    month: 'short', 
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                }) : '-'}</div>
-                            </div>
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    ${request.status === 'rejected' && request.rejector_first_name ? `
-                    <!-- Rejection Info -->
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold text-red-900 mb-3">Rejection Information</h3>
-                        <div class="space-y-3">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-red-700 mb-1">Rejected By</label>
-                                    <div class="text-red-900 font-medium">${request.rejector_first_name} ${request.rejector_last_name}</div>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-red-700 mb-1">Rejected At</label>
-                                    <div class="text-red-900">${request.rejected_at ? new Date(request.rejected_at).toLocaleDateString('en-US', { 
-                                        year: 'numeric', 
-                                        month: 'short', 
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    }) : '-'}</div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Medicine</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-xl font-medium text-gray-900">${request.medicine}</p>
                                 </div>
                             </div>
-                            ${request.rejection_reason ? `
+
+                            <!-- Requested For -->
                             <div>
-                                <label class="block text-sm font-medium text-red-700 mb-1">Rejection Reason</label>
-                                <div class="bg-white border border-red-200 rounded-lg p-3">
-                                    <p class="text-red-900">${request.rejection_reason}</p>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Requested For</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-gray-900">
+                                        ${request.requested_for === 'self' ? 
+                                            (request.resident_full_name || 'Self') : 
+                                            'Family Member'
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- BHW Assignment -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Assigned BHW</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-gray-900">
+                                        ${request.bhw_first_name && request.bhw_last_name ? 
+                                            `${request.bhw_first_name} ${request.bhw_last_name}` : 
+                                            'Not assigned'
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            ${request.requested_for === 'family' && request.patient_name ? `
+                            <!-- Patient Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Patient Information</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                    <div>
+                                        <span class="text-sm text-gray-500">Name:</span>
+                                        <p class="text-gray-900">${request.patient_name || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-gray-500">Age:</span>
+                                        <p class="text-gray-900">${request.patient_date_of_birth ? calculateAge(request.patient_date_of_birth) + ' years' : '-'}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-gray-500">Relationship:</span>
+                                        <p class="text-gray-900">${request.relationship || '-'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            ${request.status === 'approved' && request.approver_first_name ? `
+                            <!-- Approval Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Approval Information</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                    <div>
+                                        <span class="text-sm text-gray-500">Approved By:</span>
+                                        <p class="text-gray-900">${request.approver_first_name} ${request.approver_last_name}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-gray-500">Approved At:</span>
+                                        <p class="text-gray-900">${request.approved_at ? new Date(request.approved_at).toLocaleDateString('en-US', { 
+                                            year: 'numeric', 
+                                            month: 'short', 
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        }) : '-'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            ${request.status === 'rejected' && request.rejector_first_name ? `
+                            <!-- Rejection Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Rejection Information</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                    <div>
+                                        <span class="text-sm text-gray-500">Rejected By:</span>
+                                        <p class="text-gray-900">${request.rejector_first_name} ${request.rejector_last_name}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-gray-500">Rejected At:</span>
+                                        <p class="text-gray-900">${request.rejected_at ? new Date(request.rejected_at).toLocaleDateString('en-US', { 
+                                            year: 'numeric', 
+                                            month: 'short', 
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        }) : '-'}</p>
+                                    </div>
+                                    ${request.rejection_reason ? `
+                                    <div>
+                                        <span class="text-sm text-gray-500">Reason:</span>
+                                        <p class="text-gray-900 mt-1">${request.rejection_reason}</p>
+                                    </div>
+                                    ` : ''}
                                 </div>
                             </div>
                             ` : ''}
                         </div>
                     </div>
-                    ` : ''}
+
+                    <!-- Reason Section (Full Width) -->
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-3">Reason for Request</h4>
+                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <p class="text-gray-900 leading-relaxed">${request.reason || 'No reason provided'}</p>
+                        </div>
+                    </div>
                 </div>
             `;
             

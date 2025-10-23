@@ -290,7 +290,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 
+                // Generate email verification code (6 digits) and expiry (15 mins)
+                $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                $expiresAt = (new DateTime('+15 minutes'))->format('Y-m-d H:i:s');
+                $updVer = $pdo->prepare('UPDATE pending_residents SET email_verification_code = ?, email_verification_expires_at = ?, email_verified = 0 WHERE id = ?');
+                $updVer->execute([$code, $expiresAt, $pendingId]);
+
                 $pdo->commit();
+                
+                // Send email verification to user
+                try {
+                    $residentName = format_full_name($first, $last, $middle);
+                    send_email_verification_code($email, $residentName, $code);
+                } catch (Throwable $e) {
+                    error_log('Verification email send failed: ' . $e->getMessage());
+                }
                 
                 // Notify assigned BHW about new registration
                 try {
@@ -314,8 +328,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log('Email notification failed: ' . $e->getMessage());
                 }
                 
-                set_flash('Registration submitted successfully! Your account is pending approval from your Barangay Health Worker. You will receive an email notification once your account is approved.','success');
-                redirect_to('../index.php?registered=1');
+                set_flash('Registration received! We sent a 6-digit verification code to your email. Enter it to verify your email, then your account will be reviewed by your BHW.','success');
+                redirect_to('verify_email.php?email=' . urlencode($email));
             } catch (Throwable $e) {
                 if (isset($pdo)) $pdo->rollBack();
                 error_log('Registration failed: ' . $e->getMessage());

@@ -32,6 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pending = $stmt->fetch();
             
             if ($pending) {
+                // Check if email is verified
+                if ((int)$pending['email_verified'] !== 1) {
+                    set_flash('Cannot approve: Resident has not verified their email address yet.', 'error');
+                    redirect_to('bhw/pending_residents.php');
+                }
                 // Create user account
                 $insUser = $pdo->prepare('INSERT INTO users(email, password_hash, role, first_name, last_name, middle_initial, purok_id) VALUES(?,?,?,?,?,?,?)');
                 $insUser->execute([$pending['email'], $pending['password_hash'], 'resident', $pending['first_name'], $pending['last_name'], $pending['middle_initial'], $pending['purok_id']]);
@@ -544,6 +549,11 @@ try {
                                                 <div class="flex items-center space-x-3 mb-2">
                                                     <h3 class="text-xl font-bold text-gray-900"><?php echo htmlspecialchars(format_full_name($resident['first_name'], $resident['last_name'], $resident['middle_initial'] ?? null)); ?></h3>
                                                     <span class="px-3 py-1 bg-warning-100 text-warning-800 text-xs font-semibold rounded-full">PENDING</span>
+                                                    <?php if ((int)$resident['email_verified'] === 1): ?>
+                                                        <span class="px-3 py-1 bg-success-100 text-success-800 text-xs font-semibold rounded-full">✓ EMAIL VERIFIED</span>
+                                                    <?php else: ?>
+                                                        <span class="px-3 py-1 bg-danger-100 text-danger-800 text-xs font-semibold rounded-full">✗ EMAIL NOT VERIFIED</span>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <div class="space-y-1">
                                                     <div class="flex items-center space-x-2 text-sm text-gray-600">
@@ -673,11 +683,11 @@ try {
                                         <form method="post" class="inline">
                                             <input type="hidden" name="action" value="approve" />
                                             <input type="hidden" name="pending_id" value="<?php echo (int)$resident['id']; ?>" />
-                                            <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-success-500 to-success-600 text-white font-semibold rounded-xl hover:from-success-600 hover:to-success-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2">
+                                            <button type="submit" <?php echo (int)$resident['email_verified'] !== 1 ? 'disabled title="Email not verified yet"' : ''; ?> class="w-full px-6 py-3 <?php echo (int)$resident['email_verified'] === 1 ? 'bg-gradient-to-r from-success-500 to-success-600 hover:from-success-600 hover:to-success-700' : 'bg-gray-300 cursor-not-allowed'; ?> text-white font-semibold rounded-xl transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2">
                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                                 </svg>
-                                                <span>Approve</span>
+                                                <span><?php echo (int)$resident['email_verified'] === 1 ? 'Approve' : 'Email Not Verified'; ?></span>
                                             </button>
                                         </form>
                                         

@@ -89,12 +89,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
     
+    // Check if email is verified
+    if (!isset($_SESSION['email_verified']) || $_SESSION['email_verified'] !== true) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Please verify your email address first']);
+        exit;
+    }
+    
+    // Verify that the email matches the verified email
+    $email = trim($_POST['email'] ?? '');
+    $verified_email = $_SESSION['verified_email'] ?? '';
+    
+    if ($email !== $verified_email) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Email mismatch. Please verify your email again.']);
+        exit;
+    }
+    
     // Debug: Log all POST data
     error_log('POST data received in index.php: ' . print_r($_POST, true));
     file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - POST data: ' . print_r($_POST, true) . "\n", FILE_APPEND);
     
     // Sanitize and validate input data
-    $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $first = trim($_POST['first_name'] ?? '');
     $last = trim($_POST['last_name'] ?? '');
@@ -197,9 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $row = $q->fetch();
             $barangay_id = $row ? (int)$row['barangay_id'] : 0;
             
-            // Insert into pending_residents table
-            $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, date_of_birth, phone, address, barangay_id, purok_id) VALUES(?,?,?,?,?,?,?,?,?,?)');
-            $result = $insPending->execute([$email, $hash, $first, $last, $middle, $dob, $phone, $address, $barangay_id, $purok_id]);
+            // Insert into pending_residents table (email is already verified at this point)
+            $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, date_of_birth, phone, address, barangay_id, purok_id, email_verified) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+            $result = $insPending->execute([$email, $hash, $first, $last, $middle, $dob, $phone, $address, $barangay_id, $purok_id, 1]);
             
             if (!$result) {
                 throw new Exception('Failed to insert pending resident: ' . implode(', ', $insPending->errorInfo()));
@@ -243,9 +259,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log('Email notification failed: ' . $e->getMessage());
             }
             
+            // Clear verification session BEFORE sending response
+            unset($_SESSION['email_verified'], $_SESSION['verified_email']);
+            
             // Return success response
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'message' => 'Registration submitted successfully!']);
+            
             exit;
             
         } catch (Throwable $e) {
@@ -1412,6 +1432,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <!-- Email Verification Modal -->
+    <div id="verificationModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300">
+            <div class="p-8">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Verify Your Email</h3>
+                    <p class="text-gray-600">We sent a 6-digit code to your email</p>
+                </div>
+
+                <div id="verificationError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Verification Code</label>
+                        <input type="text" id="verificationCode" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 text-center text-2xl tracking-widest" placeholder="000000" />
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <button type="button" onclick="closeVerificationModal()" class="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200">
+                            Cancel
+                        </button>
+                        <button type="button" onclick="requestVerificationCode()" id="resendBtn" class="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200">
+                            Resend Code
+                        </button>
+                        <button type="button" onclick="verifyCode()" class="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200">
+                            Verify
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Enhanced Login Modal -->
     <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300">
@@ -1621,7 +1679,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     nextBtn.disabled = false;
                     nextBtn.textContent = 'Proceed to Family Members';
                 }
-                goToStep(2);
+                // Show verification modal instead of going to step 2
+                showVerificationModal();
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -1857,11 +1916,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     submitBtn.classList.remove('bg-gradient-to-r', 'from-green-600', 'to-emerald-600');
                     submitBtn.classList.add('bg-green-500');
                     
-                    // Close modal after 2 seconds
+                    // Close modal and redirect to verification page
                     setTimeout(() => {
                         closeRegisterModal();
                         // Show success notification
-                        showSuccessNotification();
+                        showToast(data.message || 'Registration submitted! Please check your email for verification code.', 'success');
+                        
+                        // Redirect to verification page if provided
+                        if (data.redirect) {
+                            setTimeout(() => {
+                                window.location.href = data.redirect;
+                            }, 1000);
+                        }
                     }, 2000);
                 } else {
                     // Show error message
@@ -2478,6 +2544,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Observe all scroll-reveal elements
         document.querySelectorAll('.scroll-reveal, .scroll-reveal-left, .scroll-reveal-right').forEach(el => {
             scrollRevealObserver.observe(el);
+        });
+        
+        // Email verification functions
+        function showVerificationModal() {
+            const modal = document.getElementById('verificationModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Request verification code immediately
+            requestVerificationCode();
+        }
+        
+        function closeVerificationModal() {
+            const modal = document.getElementById('verificationModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('verificationCode').value = '';
+            document.getElementById('verificationError').classList.add('hidden');
+        }
+        
+        async function requestVerificationCode() {
+            const email = document.querySelector('input[name="email"]').value.trim();
+            const firstName = document.querySelector('input[name="first_name"]').value.trim();
+            const lastName = document.querySelector('input[name="last_name"]').value.trim();
+            
+            if (!email || !firstName || !lastName) {
+                showVerificationError('Please fill in email, first name, and last name first.');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'send_verification_code');
+                formData.append('email', email);
+                formData.append('first_name', firstName);
+                formData.append('last_name', lastName);
+                
+                const response = await fetch('public/verify_email_step.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Verification code sent!', 'success');
+                } else {
+                    showVerificationError(result.message || 'Failed to send verification code');
+                }
+            } catch (error) {
+                showVerificationError('Error sending verification code');
+            }
+        }
+        
+        async function verifyCode() {
+            const code = document.getElementById('verificationCode').value.trim();
+            
+            if (!code || code.length !== 6) {
+                showVerificationError('Please enter a 6-digit code');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'verify_code');
+                formData.append('code', code);
+                
+                const response = await fetch('public/verify_email_step.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Email verified!', 'success');
+                    closeVerificationModal();
+                    goToStep(2);
+                } else {
+                    showVerificationError(result.message || 'Invalid verification code');
+                }
+            } catch (error) {
+                showVerificationError('Error verifying code');
+            }
+        }
+        
+        function showVerificationError(message) {
+            const errorDiv = document.getElementById('verificationError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+        
+        // Allow Enter key to verify
+        document.getElementById('verificationCode').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                verifyCode();
+            }
         });
     </script>
 </body>

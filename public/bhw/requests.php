@@ -567,21 +567,14 @@ $reqs = $rows->fetchAll();
     <!-- View Details Modal -->
     <div id="viewDetailsModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
-            <!-- Header with gradient background -->
-            <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-t-3xl p-6 text-white">
+            <!-- Header with clean design -->
+            <div class="bg-white border-b border-gray-200 rounded-t-3xl p-6">
                 <div class="flex justify-between items-center">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-white/20 p-3 rounded-2xl">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-2xl font-bold">Request Details</h2>
-                            <p class="text-blue-100 text-sm">Complete medicine request information</p>
-                        </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Request Details</h2>
+                        <p class="text-gray-500 text-sm">Complete medicine request information</p>
                     </div>
-                    <button onclick="closeViewDetailsModal()" class="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all duration-200">
+                    <button onclick="closeViewDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg transition-colors duration-200">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
@@ -822,143 +815,95 @@ $reqs = $rows->fetchAll();
             }
             
             content.innerHTML = `
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Left Column -->
-                    <div class="space-y-6">
-                        <!-- Request ID & Status -->
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                            <div class="flex items-center space-x-3 mb-4">
-                                <div class="bg-gray-100 p-2 rounded-lg">
-                                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-800">Request Information</h3>
-                                    <p class="text-gray-600 text-sm">Basic request details</p>
-                                </div>
-                            </div>
-                            <div class="space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Request ID:</span>
-                                    <span class="text-sm font-mono text-gray-900">#${request.id}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Status:</span>
-                                    ${statusBadge}
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Created:</span>
-                                    <span class="text-sm text-gray-900">${new Date(request.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                                </div>
-                                ${request.updated_at ? `
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Updated:</span>
-                                    <span class="text-sm text-gray-900">${new Date(request.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                                </div>
-                                ` : ''}
-                            </div>
+                <div class="bg-white border border-gray-200 rounded-lg p-8">
+                    <!-- Header Section -->
+                    <div class="border-b border-gray-200 pb-6 mb-8">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-2xl font-bold text-gray-900">Request #${request.id}</h3>
+                            ${statusBadge}
                         </div>
-
-                        <!-- Medicine Information -->
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                            <div class="flex items-center space-x-3 mb-4">
-                                <div class="bg-gray-100 p-2 rounded-lg">
-                                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-800">Medicine</h3>
-                                    <p class="text-gray-600 text-sm">Requested medication</p>
-                                </div>
-                            </div>
-                            <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                <h4 class="text-xl font-bold text-gray-900">${request.medicine}</h4>
-                            </div>
-                        </div>
-
-                        <!-- Patient Information -->
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                            <div class="flex items-center space-x-3 mb-4">
-                                <div class="bg-gray-100 p-2 rounded-lg">
-                                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-800">Patient Information</h3>
-                                    <p class="text-gray-600 text-sm">Who the medicine is for</p>
-                                </div>
-                            </div>
-                            <div class="space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Requested For:</span>
-                                    <span class="text-sm text-gray-900">${requestedForDisplay}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Patient Name:</span>
-                                    <span class="text-sm text-gray-900">${patientInfo}</span>
-                                </div>
-                                ${request.patient_date_of_birth ? `
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Date of Birth:</span>
-                                    <span class="text-sm text-gray-900">${request.patient_date_of_birth ? new Date(request.patient_date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not provided'}</span>
-                                </div>
-                                ` : ''}
-                                ${request.relationship ? `
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-700">Relationship:</span>
-                                    <span class="text-sm text-gray-900">${request.relationship}</span>
-                                </div>
-                                ` : ''}
-                            </div>
+                        <div class="text-sm text-gray-500">
+                            Created: ${new Date(request.created_at).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}
+                            ${request.updated_at ? ` • Updated: ${new Date(request.updated_at).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}` : ''}
                         </div>
                     </div>
 
-                    <!-- Right Column -->
-                    <div class="space-y-6">
-                        <!-- Resident Information -->
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                            <div class="flex items-center space-x-3 mb-4">
-                                <div class="bg-gray-100 p-2 rounded-lg">
-                                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-800">Resident</h3>
-                                    <p class="text-gray-600 text-sm">Who submitted the request</p>
+                    <!-- Main Content Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Left Column -->
+                        <div class="space-y-6">
+                            <!-- Medicine Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Medicine</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-xl font-medium text-gray-900">${request.medicine}</p>
                                 </div>
                             </div>
-                            <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                <h4 class="text-lg font-semibold text-gray-900">${request.first_name} ${request.last_name}</h4>
+
+                            <!-- Patient Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Patient Information</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                                    <div>
+                                        <span class="text-sm text-gray-500">Requested For:</span>
+                                        <p class="text-gray-900">${requestedForDisplay}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-sm text-gray-500">Patient Name:</span>
+                                        <p class="text-gray-900">${patientInfo}</p>
+                                    </div>
+                                    ${request.patient_date_of_birth ? `
+                                    <div>
+                                        <span class="text-sm text-gray-500">Date of Birth:</span>
+                                        <p class="text-gray-900">${new Date(request.patient_date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                    </div>
+                                    ` : ''}
+                                    ${request.relationship ? `
+                                    <div>
+                                        <span class="text-sm text-gray-500">Relationship:</span>
+                                        <p class="text-gray-900">${request.relationship}</p>
+                                    </div>
+                                    ` : ''}
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Reason -->
-                        ${request.reason ? `
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                            <div class="flex items-center space-x-3 mb-4">
-                                <div class="bg-gray-100 p-2 rounded-lg">
-                                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-800">Reason</h3>
-                                    <p class="text-gray-600 text-sm">Why the medicine is needed</p>
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            <!-- Resident Information -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Resident</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-lg font-medium text-gray-900">${request.first_name} ${request.last_name}</p>
                                 </div>
                             </div>
-                            <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                <p class="text-gray-800">${request.reason}</p>
+
+                            ${request.reason ? `
+                            <!-- Reason -->
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Reason</h4>
+                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <p class="text-gray-900">${request.reason}</p>
+                                </div>
                             </div>
+                            ` : ''}
+
+                            ${proofImageSection}
+
+                            ${rejectionSection}
                         </div>
-                        ` : ''}
-
-                        ${proofImageSection}
-
-                        ${rejectionSection}
                     </div>
                 </div>
             `;

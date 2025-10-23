@@ -3,6 +3,26 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/mail.php';
 
+function send_email_verification_code(string $email, string $name, string $code): bool {
+    $subject = 'Verify your email - MediTrack';
+    $verifyUrl = base_url('verify_email.php?email=' . urlencode($email));
+    $html = email_template(
+        'Verify your email address',
+        'Use the code below to verify your email and complete your registration.',
+        '<div style="font-size:14px;color:#111827">'
+        . '<p>Hello ' . htmlspecialchars($name) . ',</p>'
+        . '<p>Your verification code is:</p>'
+        . '<div style="font-size:28px;font-weight:700;letter-spacing:4px;margin:12px 0;padding:12px 16px;background:#f3f4f6;border-radius:8px;text-align:center">'
+        . htmlspecialchars($code)
+        . '</div>'
+        . '<p>This code will expire in 15 minutes. If you did not request this, you can ignore this email.</p>'
+        . '</div>',
+        'Verify Email',
+        $verifyUrl
+    );
+    return send_email($email, $name, $subject, $html);
+}
+
 function send_registration_approval_email(string $email, string $name): bool {
     $subject = 'Registration Approved - MediTrack';
     $html = email_template(

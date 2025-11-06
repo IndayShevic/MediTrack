@@ -9,7 +9,20 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 require_once __DIR__ . '/includes/sidebar_counts.php';
 $notification_counts = get_bhw_notification_counts($bhw_purok_id);
 
-$rows = db()->prepare('SELECT fm.full_name, fm.relationship, r.last_name, r.first_name FROM family_members fm JOIN residents r ON r.id=fm.resident_id WHERE r.purok_id=(SELECT purok_id FROM users WHERE id=?) ORDER BY r.last_name, fm.full_name');
+$rows = db()->prepare('
+    SELECT 
+        fm.full_name, 
+        fm.relationship, 
+        fm.date_of_birth,
+        r.last_name, 
+        r.first_name,
+        r.id as resident_id,
+        CONCAT(r.first_name, " ", r.last_name) as resident_full_name
+    FROM family_members fm 
+    JOIN residents r ON r.id = fm.resident_id 
+    WHERE r.purok_id = (SELECT purok_id FROM users WHERE id = ?) 
+    ORDER BY r.last_name, r.first_name, fm.relationship, fm.full_name
+');
 $rows->execute([$user['id']]);
 $families = $rows->fetchAll();
 ?>
@@ -23,7 +36,11 @@ $families = $rows->fetchAll();
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+<script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
 <script>
     tailwind.config = {
         theme: {
@@ -36,6 +53,40 @@ $families = $rows->fetchAll();
     }
 </script>
     <style>
+        /* Content Header Styles */
+        .content-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 50 !important;
+            background: white !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 2rem !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            margin-bottom: 2rem !important;
+        }
+        
+        .dark .content-header {
+            background: #1f2937 !important;
+            border-bottom-color: #374151 !important;
+        }
+        
+        .dark .text-gray-900 {
+            color: #f9fafb !important;
+        }
+        
+        .dark .text-gray-600 {
+            color: #d1d5db !important;
+        }
+        
+        .dark .text-gray-500 {
+            color: #9ca3af !important;
+        }
+        
+        .dark .card {
+            background: #374151 !important;
+            border-color: #4b5563 !important;
+        }
+        
         .notification-badge {
             display: inline-flex;
             align-items: center;
@@ -79,9 +130,61 @@ $families = $rows->fetchAll();
         .sidebar-nav a:hover {
             transform: translateX(2px);
         }
+        
+        .filter-chip.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Table Styles */
+        #familyTable {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        #familyTable tbody tr {
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        #familyTable tbody tr:last-child {
+            border-bottom: none;
+        }
+        
+        .dark #familyTable thead {
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+        }
+        
+        .dark #familyTable tbody tr {
+            background: #374151;
+            border-bottom-color: #4b5563;
+        }
+        
+        .dark #familyTable tbody tr:hover {
+            background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+        }
+        
+        .dark #familyTable thead th {
+            color: #f9fafb;
+        }
+        
+        .dark #familyTable tbody td {
+            color: #e5e7eb;
+        }
+        
+        @media (max-width: 768px) {
+            #familyTable {
+                font-size: 0.875rem;
+            }
+            
+            #familyTable th,
+            #familyTable td {
+                padding: 0.75rem 0.5rem;
+            }
+        }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-50 to-blue-50">
+<body class="bg-gradient-to-br from-gray-50 to-blue-50 bhw-theme">
 <div class="min-h-screen flex">
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -153,25 +256,100 @@ $families = $rows->fetchAll();
         <!-- Header -->
         <div class="content-header">
             <div class="flex items-center justify-between">
-                <div class="animate-fade-in-up">
-                    <div class="flex items-center space-x-3 mb-2">
-                        <h1 class="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
-                            Family Members
-                        </h1>
-                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Family Members</h1>
+                    <p class="text-gray-600 mt-1">Residents' listed family members in your assigned area</p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Current Time Display -->
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">Current Time</div>
+                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
                     </div>
-                    <p class="text-gray-600 text-lg">Residents' listed family members in your assigned area</p>
-                    <div class="flex items-center space-x-2 mt-2">
-                        <div class="w-1 h-1 bg-blue-400 rounded-full"></div>
-                        <div class="w-1 h-1 bg-purple-400 rounded-full"></div>
-                        <div class="w-1 h-1 bg-cyan-400 rounded-full"></div>
-                        <span class="text-sm text-gray-500 ml-2">Live directory</span>
+                    
+                    <!-- Night Mode Toggle -->
+                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Notifications -->
+                    <div class="relative">
+                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
+                            </svg>
+                            <?php 
+                            $total_notifications = ($notification_counts['pending_requests'] ?? 0) + ($notification_counts['pending_registrations'] ?? 0) + ($notification_counts['pending_family_additions'] ?? 0);
+                            if ($total_notifications > 0): ?>
+                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $total_notifications; ?></span>
+                            <?php endif; ?>
+                        </button>
+                    </div>
+                    
+                    <!-- Profile Section -->
+                    <div class="relative" id="profile-dropdown">
+                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                <?php 
+                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                            <div class="text-left">
+                                <div class="text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'BHW'); ?>
+                                </div>
+                                <div class="text-xs text-gray-500">Barangay Health Worker</div>
+                            </div>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
+                            <!-- User Info Section -->
+                            <div class="px-4 py-3 border-b border-gray-100">
+                                <div class="text-sm font-semibold text-gray-900">
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'User'))); ?>
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
+                                </div>
+                            </div>
+                            
+                            <!-- Menu Items -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('bhw/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Edit Profile
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Support
+                                </a>
+                    </div>
+                            
+                            <!-- Separator -->
+                            <div class="border-t border-gray-100 my-1"></div>
+                            
+                            <!-- Sign Out -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Sign Out
+                                </a>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4 animate-slide-in-right">
-                    <div class="text-right glass-effect px-4 py-2 rounded-xl">
-                        <div class="text-xs text-gray-500 uppercase tracking-wide">Total members</div>
-                        <div class="text-sm font-semibold text-gray-900" id="family-count"><?php echo count($families); ?></div>
                     </div>
                 </div>
             </div>
@@ -211,31 +389,72 @@ $families = $rows->fetchAll();
                     </div>
                 </div>
 
-                <!-- Family Members Grid -->
-                <div id="familyGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Family Members Table -->
+                <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full" id="familyTable">
+                            <thead class="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                            </svg>
+                                            <span>Family Member</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"></path>
+                                            </svg>
+                                            <span>Resident</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            </svg>
+                                            <span>Relationship</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span>Date of Birth</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-100">
                     <?php foreach ($families as $index => $f): ?>
-                        <div class="family-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" 
+                                    <tr class="family-row hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200" 
                              data-name="<?php echo strtolower(htmlspecialchars($f['full_name'])); ?>"
-                             data-resident="<?php echo strtolower(htmlspecialchars($f['last_name'] . ' ' . $f['first_name'])); ?>"
+                                        data-resident="<?php echo strtolower(htmlspecialchars($f['resident_full_name'])); ?>"
                              data-relationship="<?php echo strtolower(htmlspecialchars($f['relationship'])); ?>"
-                             style="animation-delay: <?php echo $index * 0.1; ?>s">
-                            
-                            <!-- Family Member Header -->
-                            <div class="flex items-center justify-between mb-4">
+                                        style="animation-delay: <?php echo $index * 0.05; ?>s">
+                                        <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center space-x-3">
-                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                         </svg>
                                     </div>
                                     <div>
-                                        <h3 class="text-lg font-bold text-gray-900"><?php echo htmlspecialchars($f['full_name']); ?></h3>
-                                        <p class="text-sm text-gray-500">Family Member</p>
+                                                    <div class="text-sm font-semibold text-gray-900"><?php echo htmlspecialchars($f['full_name']); ?></div>
+                                                    <div class="text-xs text-gray-500">Family Member</div>
                                     </div>
                                 </div>
-                                
-                                <!-- Relationship Badge -->
-                                <div class="relationship-badge">
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($f['resident_full_name']); ?></div>
+                                            <div class="text-xs text-gray-500"><?php echo htmlspecialchars($f['last_name'] . ', ' . $f['first_name']); ?></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
                                     <?php 
                                     $relationship = strtolower($f['relationship']);
                                     $badgeClass = 'bg-gray-100 text-gray-800';
@@ -249,49 +468,36 @@ $families = $rows->fetchAll();
                                         $badgeClass = 'bg-purple-100 text-purple-800';
                                     }
                                     ?>
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium <?php echo $badgeClass; ?>">
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold <?php echo $badgeClass; ?>">
                                         <?php echo htmlspecialchars($f['relationship']); ?>
                                     </span>
-                                </div>
-                            </div>
-
-                            <!-- Family Member Details -->
-                            <div class="space-y-3">
-                                <!-- Resident Info -->
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div class="flex items-center space-x-2">
-                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"></path>
-                                        </svg>
-                                        <span class="text-sm font-medium text-gray-700">Resident</span>
-                                    </div>
-                                    <span class="text-sm text-gray-600"><?php echo htmlspecialchars($f['last_name'] . ', ' . $f['first_name']); ?></span>
-                                </div>
-
-                                <!-- Relationship Info -->
-                                <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                                    <div class="flex items-center space-x-2">
-                                        <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                        </svg>
-                                        <span class="text-sm font-medium text-blue-700">Relationship</span>
-                                    </div>
-                                    <span class="text-sm text-blue-600"><?php echo htmlspecialchars($f['relationship']); ?></span>
-                                </div>
-                            </div>
-
-                            <!-- Action Button -->
-                            <div class="mt-6 flex justify-end">
-                                <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if (!empty($f['date_of_birth'])): 
+                                                $birthDate = new DateTime($f['date_of_birth']);
+                                                $today = new DateTime();
+                                                $age = $today->diff($birthDate)->y;
+                                            ?>
+                                                <div class="text-sm text-gray-900"><?php echo htmlspecialchars(date('M d, Y', strtotime($f['date_of_birth']))); ?></div>
+                                                <div class="text-xs text-gray-500">Age: <?php echo $age; ?> years</div>
+                                            <?php else: ?>
+                                                <span class="text-xs text-gray-400 italic">Not provided</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                                            <button class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105">
+                                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                     </svg>
-                                    View Details
+                                                View
                                 </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
                 </div>
 
                 <!-- No Results Message -->
@@ -344,10 +550,9 @@ $families = $rows->fetchAll();
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchInput');
         const filterChips = document.querySelectorAll('.filter-chip');
-        const familyCards = document.querySelectorAll('.family-card');
-        const familyGrid = document.getElementById('familyGrid');
+        const familyRows = document.querySelectorAll('.family-row');
+        const familyTable = document.getElementById('familyTable');
         const noResults = document.getElementById('noResults');
-        const familyCount = document.getElementById('family-count');
 
         let currentFilter = 'all';
         let currentSearch = '';
@@ -375,10 +580,10 @@ $families = $rows->fetchAll();
         function filterFamilyMembers() {
             let visibleCount = 0;
             
-            familyCards.forEach(card => {
-                const name = card.dataset.name;
-                const resident = card.dataset.resident;
-                const relationship = card.dataset.relationship;
+            familyRows.forEach(row => {
+                const name = row.dataset.name;
+                const resident = row.dataset.resident;
+                const relationship = row.dataset.relationship;
                 
                 let matchesSearch = true;
                 let matchesFilter = true;
@@ -394,27 +599,22 @@ $families = $rows->fetchAll();
                 }
                 
                 if (matchesSearch && matchesFilter) {
-                    card.style.display = 'block';
-                    card.classList.add('animate-fade-in');
+                    row.style.display = '';
+                    row.classList.add('animate-fade-in');
                     visibleCount++;
                 } else {
-                    card.style.display = 'none';
-                    card.classList.remove('animate-fade-in');
+                    row.style.display = 'none';
+                    row.classList.remove('animate-fade-in');
                 }
             });
-            
-            // Update count
-            if (familyCount) {
-                familyCount.textContent = visibleCount;
-            }
             
             // Show/hide no results message
             if (visibleCount === 0) {
                 if (noResults) noResults.classList.remove('hidden');
-                if (familyGrid) familyGrid.classList.add('hidden');
+                if (familyTable) familyTable.closest('.bg-white').classList.add('hidden');
             } else {
                 if (noResults) noResults.classList.add('hidden');
-                if (familyGrid) familyGrid.classList.remove('hidden');
+                if (familyTable) familyTable.closest('.bg-white').classList.remove('hidden');
             }
         }
 
@@ -440,28 +640,19 @@ $families = $rows->fetchAll();
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
+                    entry.target.style.transform = 'translateX(0)';
                 }
             });
         }, observerOptions);
 
-        // Observe all animated elements
-        document.querySelectorAll('.animate-fade-in-up, .animate-fade-in, .animate-slide-in-right').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(20px)';
-            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-            observer.observe(el);
-        });
-
-        // Add hover effects to cards
-        document.querySelectorAll('.hover-lift').forEach(card => {
-            card.addEventListener('mouseenter', function() {
-                this.style.transform = 'translateY(-8px) scale(1.02)';
-            });
-            
-            card.addEventListener('mouseleave', function() {
-                this.style.transform = 'translateY(0) scale(1)';
-            });
+        // Observe all table rows for animations
+        familyRows.forEach((row, index) => {
+            row.style.opacity = '0';
+            row.style.transform = 'translateX(-20px)';
+            row.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+            setTimeout(() => {
+                observer.observe(row);
+            }, index * 50);
         });
 
         // Add ripple effect to buttons (excluding sidebar links)
@@ -497,6 +688,115 @@ $families = $rows->fetchAll();
             });
         }
     });
+
+    // Header Functions
+    // Real-time clock update
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('en-US', { 
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        const timeElement = document.getElementById('current-time');
+        if (timeElement) {
+            timeElement.textContent = timeString;
+        }
+    }
+
+    // Update clock every second
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Night mode functionality
+    function initNightMode() {
+        const toggle = document.getElementById('night-mode-toggle');
+        const body = document.body;
+        
+        if (!toggle) return;
+        
+        // Check for saved theme preference or default to light mode
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        if (currentTheme === 'dark') {
+            body.classList.add('dark');
+            toggle.innerHTML = `
+                <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
+                </svg>
+            `;
+        }
+        
+        toggle.addEventListener('click', function() {
+            body.classList.toggle('dark');
+            
+            if (body.classList.contains('dark')) {
+                localStorage.setItem('theme', 'dark');
+                toggle.innerHTML = `
+                    <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
+                    </svg>
+                `;
+            } else {
+                localStorage.setItem('theme', 'light');
+                toggle.innerHTML = `
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                    </svg>
+                `;
+            }
+        });
+    }
+
+    // Profile dropdown functionality
+    function initProfileDropdown() {
+        const toggle = document.getElementById('profile-toggle');
+        const menu = document.getElementById('profile-menu');
+        const arrow = document.getElementById('profile-arrow');
+        
+        if (!toggle || !menu || !arrow) return;
+        
+        toggle.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                arrow.classList.add('rotate-180');
+            } else {
+                menu.classList.add('hidden');
+                arrow.classList.remove('rotate-180');
+            }
+        };
+        
+        // Close dropdown when clicking outside
+        if (!window.bhwFamilyProfileDropdownClickHandler) {
+            window.bhwFamilyProfileDropdownClickHandler = function(e) {
+                const toggle = document.getElementById('profile-toggle');
+                const menu = document.getElementById('profile-menu');
+                if (menu && !toggle.contains(e.target) && !menu.contains(e.target)) {
+                    menu.classList.add('hidden');
+                    const arrow = document.getElementById('profile-arrow');
+                    if (arrow) arrow.classList.remove('rotate-180');
+                }
+            };
+            document.addEventListener('click', window.bhwFamilyProfileDropdownClickHandler);
+        }
+        
+        // Close dropdown when pressing Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const menu = document.getElementById('profile-menu');
+                const arrow = document.getElementById('profile-arrow');
+                if (menu) menu.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+            }
+        });
+    }
+
+    // Initialize night mode and profile dropdown
+    initNightMode();
+    initProfileDropdown();
     </script>
 </div>
 </body>

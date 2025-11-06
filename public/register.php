@@ -705,15 +705,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </form>
             
-            <!-- Debug Test Button -->
-            <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h3 class="text-sm font-bold text-yellow-800 mb-2">🔧 Debug Test</h3>
-                <button type="button" onclick="testValidation()" class="px-4 py-2 bg-yellow-600 text-white rounded text-sm">
-                    Test Resident Validation
-                </button>
-                <div id="debug-result" class="mt-2 text-sm"></div>
-            </div>
-            
             <div class="text-center mt-8">
                 <p class="text-gray-600">Already have an account? 
                     <a class="text-primary-600 hover:text-primary-700 font-medium" href="<?php echo htmlspecialchars(base_url('../index.php')); ?>">Sign in</a>
@@ -778,10 +769,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setupPasswordValidation();
             setupStepNavigation();
             
-            // Test the validation endpoint on page load
-            console.log('Testing validation endpoint...');
-            testValidationEndpoint();
-            
             // BACKUP VALIDATION - Check every 2 seconds if user is on step 2 without validation
             setInterval(function() {
                 if (currentStep === 2) {
@@ -804,32 +791,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }, 2000);
         });
-        
-        async function testValidationEndpoint() {
-            try {
-                const formData = new FormData();
-                formData.append('first_name', 'Test');
-                formData.append('last_name', 'User');
-                formData.append('middle_initial', 'T');
-                formData.append('date_of_birth', '1990-01-01');
-                
-                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                console.log('Validation endpoint test result:', result);
-                
-                if (response.ok) {
-                    console.log('✅ Validation endpoint is working correctly');
-                } else {
-                    console.error('❌ Validation endpoint returned error:', response.status);
-                }
-            } catch (error) {
-                console.error('❌ Validation endpoint test failed:', error);
-            }
-        }
         
         function initializeForm() {
             // Add real-time validation to all inputs
@@ -1564,44 +1525,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Initialize remove buttons
         updateRemoveButtons();
-        
-        // Debug test function
-        async function testValidation() {
-            const firstName = document.getElementById('first_name').value.trim();
-            const lastName = document.getElementById('last_name').value.trim();
-            const middleInitial = document.getElementById('middle_initial').value.trim();
-            const dateOfBirth = document.getElementById('date_of_birth').value;
-            
-            const debugResult = document.getElementById('debug-result');
-            debugResult.innerHTML = 'Testing...';
-            
-            console.log('Manual test triggered with:', { firstName, lastName, middleInitial, dateOfBirth });
-            
-            try {
-                const formData = new FormData();
-                formData.append('first_name', firstName);
-                formData.append('last_name', lastName);
-                formData.append('middle_initial', middleInitial);
-                formData.append('date_of_birth', dateOfBirth);
-                
-                const response = await fetch('<?php echo htmlspecialchars(base_url('check_resident_exists.php')); ?>', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                console.log('Manual test result:', result);
-                
-                if (result.exists) {
-                    debugResult.innerHTML = `<span class="text-red-600">❌ RESIDENT EXISTS: ${result.message}</span>`;
-                } else {
-                    debugResult.innerHTML = `<span class="text-green-600">✅ RESIDENT NOT FOUND: Can proceed</span>`;
-                }
-            } catch (error) {
-                console.error('Manual test error:', error);
-                debugResult.innerHTML = `<span class="text-red-600">❌ ERROR: ${error.message}</span>`;
-            }
-        }
     </script>
 </body>
 </html>

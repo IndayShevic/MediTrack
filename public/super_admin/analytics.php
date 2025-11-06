@@ -3,24 +3,176 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
 
+// Enhanced Analytics Data
 $totalMeds = 0;
 $expiringSoon = 0;
+$expiring7Days = 0;
+$expiring14Days = 0;
 $pendingRequests = 0;
 $activePrograms = 0;
 $totalRequests = 0;
 $approvedRequests = 0;
+$claimedRequests = 0;
+$rejectedRequests = 0;
 $approvalRate = 0.0;
 $stockOuts = 0;
 $lowStockBatches = 0;
-try { $totalMeds = (int)db()->query('SELECT COUNT(*) AS c FROM medicines')->fetch()['c']; } catch (Throwable $e) {}
-try { $expiringSoon = (int)db()->query("SELECT COUNT(*) AS c FROM medicine_batches WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)")->fetch()['c']; } catch (Throwable $e) {}
-try { $pendingRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status='submitted'")->fetch()['c']; } catch (Throwable $e) {}
-try { $totalRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests")->fetch()['c']; } catch (Throwable $e) {}
-try { $approvedRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status='approved'")->fetch()['c']; } catch (Throwable $e) {}
-if ($totalRequests > 0) { $approvalRate = round(($approvedRequests / $totalRequests) * 100, 1); }
-try { $stockOuts = (int)db()->query("SELECT COUNT(*) AS c FROM (SELECT m.id, COALESCE(SUM(b.quantity_available),0) qty FROM medicines m LEFT JOIN medicine_batches b ON b.medicine_id=m.id GROUP BY m.id HAVING qty=0) t")->fetch()['c']; } catch (Throwable $e) {}
-try { $lowStockBatches = (int)db()->query("SELECT COUNT(*) AS c FROM medicine_batches WHERE quantity_available <= 10")->fetch()['c']; } catch (Throwable $e) {}
-try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_programs WHERE is_active=1')->fetch()['c']; } catch (Throwable $e) {}
+$lowStockMedicines = 0;
+$totalDispensed = 0;
+$todayRequests = 0;
+$todayDispensed = 0;
+$totalResidents = 0;
+$totalUsers = 0;
+$avgApprovalTime = 0;
+$totalStockValue = 0;
+
+try {
+    // Active medicines only
+    $totalMeds = (int)db()->query('SELECT COUNT(*) AS c FROM medicines WHERE is_active = 1')->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    // Expiring batches (only non-expired, non-zero stock)
+    $expiringSoon = (int)db()->query("
+        SELECT COUNT(*) AS c 
+        FROM medicine_batches 
+        WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) 
+        AND expiry_date > CURDATE() 
+        AND quantity_available > 0
+    ")->fetch()['c'];
+    
+    $expiring7Days = (int)db()->query("
+        SELECT COUNT(*) AS c 
+        FROM medicine_batches 
+        WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY) 
+        AND expiry_date > CURDATE() 
+        AND quantity_available > 0
+    ")->fetch()['c'];
+    
+    $expiring14Days = (int)db()->query("
+        SELECT COUNT(*) AS c 
+        FROM medicine_batches 
+        WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL 14 DAY) 
+        AND expiry_date > CURDATE() 
+        AND quantity_available > 0
+    ")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $pendingRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status='submitted'")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $totalRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $approvedRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status IN ('approved', 'ready_to_claim', 'claimed')")->fetch()['c'];
+    $claimedRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status='claimed'")->fetch()['c'];
+    $rejectedRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE status='rejected'")->fetch()['c'];
+} catch (Throwable $e) {}
+
+if ($totalRequests > 0) { 
+    $approvalRate = round(($approvedRequests / $totalRequests) * 100, 1); 
+}
+
+try {
+    // Stock outs - medicines with zero or negative total stock
+    $stockOuts = (int)db()->query("
+        SELECT COUNT(*) AS c 
+        FROM (
+            SELECT m.id, COALESCE(SUM(b.quantity_available), 0) as qty 
+            FROM medicines m 
+            LEFT JOIN medicine_batches b ON b.medicine_id = m.id 
+            WHERE m.is_active = 1 
+            AND (b.expiry_date IS NULL OR b.expiry_date > CURDATE())
+            GROUP BY m.id 
+            HAVING qty <= 0
+        ) t
+    ")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    // Low stock batches (non-expired only)
+    $lowStockBatches = (int)db()->query("
+        SELECT COUNT(*) AS c 
+        FROM medicine_batches 
+        WHERE quantity_available <= 10 
+        AND quantity_available > 0
+        AND expiry_date > CURDATE()
+    ")->fetch()['c'];
+    
+    // Low stock medicines (using minimum_stock_level if available, default 10)
+    $lowStockMedicines = (int)db()->query("
+        SELECT COUNT(DISTINCT m.id) AS c 
+        FROM medicines m
+        LEFT JOIN medicine_batches b ON b.medicine_id = m.id
+        WHERE m.is_active = 1
+        AND (b.expiry_date IS NULL OR b.expiry_date > CURDATE())
+        GROUP BY m.id
+        HAVING COALESCE(SUM(b.quantity_available), 0) > 0
+        AND COALESCE(SUM(b.quantity_available), 0) <= COALESCE(m.minimum_stock_level, 10)
+    ")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_programs WHERE is_active=1')->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    // Total dispensed quantity
+    $totalDispensed = (int)db()->query("
+        SELECT COALESCE(SUM(rf.quantity), 0) AS c 
+        FROM request_fulfillments rf
+        INNER JOIN requests r ON rf.request_id = r.id
+        WHERE r.status IN ('claimed', 'approved', 'ready_to_claim')
+    ")->fetch()['c'];
+    
+    // Today's dispensed
+    $todayDispensed = (int)db()->query("
+        SELECT COALESCE(SUM(rf.quantity), 0) AS c 
+        FROM request_fulfillments rf
+        INNER JOIN requests r ON rf.request_id = r.id
+        WHERE r.status IN ('claimed', 'approved', 'ready_to_claim')
+        AND DATE(rf.created_at) = CURDATE()
+    ")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $todayRequests = (int)db()->query("SELECT COUNT(*) AS c FROM requests WHERE DATE(created_at) = CURDATE()")->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $totalResidents = (int)db()->query('SELECT COUNT(*) AS c FROM residents')->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    $totalUsers = (int)db()->query('SELECT COUNT(*) AS c FROM users WHERE role IN ("bhw", "resident")')->fetch()['c'];
+} catch (Throwable $e) {}
+
+try {
+    // Average approval time (in hours)
+    $avgApprovalTime = db()->query("
+        SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) AS avg_hours
+        FROM requests
+        WHERE status IN ('approved', 'ready_to_claim', 'claimed', 'rejected')
+        AND updated_at IS NOT NULL
+        AND created_at != updated_at
+    ")->fetch()['avg_hours'];
+    $avgApprovalTime = $avgApprovalTime ? round($avgApprovalTime, 1) : 0;
+} catch (Throwable $e) {}
+
+try {
+    // Total active stock value (approximate - using batch quantities)
+    $totalStockValue = (int)db()->query("
+        SELECT COALESCE(SUM(b.quantity_available), 0) AS c 
+        FROM medicine_batches b
+        INNER JOIN medicines m ON b.medicine_id = m.id
+        WHERE m.is_active = 1
+        AND b.expiry_date > CURDATE()
+        AND b.quantity_available > 0
+    ")->fetch()['c'];
+} catch (Throwable $e) {}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -32,7 +184,11 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+<script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
     <style>
         .content-header {
             position: sticky !important;
@@ -113,13 +269,13 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                 Analytics
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 Brand Settings
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/locations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                Barangays & Puroks
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/email_logs.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -262,7 +418,6 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-total-meds">0</p>
-                            <p class="text-sm text-gray-500">Total</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -287,14 +442,27 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-expiring">0</p>
-                            <p class="text-sm text-gray-500">Expiring</p>
                         </div>
                     </div>
                     <div class="space-y-2">
                         <p class="text-sm font-semibold text-gray-700">Batches Expiring ≤ 30d</p>
+                        <div class="space-y-1">
+                            <?php if ($expiring7Days > 0): ?>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-red-600 font-medium">⚡ Critical (≤7d):</span>
+                                <span class="text-gray-900 font-semibold"><?php echo number_format($expiring7Days); ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($expiring14Days > 0): ?>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-orange-600 font-medium">⚠️ Urgent (≤14d):</span>
+                                <span class="text-gray-900 font-semibold"><?php echo number_format($expiring14Days); ?></span>
+                            </div>
+                            <?php endif; ?>
                         <div class="flex items-center space-x-2">
                             <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
                             <span class="text-xs text-gray-500">Need attention</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -312,7 +480,6 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-pending">0</p>
-                            <p class="text-sm text-gray-500">Pending</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -337,7 +504,6 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-programs">0</p>
-                            <p class="text-sm text-gray-500">Active</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -351,7 +517,7 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
             </div>
 
             <!-- Secondary KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Approval Rate Card -->
                 <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.4s">
                     <div class="flex items-center justify-between mb-4">
@@ -365,14 +531,13 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-approval">0%</p>
-                            <p class="text-sm text-gray-500">Success Rate</p>
                         </div>
                     </div>
                     <div class="space-y-2">
                         <p class="text-sm font-semibold text-gray-700">Approval Rate</p>
                         <div class="flex items-center space-x-2">
                             <div class="w-2 h-2 bg-green-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500">Request success rate</span>
+                            <span class="text-xs text-gray-500"><?php echo number_format($approvedRequests); ?> of <?php echo number_format($totalRequests); ?> requests</span>
                         </div>
                     </div>
                 </div>
@@ -390,7 +555,6 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-stockouts">0</p>
-                            <p class="text-sm text-gray-500">Out of Stock</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -415,14 +579,37 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                         </div>
                         <div class="text-right">
                             <p class="text-3xl font-bold text-gray-900" id="stat-lowstock">0</p>
-                            <p class="text-sm text-gray-500">Low Stock</p>
                         </div>
                     </div>
                     <div class="space-y-2">
-                        <p class="text-sm font-semibold text-gray-700">Low-stock Batches (≤ 10)</p>
+                        <p class="text-sm font-semibold text-gray-700">Low-stock Medicines</p>
                         <div class="flex items-center space-x-2">
                             <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500">Monitor closely</span>
+                            <span class="text-xs text-gray-500"><?php echo number_format($lowStockBatches); ?> batches</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Dispensed Card -->
+                <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.7s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="relative">
+                            <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-indigo-400 rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold text-gray-900" id="stat-dispensed">0</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-sm font-semibold text-gray-700">Total Dispensed</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                            <span class="text-xs text-gray-500"><?php echo number_format($todayDispensed); ?> today</span>
                         </div>
                     </div>
                 </div>
@@ -532,7 +719,8 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
             // Animate secondary KPIs
             const approvalRate = <?php echo $approvalRate; ?>;
             const stockOuts = <?php echo $stockOuts; ?>;
-            const lowStockBatches = <?php echo $lowStockBatches; ?>;
+            const lowStockMedicines = <?php echo $lowStockMedicines; ?>;
+            const totalDispensed = <?php echo $totalDispensed; ?>;
 
             // Animate approval rate
             let currentRate = 0;
@@ -558,16 +746,28 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                 document.getElementById('stat-stockouts').textContent = Math.floor(currentStockOuts);
             }, 30);
 
-            // Animate low stock
+            // Animate low stock medicines
             let currentLowStock = 0;
-            const lowStockIncrement = lowStockBatches / 50;
+            const lowStockIncrement = lowStockMedicines / 50;
             const lowStockTimer = setInterval(() => {
                 currentLowStock += lowStockIncrement;
-                if (currentLowStock >= lowStockBatches) {
-                    currentLowStock = lowStockBatches;
+                if (currentLowStock >= lowStockMedicines) {
+                    currentLowStock = lowStockMedicines;
                     clearInterval(lowStockTimer);
                 }
                 document.getElementById('stat-lowstock').textContent = Math.floor(currentLowStock);
+            }, 30);
+
+            // Animate total dispensed
+            let currentDispensed = 0;
+            const dispensedIncrement = totalDispensed / 50;
+            const dispensedTimer = setInterval(() => {
+                currentDispensed += dispensedIncrement;
+                if (currentDispensed >= totalDispensed) {
+                    currentDispensed = totalDispensed;
+                    clearInterval(dispensedTimer);
+                }
+                document.getElementById('stat-dispensed').textContent = Math.floor(currentDispensed).toLocaleString();
             }, 30);
 
             // Real-time clock update
@@ -646,7 +846,7 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
             Chart.defaults.plugins.legend.labels.usePointStyle = true;
             Chart.defaults.plugins.legend.labels.padding = 20;
 
-            // Requests last 7 days chart
+            // Requests last 7 days chart (enhanced with status breakdown)
         const reqData = <?php echo json_encode(db()->query('SELECT DATE(created_at) d, COUNT(*) c FROM requests WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(created_at) ORDER BY d')->fetchAll() ?: []); ?>;
             const days = [];
             const counts = [];
@@ -710,8 +910,8 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
                 }
             });
 
-            // Top requested medicines chart
-        const topMed = <?php echo json_encode(db()->query('SELECT m.name n, COUNT(r.id) c FROM medicines m LEFT JOIN requests r ON r.medicine_id=m.id GROUP BY m.id, m.name ORDER BY c DESC LIMIT 5')->fetchAll() ?: []); ?>;
+            // Top requested medicines chart (enhanced - active medicines only)
+            const topMed = <?php echo json_encode(db()->query('SELECT m.name n, COUNT(r.id) c FROM medicines m LEFT JOIN requests r ON r.medicine_id=m.id WHERE m.is_active = 1 GROUP BY m.id, m.name ORDER BY c DESC LIMIT 5')->fetchAll() ?: []); ?>;
             
             new Chart(document.getElementById('topMedChart').getContext('2d'), {
                 type: 'doughnut',
@@ -931,6 +1131,13 @@ try { $activePrograms = (int)db()->query('SELECT COUNT(*) AS c FROM allocation_p
             
             // Initialize profile dropdown
             initProfileDropdown();
+        });
+        
+        // Initialize functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize profile dropdown
+            initProfileDropdown();
+            // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>
 </body>

@@ -335,37 +335,40 @@ body {
   100% { left: 100%; }
 }
 
-/* Professional Sidebar */
+/* Professional Sidebar - Enhanced Modern Design */
 .sidebar {
   width: 280px !important;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
-  border-right: 1px solid var(--gray-200) !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  border-right: 1px solid rgba(229, 231, 235, 0.8) !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
   height: 100vh !important;
   z-index: 1000 !important;
-  transition: transform var(--transition-normal) !important;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+  backdrop-filter: blur(20px) !important;
 }
 
 .sidebar-brand {
-  padding: var(--space-6) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%) !important;
+  padding: 1.75rem 1.5rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%) !important;
   color: white !important;
   font-weight: 700 !important;
   font-size: 1.25rem !important;
+  letter-spacing: -0.025em !important;
   display: flex !important;
   align-items: center !important;
-  gap: var(--space-3) !important;
+  gap: 0.75rem !important;
   flex-shrink: 0 !important;
   min-height: 80px !important;
   position: relative !important;
   overflow: hidden !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;
 }
 
 .sidebar-brand::before {
@@ -375,77 +378,166 @@ body {
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%, rgba(255, 255, 255, 0.05) 100%) !important;
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 0%, transparent 50%, rgba(255, 255, 255, 0.08) 100%) !important;
   pointer-events: none !important;
 }
 
+.sidebar-brand::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%) !important;
+}
+
+.sidebar-brand img {
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2)) !important;
+  transition: transform var(--transition-fast) !important;
+  border-radius: 0.5rem !important;
+}
+
+.sidebar-brand:hover img {
+  transform: scale(1.05) rotate(2deg) !important;
+}
+
+.sidebar-brand span {
+  position: relative !important;
+  z-index: 1 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
 .sidebar-nav {
-  padding: var(--space-4) !important;
+  padding: 1rem 0.75rem !important;
   flex: 1 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   scrollbar-width: thin !important;
-  scrollbar-color: var(--gray-300) transparent !important;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent !important;
   min-height: 0 !important;
   max-height: calc(100vh - 160px) !important;
   height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
 }
 
 .sidebar-nav::-webkit-scrollbar {
-  width: 6px;
+  width: 6px !important;
 }
 
 .sidebar-nav::-webkit-scrollbar-track {
-  background: transparent;
+  background: transparent !important;
 }
 
 .sidebar-nav::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 3px;
+  background: rgba(156, 163, 175, 0.5) !important;
+  border-radius: 3px !important;
+  transition: background var(--transition-fast) !important;
 }
 
 .sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  background: rgba(107, 114, 128, 0.7) !important;
 }
 
 .sidebar-nav a {
   display: flex !important;
   align-items: center !important;
-  gap: var(--space-3) !important;
-  padding: var(--space-3) var(--space-4) !important;
-  margin-bottom: var(--space-1) !important;
-  border-radius: var(--radius-lg) !important;
-  color: var(--gray-700) !important;
+  gap: 0.75rem !important;
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 0.25rem !important;
+  border-radius: 0.75rem !important;
+  color: #4b5563 !important;
   text-decoration: none !important;
   font-weight: 500 !important;
+  font-size: 0.9375rem !important;
   transition: all var(--transition-fast) !important;
-  min-height: 42px !important;
+  min-height: 44px !important;
   position: relative !important;
   overflow: hidden !important;
+  border: 1px solid transparent !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  align-self: stretch !important;
+}
+
+.sidebar-nav a span[style*="flex"] {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: inline-block !important;
+}
+
+.sidebar-nav a::before {
+  content: '' !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 3px !important;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%) !important;
+  transform: scaleY(0) !important;
+  transition: transform var(--transition-fast) !important;
+  border-radius: 0 4px 4px 0 !important;
 }
 
 .sidebar-nav a:hover {
-  background: linear-gradient(135deg, var(--primary-50) 0%, var(--primary-100) 100%) !important;
-  color: var(--primary-700) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%) !important;
+  color: #2563eb !important;
   transform: translateX(4px) !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12), 0 0 0 1px rgba(59, 130, 246, 0.08) !important;
+  border-color: rgba(59, 130, 246, 0.15) !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1rem !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+}
+
+.sidebar-nav a:hover::before {
+  transform: scaleY(1) !important;
 }
 
 .sidebar-nav a.active {
-  background: linear-gradient(135deg, var(--primary-100) 0%, var(--primary-200) 100%) !important;
-  color: var(--primary-700) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
+  color: #1d4ed8 !important;
   font-weight: 600 !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2) !important;
-  border-left: 3px solid var(--primary-500) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.2) !important;
+  border-left: 3px solid #2563eb !important;
+  border-color: rgba(59, 130, 246, 0.25) !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1rem !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+}
+
+.sidebar-nav a.active::before {
+  transform: scaleY(1) !important;
+}
+
+.sidebar-nav a.active::after {
+  content: '' !important;
+  position: absolute !important;
+  right: 0.75rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 6px !important;
+  height: 6px !important;
+  background: #2563eb !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5) !important;
 }
 
 .sidebar-footer {
-  padding: var(--space-4) !important;
-  border-top: 1px solid rgba(0, 0, 0, 0.05) !important;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  padding: 1rem 0.75rem !important;
+  border-top: 1px solid rgba(229, 231, 235, 0.8) !important;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%) !important;
   flex-shrink: 0 !important;
   min-height: 80px !important;
   position: relative !important;
+  backdrop-filter: blur(10px) !important;
 }
 
 .sidebar-footer::before {
@@ -455,74 +547,189 @@ body {
   left: 0 !important;
   right: 0 !important;
   height: 1px !important;
-  background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.1) 50%, transparent 100%) !important;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.08) 50%, transparent 100%) !important;
 }
 
 .sidebar-footer a {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: var(--space-3) !important;
-  padding: var(--space-3) var(--space-4) !important;
-  color: var(--gray-600) !important;
+  gap: 0.75rem !important;
+  padding: 0.875rem 1rem !important;
+  color: #6b7280 !important;
   text-decoration: none !important;
-  border-radius: var(--radius-lg) !important;
+  border-radius: 0.75rem !important;
   transition: all var(--transition-fast) !important;
   font-weight: 500 !important;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.05) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  font-size: 0.9375rem !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%) !important;
+  border: 1px solid rgba(229, 231, 235, 0.8) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.sidebar-footer a::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: linear-gradient(90deg, transparent, rgba(220, 38, 38, 0.1), transparent) !important;
+  transition: left var(--transition-normal) !important;
 }
 
 .sidebar-footer a:hover {
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.95) 0%, rgba(254, 226, 226, 0.95) 100%) !important;
   color: #dc2626 !important;
   transform: translateY(-2px) !important;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15) !important;
-  border-color: rgba(220, 38, 38, 0.2) !important;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.15), 0 0 0 1px rgba(220, 38, 38, 0.2) !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+}
+
+.sidebar-footer a:hover::before {
+  left: 100% !important;
 }
 
 /* Enhanced Sidebar Icons */
 .sidebar-nav a svg {
   transition: all var(--transition-fast) !important;
   flex-shrink: 0 !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  stroke-width: 2 !important;
 }
 
 .sidebar-nav a:hover svg {
-  transform: scale(1.1) !important;
-  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3)) !important;
+  transform: scale(1.1) translateX(2px) !important;
+  filter: drop-shadow(0 2px 6px rgba(59, 130, 246, 0.3)) !important;
 }
 
 .sidebar-nav a.active svg {
-  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.4)) !important;
+  filter: drop-shadow(0 2px 6px rgba(59, 130, 246, 0.4)) !important;
+  color: #1d4ed8 !important;
 }
 
 .sidebar-footer a svg {
   transition: all var(--transition-fast) !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  stroke-width: 2 !important;
 }
 
 .sidebar-footer a:hover svg {
   transform: scale(1.1) !important;
-  filter: drop-shadow(0 2px 4px rgba(220, 38, 38, 0.3)) !important;
+  filter: drop-shadow(0 2px 6px rgba(220, 38, 38, 0.3)) !important;
 }
 
 /* Sidebar Brand Icon Enhancement */
 .sidebar-brand svg {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)) !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2)) !important;
   transition: all var(--transition-fast) !important;
+  flex-shrink: 0 !important;
 }
 
 .sidebar-brand:hover svg {
-  transform: scale(1.05) !important;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) !important;
+  transform: scale(1.05) rotate(2deg) !important;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3)) !important;
+}
+
+/* Animation for sidebar items */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidebar-nav a {
+  animation: slideInLeft 0.3s ease-out backwards;
+}
+
+.sidebar-nav a:nth-child(1) { animation-delay: 0.05s; }
+.sidebar-nav a:nth-child(2) { animation-delay: 0.1s; }
+.sidebar-nav a:nth-child(3) { animation-delay: 0.15s; }
+.sidebar-nav a:nth-child(4) { animation-delay: 0.2s; }
+.sidebar-nav a:nth-child(5) { animation-delay: 0.25s; }
+.sidebar-nav a:nth-child(6) { animation-delay: 0.3s; }
+.sidebar-nav a:nth-child(7) { animation-delay: 0.35s; }
+.sidebar-nav a:nth-child(8) { animation-delay: 0.4s; }
+.sidebar-nav a:nth-child(9) { animation-delay: 0.45s; }
+.sidebar-nav a:nth-child(10) { animation-delay: 0.5s; }
+.sidebar-nav a:nth-child(11) { animation-delay: 0.55s; }
+.sidebar-nav a:nth-child(12) { animation-delay: 0.6s; }
+.sidebar-nav a:nth-child(13) { animation-delay: 0.65s; }
+.sidebar-nav a:nth-child(14) { animation-delay: 0.7s; }
+.sidebar-nav a:nth-child(15) { animation-delay: 0.75s; }
+
+/* Dark mode sidebar styles - ALWAYS preserve enhanced design, NEVER allow dark mode */
+.dark .sidebar,
+body.dark .sidebar,
+html.dark .sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+  border-right: 1px solid rgba(229, 231, 235, 0.8) !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
+}
+
+.dark .sidebar-brand,
+body.dark .sidebar-brand,
+html.dark .sidebar-brand {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%) !important;
+  color: white !important;
+}
+
+.dark .sidebar-brand span,
+body.dark .sidebar-brand span,
+html.dark .sidebar-brand span {
+  color: white !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark .sidebar-nav,
+body.dark .sidebar-nav,
+html.dark .sidebar-nav {
+  background: transparent !important;
+}
+
+.dark .sidebar-nav a,
+body.dark .sidebar-nav a,
+html.dark .sidebar-nav a {
+  color: #4b5563 !important;
+}
+
+.dark .sidebar-nav a:hover,
+body.dark .sidebar-nav a:hover,
+html.dark .sidebar-nav a:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%) !important;
+  color: #2563eb !important;
+}
+
+.dark .sidebar-nav a.active,
+body.dark .sidebar-nav a.active,
+html.dark .sidebar-nav a.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
+  color: #1d4ed8 !important;
+}
+
+.dark .sidebar-footer,
+body.dark .sidebar-footer,
+html.dark .sidebar-footer {
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%) !important;
+}
+
+.dark .sidebar-footer a,
+body.dark .sidebar-footer a,
+html.dark .sidebar-footer a {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%) !important;
+  color: #6b7280 !important;
 }
 
 /* Section-specific sidebar variations */
-/* Super Admin - Blue theme (default) */
-.sidebar-brand {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-}
-
 /* Resident - Green theme */
 .resident-theme .sidebar-brand {
   background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
@@ -550,6 +757,11 @@ body {
   background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%) !important;
   color: #7c3aed !important;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15) !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1rem !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
 }
 
 .bhw-theme .sidebar-nav a.active {
@@ -557,6 +769,25 @@ body {
   color: #7c3aed !important;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.2) !important;
   border-left: 3px solid #8b5cf6 !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1rem !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+}
+
+.bhw-theme .sidebar-nav a {
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1rem !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  align-self: stretch !important;
+}
+
+.bhw-theme .sidebar-nav a span[style*="flex"] {
+  flex: 1 !important;
+  min-width: 0 !important;
 }
 
 /* Main Content Area */

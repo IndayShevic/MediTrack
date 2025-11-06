@@ -155,8 +155,12 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -206,6 +210,121 @@ try {
         }
     </script>
     <style>
+        /* Custom SweetAlert2 Styles */
+        .swal2-popup {
+            border-radius: 1.5rem !important;
+            padding: 2.5rem !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+            backdrop-filter: blur(20px) !important;
+        }
+        
+        .swal2-title {
+            font-size: 1.75rem !important;
+            font-weight: 700 !important;
+            color: #1f2937 !important;
+            margin-bottom: 1rem !important;
+            letter-spacing: -0.025em !important;
+        }
+        
+        .swal2-html-container {
+            font-size: 1rem !important;
+            color: #6b7280 !important;
+            line-height: 1.6 !important;
+            margin-top: 0.5rem !important;
+        }
+        
+        .swal2-icon {
+            width: 5rem !important;
+            height: 5rem !important;
+            margin: 0 auto 1.5rem !important;
+            border: none !important;
+        }
+        
+        .swal2-icon.swal2-question {
+            color: #3b82f6 !important;
+            border-color: #3b82f6 !important;
+        }
+        
+        .swal2-icon.swal2-question .swal2-icon-content {
+            font-size: 2.5rem !important;
+        }
+        
+        .swal2-actions {
+            margin-top: 2rem !important;
+            gap: 0.75rem !important;
+        }
+        
+        .swal2-confirm {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            border: none !important;
+            border-radius: 0.75rem !important;
+            padding: 0.75rem 2rem !important;
+            font-size: 0.9375rem !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        .swal2-confirm:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5) !important;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        }
+        
+        .swal2-cancel {
+            background: #ffffff !important;
+            border: 2px solid #e5e7eb !important;
+            border-radius: 0.75rem !important;
+            padding: 0.75rem 2rem !important;
+            font-size: 0.9375rem !important;
+            font-weight: 600 !important;
+            color: #6b7280 !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        .swal2-cancel:hover {
+            background: #f9fafb !important;
+            border-color: #d1d5db !important;
+            color: #374151 !important;
+            transform: translateY(-2px) !important;
+        }
+        
+        .swal2-backdrop-show {
+            background: rgba(0, 0, 0, 0.5) !important;
+            backdrop-filter: blur(4px) !important;
+        }
+        
+        @keyframes swal2-show {
+            0% {
+                transform: scale(0.8) translateY(-20px);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes swal2-hide {
+            0% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0.8) translateY(-20px);
+                opacity: 0;
+            }
+        }
+        
+        .swal2-show {
+            animation: swal2-show 0.3s ease-out !important;
+        }
+        
+        .swal2-hide {
+            animation: swal2-hide 0.2s ease-in !important;
+        }
+        
         .content-header {
             position: sticky !important;
             top: 0 !important;
@@ -725,6 +844,10 @@ try {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 Analytics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1681,5 +1804,12 @@ try {
             </div>
         </div>
     </div>
+    
+    <script>
+        // Initialize functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Logout confirmation is now handled by logout-confirmation.js
+        });
+    </script>
 </body>
 </html>

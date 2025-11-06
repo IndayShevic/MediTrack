@@ -3,21 +3,28 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
 
-// Handle create barangay
+// Handle create, update, and delete operations
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    $success = false;
+    $error = '';
+    
     if ($action === 'add_barangay') {
         $name = trim($_POST['barangay_name'] ?? '');
         if ($name !== '') {
             try {
                 $stmt = db()->prepare('INSERT INTO barangays (name) VALUES (?)');
                 $stmt->execute([$name]);
+                $success = true;
             } catch (Throwable $e) {
-                // ignore duplicate errors
+                $error = 'Barangay already exists or an error occurred.';
+                error_log('Error adding barangay: ' . $e->getMessage());
             }
+        } else {
+            $error = 'Barangay name is required.';
         }
-        redirect_to('super_admin/locations.php');
     }
+    
     if ($action === 'add_purok') {
         $barangay_id = (int)($_POST['barangay_id'] ?? 0);
         $name = trim($_POST['purok_name'] ?? '');
@@ -25,12 +32,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $stmt = db()->prepare('INSERT INTO puroks (barangay_id, name) VALUES (?, ?)');
                 $stmt->execute([$barangay_id, $name]);
+                $success = true;
             } catch (Throwable $e) {
-                // ignore duplicate errors
+                $error = 'Purok already exists or an error occurred.';
+                error_log('Error adding purok: ' . $e->getMessage());
             }
+        } else {
+            $error = 'Barangay and Purok name are required.';
         }
-        redirect_to('super_admin/locations.php');
     }
+    
+    if ($action === 'update_barangay') {
+        $id = (int)($_POST['barangay_id'] ?? 0);
+        $name = trim($_POST['barangay_name'] ?? '');
+        if ($id > 0 && $name !== '') {
+            try {
+                $stmt = db()->prepare('UPDATE barangays SET name = ? WHERE id = ?');
+                $stmt->execute([$name, $id]);
+                $success = true;
+            } catch (Throwable $e) {
+                $error = 'Barangay name already exists or an error occurred.';
+                error_log('Error updating barangay: ' . $e->getMessage());
+            }
+        } else {
+            $error = 'Barangay ID and name are required.';
+        }
+    }
+    
+    if ($action === 'update_purok') {
+        $id = (int)($_POST['purok_id'] ?? 0);
+        $barangay_id = (int)($_POST['barangay_id'] ?? 0);
+        $name = trim($_POST['purok_name'] ?? '');
+        if ($id > 0 && $barangay_id > 0 && $name !== '') {
+            try {
+                $stmt = db()->prepare('UPDATE puroks SET barangay_id = ?, name = ? WHERE id = ?');
+                $stmt->execute([$barangay_id, $name, $id]);
+                $success = true;
+            } catch (Throwable $e) {
+                $error = 'Purok name already exists or an error occurred.';
+                error_log('Error updating purok: ' . $e->getMessage());
+            }
+        } else {
+            $error = 'Purok ID, Barangay, and name are required.';
+        }
+    }
+    
+    if ($action === 'delete_barangay') {
+        $id = (int)($_POST['barangay_id'] ?? 0);
+        if ($id > 0) {
+            try {
+                // Check if barangay has puroks
+                $check = db()->prepare('SELECT COUNT(*) as cnt FROM puroks WHERE barangay_id = ?');
+                $check->execute([$id]);
+                $purok_count = (int)$check->fetch()['cnt'];
+                
+                if ($purok_count > 0) {
+                    $error = 'Cannot delete barangay that has puroks. Please delete all puroks first.';
+                } else {
+                    $stmt = db()->prepare('DELETE FROM barangays WHERE id = ?');
+                    $stmt->execute([$id]);
+                    $success = true;
+                }
+            } catch (Throwable $e) {
+                $error = 'An error occurred while deleting barangay.';
+                error_log('Error deleting barangay: ' . $e->getMessage());
+            }
+        } else {
+            $error = 'Barangay ID is required.';
+        }
+    }
+    
+    if ($action === 'delete_purok') {
+        $id = (int)($_POST['purok_id'] ?? 0);
+        if ($id > 0) {
+            try {
+                $stmt = db()->prepare('DELETE FROM puroks WHERE id = ?');
+                $stmt->execute([$id]);
+                $success = true;
+            } catch (Throwable $e) {
+                $error = 'An error occurred while deleting purok.';
+                error_log('Error deleting purok: ' . $e->getMessage());
+            }
+        } else {
+            $error = 'Purok ID is required.';
+        }
+    }
+    
+    // Redirect with success/error message
+    if ($success) {
+        redirect_to('super_admin/locations.php?success=1&action=' . urlencode($action));
+    } else {
+        redirect_to('super_admin/locations.php?error=' . urlencode($error) . '&action=' . urlencode($action));
+    }
+    exit;
 }
 
 $barangays = db()->query('SELECT b.id, b.name, (SELECT COUNT(*) FROM puroks p WHERE p.barangay_id = b.id) AS purok_count FROM barangays b ORDER BY b.name')->fetchAll();
@@ -60,8 +154,34 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
             margin-bottom: 2rem !important;
         }
+        
+        @keyframes ripple {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes scale-in {
+            from {
+                transform: scale(0.95);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .animate-scale-in {
+            animation: scale-in 0.2s ease-out;
+        }
     </style>
     <link rel="stylesheet" href="../assets/css/design-system.css" />
+    <link rel="stylesheet" href="../assets/css/sweetalert-enhanced.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+    <script src="../assets/js/logout-confirmation.js"></script>
     <style>
         .sidebar { width: 260px; }
         .main-content { margin-left: 260px; }
@@ -110,6 +230,10 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                 </svg>
                 Categories
             </a>
+            <a class="active" href="<?php echo htmlspecialchars(base_url('super_admin/locations.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Barangays & Puroks
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/batches.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -146,19 +270,16 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                 </svg>
                 Analytics
             </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
+            </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                 </svg>
                 Brand Settings
-            </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('super_admin/locations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Barangays & Puroks
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/email_logs.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -287,6 +408,62 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
 
         <!-- Content -->
         <div class="content-body">
+            <!-- Success/Error Messages -->
+            <?php if (isset($_GET['success']) && $_GET['success'] == '1'): ?>
+                <div class="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-xl flex items-center justify-between animate-fade-in-up">
+                    <div class="flex items-center space-x-3">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="font-semibold">
+                            <?php 
+                            if (isset($_GET['action'])) {
+                                $action = $_GET['action'];
+                                if ($action === 'add_barangay') {
+                                    echo 'Barangay added successfully!';
+                                } elseif ($action === 'add_purok') {
+                                    echo 'Purok added successfully!';
+                                } elseif ($action === 'update_barangay') {
+                                    echo 'Barangay updated successfully!';
+                                } elseif ($action === 'update_purok') {
+                                    echo 'Purok updated successfully!';
+                                } elseif ($action === 'delete_barangay') {
+                                    echo 'Barangay deleted successfully!';
+                                } elseif ($action === 'delete_purok') {
+                                    echo 'Purok deleted successfully!';
+                                } else {
+                                    echo 'Operation completed successfully!';
+                                }
+                            } else {
+                                echo 'Operation completed successfully!';
+                            }
+                            ?>
+                        </span>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="text-green-700 hover:text-green-900">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['error'])): ?>
+                <div class="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-xl flex items-center justify-between animate-fade-in-up">
+                    <div class="flex items-center space-x-3">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="font-semibold"><?php echo htmlspecialchars($_GET['error']); ?></span>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="text-red-700 hover:text-red-900">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            <?php endif; ?>
+            
             <!-- Statistics Dashboard -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Total Barangays Card -->
@@ -487,13 +664,13 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
 
                         <!-- Action Buttons -->
                         <div class="flex justify-end space-x-3">
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick="openEditBarangayModal(<?php echo (int)$b['id']; ?>, '<?php echo htmlspecialchars($b['name'], ENT_QUOTES); ?>')" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                 </svg>
                                 Edit
                             </button>
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick="openDeleteBarangayModal(<?php echo (int)$b['id']; ?>, '<?php echo htmlspecialchars($b['name'], ENT_QUOTES); ?>')" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
@@ -560,13 +737,13 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
 
                         <!-- Action Buttons -->
                         <div class="flex justify-end space-x-3">
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick="openEditPurokModal(<?php echo (int)$p['id']; ?>, '<?php echo htmlspecialchars($p['name'], ENT_QUOTES); ?>', <?php echo (int)$p['barangay_id']; ?>)" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                 </svg>
                                 Edit
                             </button>
-                            <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                            <button onclick="openDeletePurokModal(<?php echo (int)$p['id']; ?>, '<?php echo htmlspecialchars($p['name'], ENT_QUOTES); ?>')" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
@@ -597,7 +774,9 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
     </main>
 
     <!-- Add Barangay Modal -->
-    <div id="addBarangayModal" class="fixed inset-0 flex items-center justify-center z-50 p-4 hidden pointer-events-none">
+    <div id="addBarangayModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeAddBarangayModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
             <div class="p-8">
                 <div class="flex items-center justify-between mb-8">
@@ -619,7 +798,7 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                     </button>
                 </div>
                 
-                <form method="post" class="space-y-6">
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
                     <input type="hidden" name="action" value="add_barangay" />
                     
                     <div class="space-y-2">
@@ -629,7 +808,10 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                                placeholder="e.g., Barangay 1" />
                     </div>
                     
-                    <div class="flex justify-end">
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeAddBarangayModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
                         <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -638,12 +820,15 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Add Purok Modal -->
-    <div id="addPurokModal" class="fixed inset-0 flex items-center justify-center z-50 p-4 hidden pointer-events-none">
+    <div id="addPurokModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeAddPurokModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
             <div class="p-8">
                 <div class="flex items-center justify-between mb-8">
@@ -665,7 +850,7 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                     </button>
                 </div>
                 
-                <form method="post" class="space-y-6">
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
                     <input type="hidden" name="action" value="add_purok" />
                     
                     <div class="space-y-2">
@@ -686,7 +871,10 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                                placeholder="e.g., Purok 1" />
                     </div>
                     
-                    <div class="flex justify-end">
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeAddPurokModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
                         <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -695,29 +883,329 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                         </button>
                     </div>
                 </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Barangay Modal -->
+    <div id="editBarangayModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeEditBarangayModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-900">Edit Barangay</h3>
+                                <p class="text-gray-600">Update barangay information</p>
+                            </div>
+                        </div>
+                        <button onclick="closeEditBarangayModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
+                        <input type="hidden" name="action" value="update_barangay" />
+                        <input type="hidden" name="barangay_id" id="edit_barangay_id" />
+                        
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Barangay Name</label>
+                            <input name="barangay_name" id="edit_barangay_name" required 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
+                                   placeholder="e.g., Barangay 1" />
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeEditBarangayModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
+                            <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Update Barangay
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Barangay Modal -->
+    <div id="deleteBarangayModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeDeleteBarangayModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-900">Delete Barangay</h3>
+                                <p class="text-gray-600">This action cannot be undone</p>
+                            </div>
+                        </div>
+                        <button onclick="closeDeleteBarangayModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <p class="text-gray-700 mb-4">Are you sure you want to delete <span id="delete_barangay_name_display" class="font-semibold text-gray-900"></span>?</p>
+                        <p class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">⚠️ Note: You cannot delete a barangay that has puroks. Please delete all puroks first.</p>
+                    </div>
+                    
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
+                        <input type="hidden" name="action" value="delete_barangay" />
+                        <input type="hidden" name="barangay_id" id="delete_barangay_id" />
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeDeleteBarangayModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
+                            <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete Barangay
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Purok Modal -->
+    <div id="editPurokModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeEditPurokModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-900">Edit Purok</h3>
+                                <p class="text-gray-600">Update purok information</p>
+                            </div>
+                        </div>
+                        <button onclick="closeEditPurokModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
+                        <input type="hidden" name="action" value="update_purok" />
+                        <input type="hidden" name="purok_id" id="edit_purok_id" />
+                        
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Barangay</label>
+                            <select name="barangay_id" id="edit_purok_barangay_id" required 
+                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
+                                <option value="">Select Barangay</option>
+                                <?php foreach ($barangays as $b): ?>
+                                    <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Purok Name</label>
+                            <input name="purok_name" id="edit_purok_name" required 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
+                                   placeholder="e.g., Purok 1" />
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeEditPurokModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
+                            <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Update Purok
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Purok Modal -->
+    <div id="deletePurokModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closeDeletePurokModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-900">Delete Purok</h3>
+                                <p class="text-gray-600">This action cannot be undone</p>
+                            </div>
+                        </div>
+                        <button onclick="closeDeletePurokModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <p class="text-gray-700 mb-4">Are you sure you want to delete <span id="delete_purok_name_display" class="font-semibold text-gray-900"></span>?</p>
+                        <p class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">⚠️ Warning: This action cannot be undone.</p>
+                    </div>
+                    
+                    <form method="post" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" class="space-y-6">
+                        <input type="hidden" name="action" value="delete_purok" />
+                        <input type="hidden" name="purok_id" id="delete_purok_id" />
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="closeDeletePurokModal()" class="inline-flex items-center px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-300">
+                                Cancel
+                            </button>
+                            <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete Purok
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Make functions globally available before DOMContentLoaded
         function openAddBarangayModal() {
-            document.getElementById('addBarangayModal').classList.remove('hidden');
-            document.getElementById('addBarangayModal').classList.add('flex');
+            const modal = document.getElementById('addBarangayModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                console.log('Barangay modal opened');
+            } else {
+                console.error('Barangay modal not found');
+            }
         }
 
         function closeAddBarangayModal() {
-            document.getElementById('addBarangayModal').classList.add('hidden');
-            document.getElementById('addBarangayModal').classList.remove('flex');
+            const modal = document.getElementById('addBarangayModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
         }
 
         function openAddPurokModal() {
-            document.getElementById('addPurokModal').classList.remove('hidden');
-            document.getElementById('addPurokModal').classList.add('flex');
+            const modal = document.getElementById('addPurokModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                console.log('Purok modal opened');
+            } else {
+                console.error('Purok modal not found');
+            }
         }
 
         function closeAddPurokModal() {
-            document.getElementById('addPurokModal').classList.add('hidden');
-            document.getElementById('addPurokModal').classList.remove('flex');
+            const modal = document.getElementById('addPurokModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function openEditBarangayModal(id, name) {
+            document.getElementById('edit_barangay_id').value = id;
+            document.getElementById('edit_barangay_name').value = name;
+            const modal = document.getElementById('editBarangayModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function closeEditBarangayModal() {
+            const modal = document.getElementById('editBarangayModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function openDeleteBarangayModal(id, name) {
+            document.getElementById('delete_barangay_id').value = id;
+            document.getElementById('delete_barangay_name_display').textContent = name;
+            const modal = document.getElementById('deleteBarangayModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function closeDeleteBarangayModal() {
+            const modal = document.getElementById('deleteBarangayModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function openEditPurokModal(id, name, barangayId) {
+            document.getElementById('edit_purok_id').value = id;
+            document.getElementById('edit_purok_name').value = name;
+            document.getElementById('edit_purok_barangay_id').value = barangayId;
+            const modal = document.getElementById('editPurokModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function closeEditPurokModal() {
+            const modal = document.getElementById('editPurokModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function openDeletePurokModal(id, name) {
+            document.getElementById('delete_purok_id').value = id;
+            document.getElementById('delete_purok_name_display').textContent = name;
+            const modal = document.getElementById('deletePurokModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        function closeDeletePurokModal() {
+            const modal = document.getElementById('deletePurokModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
         }
 
         function clearFilters() {
@@ -860,8 +1348,13 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                 });
             });
 
-            // Add ripple effect to buttons (excluding sidebar links)
-            document.querySelectorAll('a:not(.sidebar-nav a), button').forEach(element => {
+            // Add ripple effect to buttons (excluding modal buttons and buttons with onclick handlers)
+            document.querySelectorAll('button').forEach(element => {
+                // Skip if button has onclick handler (like modal buttons)
+                if (element.onclick) {
+                    return;
+                }
+                
                 element.addEventListener('click', function(e) {
                     const ripple = document.createElement('span');
                     const rect = this.getBoundingClientRect();
@@ -872,8 +1365,15 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                     ripple.style.width = ripple.style.height = size + 'px';
                     ripple.style.left = x + 'px';
                     ripple.style.top = y + 'px';
-                    ripple.classList.add('ripple');
+                    ripple.style.position = 'absolute';
+                    ripple.style.borderRadius = '50%';
+                    ripple.style.background = 'rgba(255, 255, 255, 0.5)';
+                    ripple.style.transform = 'scale(0)';
+                    ripple.style.animation = 'ripple 0.6s ease-out';
+                    ripple.style.pointerEvents = 'none';
                     
+                    this.style.position = 'relative';
+                    this.style.overflow = 'hidden';
                     this.appendChild(ripple);
                     
                     setTimeout(() => {
@@ -887,16 +1387,16 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                 const barangayModal = document.getElementById('addBarangayModal');
                 const purokModal = document.getElementById('addPurokModal');
                 
-                if (barangayModal && barangayModal.classList.contains('flex')) {
-                    const modalContent = barangayModal.querySelector('div');
-                    if (modalContent && !modalContent.contains(e.target)) {
+                if (barangayModal && !barangayModal.classList.contains('hidden')) {
+                    const modalContent = barangayModal.querySelector('.bg-white');
+                    if (modalContent && !modalContent.contains(e.target) && e.target.closest('button')?.onclick?.toString().includes('openAddBarangayModal') === false) {
                         closeAddBarangayModal();
                     }
                 }
                 
-                if (purokModal && purokModal.classList.contains('flex')) {
-                    const modalContent = purokModal.querySelector('div');
-                    if (modalContent && !modalContent.contains(e.target)) {
+                if (purokModal && !purokModal.classList.contains('hidden')) {
+                    const modalContent = purokModal.querySelector('.bg-white');
+                    if (modalContent && !modalContent.contains(e.target) && e.target.closest('button')?.onclick?.toString().includes('openAddPurokModal') === false) {
                         closeAddPurokModal();
                     }
                 }
@@ -908,9 +1408,9 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                     const barangayModal = document.getElementById('addBarangayModal');
                     const purokModal = document.getElementById('addPurokModal');
                     
-                    if (barangayModal && barangayModal.classList.contains('flex')) {
+                    if (barangayModal && !barangayModal.classList.contains('hidden')) {
                         closeAddBarangayModal();
-                    } else if (purokModal && purokModal.classList.contains('flex')) {
+                    } else if (purokModal && !purokModal.classList.contains('hidden')) {
                         closeAddPurokModal();
                     }
                 }
@@ -924,6 +1424,11 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
                     filterLocations();
                 }
             });
+        });
+        
+        // Initialize functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>
 </body>

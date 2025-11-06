@@ -857,9 +857,13 @@ try {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inventory Management - MediTrack</title>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="<?php echo base_url('public/assets/css/design-system.css'); ?>">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * {
@@ -1222,95 +1226,7 @@ try {
         .stagger-5 { animation-delay: 0.5s !important; }
         .stagger-6 { animation-delay: 0.6s !important; }
         
-        .sidebar {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            height: 100vh !important;
-            z-index: 1000 !important;
-            width: 280px !important;
-            background: white !important;
-            border-right: 1px solid #e5e7eb !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }
-        
-        .sidebar-brand {
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-            padding: 1.5rem !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 0.75rem !important;
-            color: white !important;
-            font-weight: 700 !important;
-            font-size: 1.25rem !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-            flex-shrink: 0 !important;
-        }
-        
-        .sidebar-nav {
-            flex: 1 !important;
-            padding: 1rem !important;
-            overflow-y: auto !important;
-        }
-        
-        .sidebar-nav a {
-            display: flex !important;
-            align-items: center !important;
-            gap: 0.75rem !important;
-            padding: 0.75rem 1rem !important;
-            margin-bottom: 0.25rem !important;
-            border-radius: 0.75rem !important;
-            color: #374151 !important;
-            text-decoration: none !important;
-            font-weight: 500 !important;
-            transition: all 0.2s !important;
-        }
-        
-        .sidebar-nav a:hover {
-            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
-            color: #1d4ed8 !important;
-            transform: translateX(4px) !important;
-            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important;
-        }
-        
-        .sidebar-nav a.active {
-            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
-            color: #1d4ed8 !important;
-            font-weight: 600 !important;
-            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2) !important;
-            border-left: 3px solid #3b82f6 !important;
-        }
-        
-        .sidebar-footer {
-            padding: 1rem !important;
-            border-top: 1px solid rgba(0, 0, 0, 0.05) !important;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
-        }
-        
-        .sidebar-footer a {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 0.75rem !important;
-            padding: 0.75rem 1rem !important;
-            color: #6b7280 !important;
-            text-decoration: none !important;
-            border-radius: 0.75rem !important;
-            transition: all 0.2s !important;
-            font-weight: 500 !important;
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
-            border: 1px solid rgba(0, 0, 0, 0.05) !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-        }
-        
-        .sidebar-footer a:hover {
-            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
-            color: #dc2626 !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15) !important;
-            border-color: rgba(220, 38, 38, 0.2) !important;
-        }
+        /* Sidebar styles removed - using design-system.css exclusively */
         
         /* Print Styles */
         @media print {
@@ -1430,6 +1346,10 @@ try {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 Analytics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3442,14 +3362,66 @@ try {
             }
         });
 
+        // Force sidebar to always be light (prevent dark mode from affecting it)
+        function forceSidebarLight() {
+            const sidebar = document.querySelector('aside.sidebar');
+            if (sidebar) {
+                sidebar.classList.remove('dark');
+                sidebar.setAttribute('data-no-dark-mode', 'true');
+                // Force styles inline to override everything
+                sidebar.style.background = 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)';
+                sidebar.style.borderRight = '1px solid rgba(229, 231, 235, 0.8)';
+                sidebar.style.boxShadow = '4px 0 24px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02)';
+                
+                // Force brand styles
+                const brand = sidebar.querySelector('.sidebar-brand');
+                if (brand) {
+                    brand.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%)';
+                    brand.style.color = 'white';
+                    const brandSpan = brand.querySelector('span');
+                    if (brandSpan) brandSpan.style.color = 'white';
+                }
+                
+                // Force nav links
+                const navLinks = sidebar.querySelectorAll('.sidebar-nav a');
+                navLinks.forEach(link => {
+                    if (link.classList.contains('active')) {
+                        link.style.color = '#1d4ed8';
+                        link.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)';
+                    } else {
+                        link.style.color = '#4b5563';
+                    }
+                });
+            }
+        }
+        
+        // Run immediately when script loads (before DOMContentLoaded)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                forceSidebarLight();
+                setTimeout(forceSidebarLight, 50);
+            });
+        } else {
+            // DOM already loaded, run immediately
+            forceSidebarLight();
+            setTimeout(forceSidebarLight, 50);
+        }
+        
         // Initialize everything when DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
+            // Force sidebar light BEFORE dark mode initialization
+            forceSidebarLight();
+            
             // Update time immediately and then every second
             updateTime();
             setInterval(updateTime, 1000);
             
             // Initialize night mode
             initNightMode();
+            
+            // Force sidebar light AGAIN after dark mode (in case it was applied)
+            setTimeout(forceSidebarLight, 100);
+            setTimeout(forceSidebarLight, 500);
             
             // Initialize profile dropdown
             initProfileDropdown();
@@ -3461,6 +3433,23 @@ try {
                     card.style.transform = 'translateY(0)';
                 }, index * 100);
             });
+            
+            // Also watch for dark mode changes and re-apply sidebar styles
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        if (document.body.classList.contains('dark')) {
+                            forceSidebarLight();
+                        }
+                    }
+                });
+            });
+            observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        });
+        
+        // Initialize functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>
 </body>

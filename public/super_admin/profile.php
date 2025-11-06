@@ -4,6 +4,26 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/email_notifications.php';
 require_auth(['super_admin']);
 
+// Helper function to get upload URL (uploads are at project root, not in public/)
+function upload_url(string $path): string {
+    // Remove leading slash if present
+    $clean_path = ltrim($path, '/');
+    
+    // Get base path without /public/
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
 
 // Handle form submissions
@@ -76,8 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_flash('Please fill in all password fields.', 'error');
         }
     } elseif ($action === 'upload_avatar') {
-        if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
-            $file = $_FILES['profile_image'];
+        if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['avatar'];
             $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             $max_size = 5 * 1024 * 1024; // 5MB
             
@@ -150,8 +170,12 @@ $user_data = $stmt->fetch();
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -270,10 +294,307 @@ $user_data = $stmt->fetch();
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             border: 1px solid rgba(226, 232, 240, 0.8);
         }
+
+        /* Enhanced Profile UI Styles (from Resident Profile) */
+        .profile-container {
+            background: #f8fafc;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .profile-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .profile-card:hover {
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+        }
+        
+        .profile-header {
+            background: white;
+            padding: 2rem;
+            color: #1f2937;
+            position: relative;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid #e5e7eb;
+            background: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .profile-avatar:hover {
+            transform: scale(1.05);
+            border-color: #d1d5db;
+        }
+        
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        
+        .profile-name {
+            font-size: 2rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+        }
+        
+        .profile-email {
+            font-size: 1.1rem;
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .profile-badges {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .profile-badge {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #374151;
+            transition: all 0.3s ease;
+        }
+        
+        .profile-badge:hover {
+            background: #e5e7eb;
+            transform: translateY(-1px);
+        }
+        
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        .stat-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-item:hover {
+            background: #f3f4f6;
+            transform: translateY(-2px);
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #1f2937;
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        
+        .form-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s ease;
+        }
+        
+        .form-section:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .section-icon {
+            width: 40px;
+            height: 40px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+        
+        .btn-primary {
+            background: #374151;
+            border: none;
+            border-radius: 8px;
+            padding: 0.875rem 1.5rem;
+            color: white;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+        
+        .btn-primary:hover {
+            background: #1f2937;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            border: none;
+            border-radius: 8px;
+            padding: 0.875rem 1.5rem;
+            color: white;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .modal.show .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .modal-close:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            padding: 1.5rem 2rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        
         .image-upload-area {
             border: 2px dashed #cbd5e1;
             transition: all 0.3s ease;
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            cursor: pointer !important;
+            pointer-events: auto !important;
         }
         .image-upload-area:hover {
             border-color: #dc2626;
@@ -283,6 +604,13 @@ $user_data = $stmt->fetch();
             border-color: #dc2626;
             background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
             transform: scale(1.02);
+        }
+        .image-upload-area label {
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            display: block;
+            width: 100%;
+            height: 100%;
         }
         .pulse-animation {
             animation: pulse 2s infinite;
@@ -350,13 +678,6 @@ $user_data = $stmt->fetch();
                 </svg>
                 Users
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/locations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Locations
-            </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
@@ -386,6 +707,10 @@ $user_data = $stmt->fetch();
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 Analytics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/email_logs.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -546,230 +871,362 @@ $user_data = $stmt->fetch();
 
         <!-- Profile Content -->
         <div class="content-body">
-            <!-- Main Profile Card -->
-            <div class="card mb-6">
-                <div class="card-body p-6">
-                    <div class="flex items-center space-x-4">
-                        <!-- Profile Avatar -->
-                        <div class="relative">
-                            <div id="profile-avatar" class="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg overflow-hidden">
-                                <img id="profile-image-preview" src="" alt="Profile" class="w-full h-full object-cover hidden">
-                                <span id="profile-initials">SA</span>
-                                        </div>
-                            <!-- Camera Icon -->
-                            <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center cursor-pointer shadow-lg" onclick="document.getElementById('profile-image-input').click()">
-                                <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            <div class="profile-container">
+                <div class="profile-card">
+                    <!-- Profile Header -->
+                    <div class="profile-header">
+                        <div class="profile-avatar">
+                            <?php if ($user_data['profile_image']): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" alt="Profile Picture">
+                            <?php else: ?>
+                                <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                         </svg>
+                            <?php endif; ?>
                                     </div>
-                                </div>
+                        <h1 class="profile-name"><?php echo htmlspecialchars($user_data['first_name'] . ' ' . $user_data['last_name']); ?></h1>
+                        <p class="profile-email"><?php echo htmlspecialchars($user_data['email']); ?></p>
                         
-                        <!-- User Info -->
-                        <div class="flex-1">
-                            <h2 class="text-lg font-bold text-gray-900 mb-1">Super Admin</h2>
-                            <p class="text-sm text-gray-600 mb-2">admin@example.com</p>
-                            
-                            <!-- Role Badge and Member Info -->
-                            <div class="flex items-center space-x-3">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 border border-purple-200 shadow-sm">
-                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        <div class="profile-badges">
+                            <div class="profile-badge">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                     </svg>
                                     Super Administrator
-                                </span>
-                                <span class="text-xs text-gray-500">Member since Sep 2025</span>
                                 </div>
+                            <div class="profile-badge">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Verified
                             </div>
                         </div>
+                        
+                        <div class="profile-stats">
+                            <div class="stat-item">
+                                <div class="stat-value"><?php echo date('M Y', strtotime($user_data['created_at'])); ?></div>
+                                <div class="stat-label">Member Since</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">Today</div>
+                                <div class="stat-label">Last Active</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">Active</div>
+                                <div class="stat-label">Status</div>
+                            </div>
                     </div>
                 </div>
 
-            
-            <!-- Form Cards -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="p-8">
+                        <!-- Action Buttons -->
+                        <div class="flex flex-wrap gap-4 justify-center mb-8">
+                            <button onclick="openUpdateProfileModal()" class="btn-primary">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                                Update Profile
+                            </button>
+                            <button onclick="openChangePasswordModal()" class="btn-secondary">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                </svg>
+                                Change Password
+                            </button>
+                            <button onclick="document.getElementById('avatarInput').click()" class="btn-secondary">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                Upload Avatar
+                            </button>
+                        </div>
 
-                <!-- Personal Information Card -->
-                <div class="card">
-                    <div class="card-body p-6">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="p-2 bg-blue-100 rounded-lg">
-                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <!-- Profile Picture Upload Form (Hidden) -->
+                        <form method="post" enctype="multipart/form-data" id="avatarUploadForm" style="display: none;">
+                            <input type="hidden" name="action" value="upload_avatar">
+                            <input type="file" id="avatarInput" name="avatar" accept="image/*" onchange="handleFileSelect(this)">
+                        </form>
+
+                        <!-- Profile Information Display -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="form-section">
+                                <div class="section-header">
+                                    <div class="section-icon">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                     </svg>
                                 </div>
-                            <h3 class="text-lg font-semibold text-gray-900">Personal Information</h3>
+                                    <h2 class="section-title">Personal Information</h2>
+                                </div>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm font-medium text-gray-600">Full Name:</span>
+                                        <span class="text-sm text-gray-900"><?php echo htmlspecialchars($user_data['first_name'] . ' ' . $user_data['last_name']); ?></span>
+                                    </div>
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm font-medium text-gray-600">Email:</span>
+                                        <span class="text-sm text-gray-900"><?php echo htmlspecialchars($user_data['email']); ?></span>
+                                    </div>
+                                    <div class="flex justify-between items-center py-2">
+                                        <span class="text-sm font-medium text-gray-600">Member Since:</span>
+                                        <span class="text-sm text-gray-900"><?php echo date('F Y', strtotime($user_data['created_at'])); ?></span>
+                                    </div>
+                                </div>
                             </div>
                         
-                        <form method="post" class="space-y-4">
-                                <input type="hidden" name="action" value="update_profile">
-                            
-                            <!-- First Name -->
-                                    <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">First Name</label>
-                                <input type="text" name="first_name" value="<?php echo htmlspecialchars($user_data['first_name'] ?? 'Super'); ?>" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                                       placeholder="Enter first name" required>
-                                            </div>
-                            
-                            <!-- Last Name -->
-                                    <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Last Name</label>
-                                <input type="text" name="last_name" value="<?php echo htmlspecialchars($user_data['last_name'] ?? 'Admin'); ?>" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                                       placeholder="Enter last name" required>
-                                            </div>
-                            
-                            <!-- Email Address -->
-                                <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Email Address</label>
-                                <input type="email" name="email" value="<?php echo htmlspecialchars($user_data['email'] ?? 'admin@example.com'); ?>" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                                       placeholder="Enter email address" required>
-                    </div>
-
-                            <!-- Update Button -->
-                            <div class="pt-4">
-                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
-                                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                                    </svg>
-                                    Update Profile
-                                    </button>
+                            <div class="form-section">
+                                <div class="section-header">
+                                    <div class="section-icon">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <h2 class="section-title">Account Status</h2>
                                 </div>
-                            </form>
-                        </div>
-                    </div>
-
-                <!-- Security Settings Card -->
-                <div class="card">
-                    <div class="card-body p-6">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="p-2 bg-green-100 rounded-lg">
-                                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                                    </svg>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm font-medium text-gray-600">Status:</span>
+                                        <span class="text-sm text-green-600 font-medium">Active</span>
+                                    </div>
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm font-medium text-gray-600">Last Active:</span>
+                                        <span class="text-sm text-gray-900">Today</span>
+                                    </div>
+                                    <div class="flex justify-between items-center py-2">
+                                        <span class="text-sm font-medium text-gray-600">Role:</span>
+                                        <span class="text-sm text-gray-900">Super Administrator</span>
+                                    </div>
                                 </div>
-                            <h3 class="text-lg font-semibold text-gray-900">Security Settings</h3>
                             </div>
-
-                        <form method="post" class="space-y-4">
-                                <input type="hidden" name="action" value="change_password">
-                            
-                            <!-- Current Password -->
-                                <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Current Password</label>
-                                    <input type="password" name="current_password" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm" 
-                                       placeholder="Enter current password" required>
-                                </div>
-                            
-                            <!-- New Password -->
-                                    <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">New Password</label>
-                                        <input type="password" name="new_password" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm" 
-                                       placeholder="Enter new password" required>
-                                <p class="text-xs text-gray-500">Minimum 6 characters</p>
-                                    </div>
-                            
-                            <!-- Confirm New Password -->
-                                    <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Confirm New Password</label>
-                                        <input type="password" name="confirm_password" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm" 
-                                       placeholder="Confirm new password" required>
-                                    </div>
-                            
-                            <!-- Change Password Button -->
-                            <div class="pt-4">
-                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200">
-                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                                            </svg>
-                                    Change Password
-                                    </button>
-                                </div>
-                            </form>
                         </div>
                     </div>
                 </div>
-
             </div>
-            
-            <!-- Hidden file input for profile image -->
-            <form method="post" enctype="multipart/form-data" class="hidden">
-                <input type="hidden" name="action" value="upload_avatar">
-                <input type="file" id="profile-image-input" name="profile_image" accept="image/*" onchange="previewProfileImage(this)">
-            </form>
         </div>
     </main>
 
+    <!-- Update Profile Modal -->
+    <div id="updateProfileModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-xl font-bold text-white">Update Profile</h3>
+                <button onclick="closeUpdateProfileModal()" class="text-white hover:text-gray-200 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form method="post" class="p-6">
+                <input type="hidden" name="action" value="update_profile">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                        <input type="text" name="first_name" value="<?php echo htmlspecialchars($user_data['first_name'] ?? ''); ?>" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all input-focus" 
+                                       placeholder="Enter first name" required>
+                                            </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                        <input type="text" name="last_name" value="<?php echo htmlspecialchars($user_data['last_name'] ?? ''); ?>" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all input-focus" 
+                                       placeholder="Enter last name" required>
+                                            </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                        <input type="email" name="email" value="<?php echo htmlspecialchars($user_data['email'] ?? ''); ?>" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all input-focus" 
+                                       placeholder="Enter email address" required>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeUpdateProfileModal()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium shadow-lg">
+                                    Update Profile
+                                    </button>
+                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div class="sticky top-0 bg-gradient-to-r from-orange-600 to-orange-700 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-xl font-bold text-white">Change Password</h3>
+                <button onclick="closeChangePasswordModal()" class="text-white hover:text-gray-200 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                </button>
+                                </div>
+            <form method="post" class="p-6">
+                                <input type="hidden" name="action" value="change_password">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                                    <input type="password" name="current_password" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all input-focus" 
+                                       placeholder="Enter current password" required>
+                                </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                        <input type="password" name="new_password" id="newPassword" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all input-focus" 
+                               placeholder="Enter new password" required minlength="6">
+                        <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                        <input type="password" name="confirm_password" id="confirmPassword" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all input-focus" 
+                                       placeholder="Confirm new password" required>
+                        <p id="passwordMatch" class="text-xs mt-1 hidden"></p>
+                                    </div>
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeChangePasswordModal()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all font-medium shadow-lg">
+                                    Change Password
+                                    </button>
+                    </div>
+                                </div>
+                            </form>
+                    </div>
+                </div>
+
     <!-- JavaScript for Enhanced UI -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Image upload and preview functionality
-            const avatarInput = document.getElementById('avatarInput');
-            const imageUploadArea = document.getElementById('imageUploadArea');
-            const imagePreview = document.getElementById('imagePreview');
-            const previewImg = document.getElementById('previewImg');
+        // Modal Functions
+        function openUpdateProfileModal() {
+            document.getElementById('updateProfileModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
 
-            // File input change handler
-            avatarInput.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        previewImg.src = e.target.result;
-                        imagePreview.classList.remove('hidden');
-                        imageUploadArea.classList.add('hidden');
-                    };
-                    reader.readAsDataURL(file);
+        function closeUpdateProfileModal() {
+            document.getElementById('updateProfileModal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function openChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('hidden');
+            document.body.style.overflow = '';
+            // Reset form
+            document.querySelector('#changePasswordModal form').reset();
+            document.getElementById('passwordMatch').classList.add('hidden');
+        }
+
+        // Handle file selection directly - submit form automatically
+        function handleFileSelect(input) {
+            const file = input.files[0];
+            if (file) {
+                // Validate file type
+                if (!file.type.match('image.*')) {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invalid File',
+                            text: 'Please select an image file.',
+                            customClass: {
+                                popup: 'swal2-popup-enhanced',
+                                title: 'swal2-title-enhanced',
+                                htmlContainer: 'swal2-html-container-enhanced',
+                                confirmButton: 'swal2-confirm-enhanced'
+                            },
+                            buttonsStyling: false
+                        });
+                    } else {
+                        alert('Please select an image file.');
+                    }
+                    input.value = '';
+                    return;
                 }
-            });
 
-            // Drag and drop functionality
-            imageUploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                imageUploadArea.classList.add('dragover');
-            });
+                // Validate file size (5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'File Too Large',
+                            text: 'Please select an image smaller than 5MB.',
+                            customClass: {
+                                popup: 'swal2-popup-enhanced',
+                                title: 'swal2-title-enhanced',
+                                htmlContainer: 'swal2-html-container-enhanced',
+                                confirmButton: 'swal2-confirm-enhanced'
+                            },
+                            buttonsStyling: false
+                        });
+                    } else {
+                        alert('Please select an image smaller than 5MB.');
+                    }
+                    input.value = '';
+                    return;
+                }
 
-            imageUploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                imageUploadArea.classList.remove('dragover');
-            });
+                // Submit the form automatically
+                const form = document.getElementById('avatarUploadForm');
+                if (form) {
+                    form.submit();
+                }
+            }
+        }
 
-            imageUploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                imageUploadArea.classList.remove('dragover');
-                
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    const file = files[0];
-                    if (file.type.startsWith('image/')) {
-                        avatarInput.files = files;
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            previewImg.src = e.target.result;
-                            imagePreview.classList.remove('hidden');
-                            imageUploadArea.classList.add('hidden');
-                        };
-                        reader.readAsDataURL(file);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Image upload functionality
+            const avatarInput = document.getElementById('avatarInput');
+            
+            if (avatarInput) {
+                // File input change handler (backup - also handled by onchange attribute)
+                avatarInput.addEventListener('change', function(e) {
+                    handleFileSelect(this);
+                });
+            }
+
+            // Password confirmation validation
+            const newPasswordInput = document.getElementById('newPassword');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const passwordMatch = document.getElementById('passwordMatch');
+            
+            if (newPasswordInput && confirmPasswordInput && passwordMatch) {
+                function validatePasswords() {
+                    if (newPasswordInput.value && confirmPasswordInput.value) {
+                        if (newPasswordInput.value !== confirmPasswordInput.value) {
+                            confirmPasswordInput.classList.add('border-red-500');
+                            confirmPasswordInput.classList.remove('border-green-500');
+                            passwordMatch.textContent = 'Passwords do not match';
+                            passwordMatch.classList.remove('hidden', 'text-green-600');
+                            passwordMatch.classList.add('text-red-600');
+                        } else {
+                            confirmPasswordInput.classList.remove('border-red-500');
+                            confirmPasswordInput.classList.add('border-green-500');
+                            passwordMatch.textContent = 'Passwords match';
+                            passwordMatch.classList.remove('hidden', 'text-red-600');
+                            passwordMatch.classList.add('text-green-600');
+                        }
+                    } else {
+                        confirmPasswordInput.classList.remove('border-red-500', 'border-green-500');
+                        passwordMatch.classList.add('hidden');
                     }
                 }
-            });
-
-            // Click to upload
-            imageUploadArea.addEventListener('click', function() {
-                avatarInput.click();
-            });
+                
+                newPasswordInput.addEventListener('input', validatePasswords);
+                confirmPasswordInput.addEventListener('input', validatePasswords);
+            }
 
             // Form validation and feedback
             const forms = document.querySelectorAll('form');
             forms.forEach(form => {
                 form.addEventListener('submit', function(e) {
                     const submitBtn = form.querySelector('button[type="submit"]');
-                    if (submitBtn) {
+                    if (submitBtn && !submitBtn.disabled) {
                         submitBtn.disabled = true;
                         const originalText = submitBtn.innerHTML;
                         submitBtn.innerHTML = `
@@ -791,68 +1248,29 @@ $user_data = $stmt->fetch();
                 });
             });
 
-            // Password confirmation validation
-            const newPasswordInput = document.querySelector('input[name="new_password"]');
-            const confirmPasswordInput = document.querySelector('input[name="confirm_password"]');
-            
-            if (newPasswordInput && confirmPasswordInput) {
-                function validatePasswords() {
-                    if (newPasswordInput.value && confirmPasswordInput.value) {
-                        if (newPasswordInput.value !== confirmPasswordInput.value) {
-                            confirmPasswordInput.setCustomValidity('Passwords do not match');
-                            confirmPasswordInput.classList.add('border-red-500');
-                        } else {
-                            confirmPasswordInput.setCustomValidity('');
-                            confirmPasswordInput.classList.remove('border-red-500');
-                            confirmPasswordInput.classList.add('border-green-500');
-                        }
-                    }
+            // Close modals when clicking outside
+            document.getElementById('updateProfileModal')?.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeUpdateProfileModal();
                 }
-                
-                newPasswordInput.addEventListener('input', validatePasswords);
-                confirmPasswordInput.addEventListener('input', validatePasswords);
-            }
-
-            // Add smooth scrolling for better UX
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    const target = document.querySelector(this.getAttribute('href'));
-                    if (target) {
-                        target.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start'
-                        });
-                    }
-                });
             });
 
-            // Add loading states to buttons
-            document.querySelectorAll('.btn-primary, .btn-secondary').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    if (!this.disabled) {
-                        this.style.transform = 'scale(0.95)';
-                        setTimeout(() => {
-                            this.style.transform = 'scale(1)';
-                        }, 150);
-                    }
-                });
+            document.getElementById('changePasswordModal')?.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeChangePasswordModal();
+                }
             });
-            
-            // Initialize real-time clock
-            updateClock();
-            setInterval(updateClock, 1000);
-            
-            // Initialize night mode toggle
-            initNightMode();
-            
-            // Initialize profile dropdown with a small delay to ensure DOM is ready
-            setTimeout(() => {
-                initProfileDropdown();
-            }, 100);
-        });
-        
-        // Real-time clock function
+
+            // Close modals on Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeUpdateProfileModal();
+                    closeChangePasswordModal();
+                }
+            });
+
+            // Header Functions
+            // Real-time clock update
         function updateClock() {
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { 
@@ -861,13 +1279,22 @@ $user_data = $stmt->fetch();
                 minute: '2-digit',
                 second: '2-digit'
             });
-            document.getElementById('current-time').textContent = timeString;
+                const timeElement = document.getElementById('current-time');
+                if (timeElement) {
+                    timeElement.textContent = timeString;
+                }
         }
+
+            // Update clock every second
+            updateClock();
+            setInterval(updateClock, 1000);
         
         // Night mode functionality
         function initNightMode() {
             const toggle = document.getElementById('night-mode-toggle');
             const body = document.body;
+                
+                if (!toggle) return;
             
             // Check for saved theme preference or default to light mode
             const currentTheme = localStorage.getItem('theme') || 'light';
@@ -900,47 +1327,6 @@ $user_data = $stmt->fetch();
                 }
             });
         }
-        
-        // Show profile section function
-        function showProfileSection() {
-            // This function is for compatibility - profile page already shows profile content
-            console.log('Profile section is already visible');
-        }
-        
-        // Show dashboard function
-        function showDashboard() {
-            // Redirect to dashboard
-            window.location.href = '<?php echo base_url('super_admin/dashboard.php'); ?>';
-        }
-
-        // Preview profile image function
-        function previewProfileImage(input) {
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const previewImg = document.getElementById('profile-image-preview');
-                    const initialsSpan = document.getElementById('profile-initials');
-                    const avatarDiv = document.getElementById('profile-avatar');
-                    
-                    // Show the image preview
-                    previewImg.src = e.target.result;
-                    previewImg.classList.remove('hidden');
-                    initialsSpan.classList.add('hidden');
-                    
-                    // Remove gradient background when showing image
-                    avatarDiv.classList.remove('bg-gradient-to-br', 'from-purple-500', 'to-blue-600');
-                    avatarDiv.classList.add('bg-gray-200');
-                    
-                    // Auto-submit the form after preview
-                    setTimeout(() => {
-                        input.form.submit();
-                    }, 1000);
-                };
-                
-                reader.readAsDataURL(input.files[0]);
-            }
-        }
 
         // Profile dropdown functionality
         function initProfileDropdown() {
@@ -948,15 +1334,8 @@ $user_data = $stmt->fetch();
             const menu = document.getElementById('profile-menu');
             const arrow = document.getElementById('profile-arrow');
             
-            // Check if elements exist
-            if (!toggle || !menu || !arrow) {
-                return;
-            }
+                if (!toggle || !menu || !arrow) return;
             
-            // Remove any existing event listeners
-            toggle.onclick = null;
-            
-            // Simple click handler
             toggle.onclick = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -970,38 +1349,35 @@ $user_data = $stmt->fetch();
                 }
             };
             
-            // Close dropdown when clicking outside (use a single event listener)
-            if (!window.profileDropdownClickHandler) {
-                window.profileDropdownClickHandler = function(e) {
-                    const allToggles = document.querySelectorAll('#profile-toggle');
-                    const allMenus = document.querySelectorAll('#profile-menu');
-                    
-                    allToggles.forEach((toggle, index) => {
-                        const menu = allMenus[index];
+                // Close dropdown when clicking outside
+                if (!window.superAdminProfileDropdownClickHandler) {
+                    window.superAdminProfileDropdownClickHandler = function(e) {
+                        const toggle = document.getElementById('profile-toggle');
+                        const menu = document.getElementById('profile-menu');
                         if (menu && !toggle.contains(e.target) && !menu.contains(e.target)) {
                             menu.classList.add('hidden');
-                            const arrow = toggle.querySelector('#profile-arrow');
+                            const arrow = document.getElementById('profile-arrow');
                             if (arrow) arrow.classList.remove('rotate-180');
                         }
-                    });
                 };
-                document.addEventListener('click', window.profileDropdownClickHandler);
+                    document.addEventListener('click', window.superAdminProfileDropdownClickHandler);
             }
             
             // Close dropdown when pressing Escape
-            if (!window.profileDropdownKeyHandler) {
-                window.profileDropdownKeyHandler = function(e) {
+                document.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
-                        const allMenus = document.querySelectorAll('#profile-menu');
-                        const allArrows = document.querySelectorAll('#profile-arrow');
-                        allMenus.forEach(menu => menu.classList.add('hidden'));
-                        allArrows.forEach(arrow => arrow.classList.remove('rotate-180'));
+                        const menu = document.getElementById('profile-menu');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (menu) menu.classList.add('hidden');
+                        if (arrow) arrow.classList.remove('rotate-180');
                     }
-                };
-                document.addEventListener('keydown', window.profileDropdownKeyHandler);
+                });
             }
-            
-        }
+
+            // Initialize night mode and profile dropdown
+            initNightMode();
+            initProfileDropdown();
+        });
     </script>
 </body>
 </html>

@@ -12,12 +12,17 @@ $notification_counts = get_bhw_notification_counts($bhw_purok_id);
 // Fetch residents with their family members (including walk-in residents)
 $rows = db()->prepare('
     SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address,
+           r.purok_id, r.barangay_id,
+           p.name as purok_name,
+           b.name as barangay_name,
            COUNT(fm.id) as family_count,
            CASE 
                WHEN r.last_name = "Walk-in" THEN "Walk-in"
                ELSE "Registered"
            END as resident_type
     FROM residents r 
+    LEFT JOIN puroks p ON r.purok_id = p.id
+    LEFT JOIN barangays b ON r.barangay_id = b.id
     LEFT JOIN family_members fm ON r.id = fm.resident_id 
     WHERE r.purok_id = (SELECT purok_id FROM users WHERE id=?) 
     GROUP BY r.id 
@@ -53,7 +58,11 @@ foreach ($family_members as $family) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+<script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
 <script>
     tailwind.config = {
         theme: {
@@ -104,8 +113,100 @@ foreach ($family_members as $family) {
             will-change: scroll-position;
         }
         
-        .sidebar-nav a:hover {
-            transform: translateX(2px);
+        /* Table Styles */
+        #residentsTable {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        #residentsTable tbody tr {
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        #residentsTable tbody tr:last-child {
+            border-bottom: none;
+        }
+        
+        .dark #residentsTable thead {
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+        }
+        
+        .dark #residentsTable tbody tr {
+            background: #374151;
+            border-bottom-color: #4b5563;
+        }
+        
+        .dark #residentsTable tbody tr:hover {
+            background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+        }
+        
+        .dark #residentsTable thead th {
+            color: #f9fafb;
+        }
+        
+        .dark #residentsTable tbody td {
+            color: #e5e7eb;
+        }
+        
+        /* Enhanced Family Section Styles */
+        .family-member-card-modern {
+            animation: fadeInUp 0.5s ease-out forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        #residentsTable tr[id^="family-"] {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        #residentsTable tr[id^="family-"]:not(.hidden) {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 1000px;
+            }
+        }
+        
+        .dark #residentsTable tr[id^="family-"] td > div {
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+            border-color: #6b7280;
+        }
+        
+        .dark .family-member-card-modern {
+            background: #374151;
+            border-color: #4b5563;
+        }
+        
+        @media (max-width: 768px) {
+            #residentsTable {
+                font-size: 0.875rem;
+            }
+            
+            #residentsTable th,
+            #residentsTable td {
+                padding: 0.75rem 0.5rem;
+            }
+            
+            .family-member-card-modern {
+                padding: 1rem !important;
+            }
         }
 
         /* Enhanced BHW Design System */
@@ -345,8 +446,38 @@ foreach ($family_members as $family) {
             50% { opacity: 0.7; }
         }
 
+        /* Content Header Styles */
         .content-header {
-            animation: slideInLeft 0.8s ease-out forwards;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 50 !important;
+            background: white !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 2rem !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            margin-bottom: 2rem !important;
+        }
+        
+        .dark .content-header {
+            background: #1f2937 !important;
+            border-bottom-color: #374151 !important;
+        }
+        
+        .dark .text-gray-900 {
+            color: #f9fafb !important;
+        }
+        
+        .dark .text-gray-600 {
+            color: #d1d5db !important;
+        }
+        
+        .dark .text-gray-500 {
+            color: #9ca3af !important;
+        }
+        
+        .dark .card {
+            background: #374151 !important;
+            border-color: #4b5563 !important;
         }
 
         .resident-card {
@@ -412,7 +543,7 @@ foreach ($family_members as $family) {
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-50 to-blue-50">
+<body class="bg-gradient-to-br from-gray-50 to-blue-50 bhw-theme">
 <div class="min-h-screen flex">
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -511,44 +642,100 @@ foreach ($family_members as $family) {
         <!-- Header -->
         <div class="content-header">
             <div class="flex items-center justify-between">
-                <div class="animate-fade-in-up">
-                    <div class="flex items-center space-x-4 mb-3">
-                        <h1 class="text-5xl font-bold gradient-text">
-                            Residents & Family
-                        </h1>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                            <span class="text-sm text-gray-500 font-medium">Live</span>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Residents & Family</h1>
+                    <p class="text-gray-600 mt-1">List of residents and their family members in your assigned area</p>
                         </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Current Time Display -->
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">Current Time</div>
+                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
                     </div>
-                    <p class="text-gray-600 text-xl mb-3">List of residents and their family members in your assigned area</p>
-                    <div class="flex items-center space-x-3">
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-blue-400 rounded-full animate-float"></div>
-                            <div class="w-2 h-2 bg-purple-400 rounded-full animate-float" style="animation-delay: 0.2s;"></div>
-                            <div class="w-2 h-2 bg-cyan-400 rounded-full animate-float" style="animation-delay: 0.4s;"></div>
-                        </div>
-                        <span class="text-sm text-gray-500 font-medium">Live directory</span>
-                        <div class="status-indicator">
-                            <span class="text-xs text-gray-400 uppercase tracking-wide">Active</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-6 animate-slide-in-right">
-                    <div class="stats-card text-center px-6 py-4 rounded-2xl">
-                        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Residents</div>
-                        <div class="text-3xl font-bold text-gray-900" id="resident-count"><?php echo count($residents); ?></div>
-                        <div class="text-xs text-green-600 mt-1">✓ Verified</div>
-                    </div>
-                    <div class="stats-card text-center px-6 py-4 rounded-2xl">
-                        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Family Members</div>
-                        <div class="text-3xl font-bold text-blue-600">
+                    
+                    <!-- Night Mode Toggle -->
+                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Notifications -->
+                    <div class="relative">
+                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
+                            </svg>
                             <?php 
-                            $total_family = array_sum(array_column($residents, 'family_count'));
-                            echo $total_family;
-                            ?>
+                            $total_notifications = ($notification_counts['pending_requests'] ?? 0) + ($notification_counts['pending_registrations'] ?? 0) + ($notification_counts['pending_family_additions'] ?? 0);
+                            if ($total_notifications > 0): ?>
+                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $total_notifications; ?></span>
+                            <?php endif; ?>
+                        </button>
                         </div>
-                        <div class="text-xs text-blue-600 mt-1">Registered</div>
+                    
+                    <!-- Profile Section -->
+                    <div class="relative" id="profile-dropdown">
+                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                <?php 
+                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                        </div>
+                            <div class="text-left">
+                                <div class="text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'BHW'); ?>
+                    </div>
+                                <div class="text-xs text-gray-500">Barangay Health Worker</div>
+                </div>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
+                            <!-- User Info Section -->
+                            <div class="px-4 py-3 border-b border-gray-100">
+                                <div class="text-sm font-semibold text-gray-900">
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'User'))); ?>
+                    </div>
+                                <div class="text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
+                        </div>
+                    </div>
+                            
+                            <!-- Menu Items -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('bhw/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Edit Profile
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Support
+                                </a>
+                            </div>
+                            
+                            <!-- Separator -->
+                            <div class="border-t border-gray-100 my-1"></div>
+                            
+                            <!-- Sign Out -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Sign Out
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -570,123 +757,218 @@ foreach ($family_members as $family) {
                     </div>
                 </div>
 
-                <!-- Residents Grid -->
-        <div id="residentsGrid" class="space-y-6 mb-8">
+                <!-- Residents Table -->
+                <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full" id="residentsTable">
+                            <thead class="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                            </svg>
+                                            <span>Resident</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ID</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                            </svg>
+                                            <span>Phone</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            </svg>
+                                            <span>Address</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center justify-center space-x-2">
+                                            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            </svg>
+                                            <span>Family</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-100">
             <?php foreach ($residents as $index => $r): ?>
-                <div class="resident-card hover-lift animate-fade-in-up rounded-3xl overflow-hidden" 
+                                    <tr class="resident-row hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50 transition-all duration-200" 
                      data-name="<?php echo strtolower(htmlspecialchars($r['last_name'] . ' ' . $r['first_name'])); ?>"
-                     style="animation-delay: <?php echo $index * 0.1; ?>s">
-                    
-                    <!-- Resident Header -->
-                    <div class="p-8 border-b border-gray-100/50">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-6">
-                                <div class="avatar-gradient w-20 h-20 rounded-3xl flex items-center justify-center shadow-lg">
-                                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        style="animation-delay: <?php echo $index * 0.05; ?>s">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                     </svg>
                                 </div>
                                 <div>
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <h3 class="text-2xl font-bold text-gray-900"><?php echo htmlspecialchars(format_full_name($r['first_name'], $r['last_name'], $r['middle_initial'] ?? null)); ?></h3>
+                                                    <div class="text-sm font-semibold text-gray-900"><?php echo htmlspecialchars(format_full_name($r['first_name'], $r['last_name'], $r['middle_initial'] ?? null)); ?></div>
+                                                    <div class="text-xs text-gray-500">Resident</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm font-medium text-gray-900"><?php echo (int)$r['id']; ?></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if ($r['phone']): ?>
+                                                <div class="text-sm text-gray-900"><?php echo htmlspecialchars($r['phone']); ?></div>
+                                            <?php else: ?>
+                                                <span class="text-xs text-gray-400 italic">Not provided</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <?php 
+                                            // Build address from purok and barangay
+                                            $address_parts = [];
+                                            if (!empty($r['purok_name'])) {
+                                                $purok_name = htmlspecialchars($r['purok_name']);
+                                                // Check if purok name already starts with "Purok"
+                                                if (stripos($purok_name, 'Purok') === 0) {
+                                                    $address_parts[] = $purok_name;
+                                                } else {
+                                                    $address_parts[] = 'Purok ' . $purok_name;
+                                                }
+                                            }
+                                            if (!empty($r['barangay_name'])) {
+                                                $address_parts[] = htmlspecialchars($r['barangay_name']);
+                                            }
+                                            $full_address = !empty($address_parts) ? implode(', ', $address_parts) : null;
+                                            
+                                            if ($full_address): ?>
+                                                <div class="text-sm text-gray-900 max-w-xs truncate" title="<?php echo $full_address; ?>"><?php echo $full_address; ?></div>
+                                            <?php else: ?>
+                                                <span class="text-xs text-gray-400 italic">Not provided</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-center">
                                         <?php if ($r['resident_type'] === 'Walk-in'): ?>
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
                                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                                 </svg>
                                                 Walk-in
                                             </span>
                                         <?php else: ?>
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
                                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                                 </svg>
                                                 Registered
                                             </span>
                                         <?php endif; ?>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                                            <div class="flex items-center justify-center space-x-2">
+                                                <span class="text-lg font-bold text-blue-600"><?php echo (int)$r['family_count']; ?></span>
+                                                <span class="text-xs text-gray-500">member<?php echo (int)$r['family_count'] !== 1 ? 's' : ''; ?></span>
                                     </div>
-                                    <div class="flex items-center space-x-6 mb-2">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                                            </svg>
-                                            <span class="text-sm text-gray-500 font-medium">ID: <?php echo (int)$r['id']; ?></span>
-                                        </div>
-                                        <?php if ($r['phone']): ?>
-                                            <div class="flex items-center space-x-2">
-                                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
-                                                </svg>
-                                                <span class="text-sm text-gray-500 font-medium"><?php echo htmlspecialchars($r['phone']); ?></span>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php if ($r['address']): ?>
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                            </svg>
-                                            <p class="text-sm text-gray-600"><?php echo htmlspecialchars($r['address']); ?></p>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                            <div class="flex items-center space-x-6">
-                                <div class="text-center">
-                                    <div class="text-sm text-gray-500 font-medium mb-1">Family Members</div>
-                                    <div class="text-4xl font-bold text-blue-600"><?php echo (int)$r['family_count']; ?></div>
-                                    <div class="text-xs text-blue-500 mt-1"><?php echo $r['resident_type']; ?></div>
-                                </div>
-                                <button onclick="toggleFamily(<?php echo (int)$r['id']; ?>)" class="btn-gradient ripple-effect inline-flex items-center px-6 py-3 text-white font-semibold rounded-2xl shadow-lg">
-                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                                            <button onclick="toggleFamily(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105">
+                                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                     </svg>
                                     <span id="toggle-text-<?php echo (int)$r['id']; ?>">View Family</span>
                                 </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Family Members Section -->
-                    <div id="family-<?php echo (int)$r['id']; ?>" class="hidden p-8 bg-gradient-to-br from-gray-50 to-blue-50/30">
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Expandable Family Members Row -->
+                                    <tr id="family-<?php echo (int)$r['id']; ?>" class="hidden">
+                                        <td colspan="7" class="px-0 py-0">
+                                            <div class="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 border-t border-l border-r border-purple-200 rounded-b-xl overflow-hidden">
+                                                <div class="px-6 py-6">
                         <?php if (isset($families_by_resident[$r['id']]) && !empty($families_by_resident[$r['id']])): ?>
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <?php foreach ($families_by_resident[$r['id']] as $family): ?>
-                                    <div class="family-member-card p-6 rounded-2xl shadow-sm">
-                                        <div class="flex items-center space-x-4">
-                                            <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <!-- Family Members Grid -->
+                                                        <div class="mb-4">
+                                                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-2 mb-4">
+                                                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                </svg>
+                                                                <span>Family Members (<?php echo count($families_by_resident[$r['id']]); ?>)</span>
+                                                            </h4>
+                                                        </div>
+                                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                            <?php foreach ($families_by_resident[$r['id']] as $index => $family): ?>
+                                                                <div class="family-member-card-modern bg-white p-5 rounded-xl shadow-md border border-gray-200 hover:shadow-lg hover:border-purple-300 transition-all duration-300 transform hover:-translate-y-1" style="animation-delay: <?php echo $index * 0.1; ?>s">
+                                                                    <div class="flex items-start space-x-4">
+                                                                        <div class="w-14 h-14 bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                                                                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                                 </svg>
                                             </div>
-                                            <div class="flex-1">
-                                                <h4 class="text-lg font-bold text-gray-900 mb-2"><?php echo htmlspecialchars($family['full_name']); ?></h4>
-                                                <div class="flex items-center space-x-2">
-                                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                                                        <div class="flex-1 min-w-0">
+                                                                            <div class="text-base font-bold text-gray-900 mb-2 truncate"><?php echo htmlspecialchars($family['full_name']); ?></div>
+                                                                            <?php 
+                                                                            $relationship = strtolower($family['relationship']);
+                                                                            $badgeClass = 'bg-gray-100 text-gray-800';
+                                                                            if (strpos($relationship, 'spouse') !== false || strpos($relationship, 'wife') !== false || strpos($relationship, 'husband') !== false) {
+                                                                                $badgeClass = 'bg-pink-100 text-pink-800 border-pink-200';
+                                                                            } elseif (strpos($relationship, 'child') !== false || strpos($relationship, 'son') !== false || strpos($relationship, 'daughter') !== false) {
+                                                                                $badgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                                                                            } elseif (strpos($relationship, 'parent') !== false || strpos($relationship, 'mother') !== false || strpos($relationship, 'father') !== false) {
+                                                                                $badgeClass = 'bg-green-100 text-green-800 border-green-200';
+                                                                            } elseif (strpos($relationship, 'sibling') !== false || strpos($relationship, 'brother') !== false || strpos($relationship, 'sister') !== false) {
+                                                                                $badgeClass = 'bg-purple-100 text-purple-800 border-purple-200';
+                                                                            }
+                                                                            ?>
+                                                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold <?php echo $badgeClass; ?> border">
+                                                                                <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                                </svg>
                                                         <?php echo htmlspecialchars($family['relationship']); ?>
                                                     </span>
-                                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
                         <?php else: ?>
-                            <div class="text-center py-12">
-                                <div class="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                                    <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                                        <!-- Enhanced Empty State -->
+                                                        <div class="text-center py-12 px-4">
+                                                            <div class="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-purple-100 via-indigo-100 to-blue-100 rounded-2xl shadow-lg mb-6 relative">
+                                                                <svg class="w-12 h-12 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                </svg>
+                                                                <div class="absolute -top-1 -right-1 w-6 h-6 bg-purple-200 rounded-full flex items-center justify-center">
+                                                                    <svg class="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                                     </svg>
                                 </div>
-                                <h4 class="text-xl font-bold text-gray-900 mb-3">No Family Members</h4>
-                                <p class="text-gray-500 text-lg">This resident hasn't registered any family members yet.</p>
+                                                            </div>
+                                                            <h4 class="text-lg font-bold text-gray-900 mb-2">No Family Members</h4>
+                                                            <p class="text-sm text-gray-600 max-w-md mx-auto mb-6">
+                                                                This resident hasn't registered any family members yet. Family members can be added through the registration process.
+                                                            </p>
+                                                            <div class="inline-flex items-center px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                                                                <svg class="w-4 h-4 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                                </svg>
+                                                                <span class="text-xs text-purple-700 font-medium">Family members will appear here once registered</span>
+                                                            </div>
                             </div>
                         <?php endif; ?>
                     </div>
                 </div>
+                                        </td>
+                                    </tr>
             <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
         </div>
 
                 <!-- No Results Message -->
@@ -757,10 +1039,9 @@ foreach ($family_members as $family) {
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchInput');
-        const residentCards = document.querySelectorAll('.resident-card');
-        const residentsGrid = document.getElementById('residentsGrid');
+        const residentRows = document.querySelectorAll('.resident-row');
+        const residentsTable = document.getElementById('residentsTable');
         const noResults = document.getElementById('noResults');
-        const residentCount = document.getElementById('resident-count');
 
         let currentSearch = '';
 
@@ -775,8 +1056,8 @@ foreach ($family_members as $family) {
         function filterResidents() {
             let visibleCount = 0;
             
-            residentCards.forEach(card => {
-                const name = card.dataset.name;
+            residentRows.forEach(row => {
+                const name = row.dataset.name;
                 
                 let matchesSearch = true;
                 
@@ -786,27 +1067,30 @@ foreach ($family_members as $family) {
                 }
                 
                 if (matchesSearch) {
-                    card.style.display = 'block';
-                    card.classList.add('animate-fade-in');
+                    row.style.display = '';
                     visibleCount++;
+                    // Also show/hide the family row if it exists
+                    const familyRow = row.nextElementSibling;
+                    if (familyRow && familyRow.id && familyRow.id.startsWith('family-')) {
+                        // Keep family row visibility state as is (don't force show)
+                    }
                 } else {
-                    card.style.display = 'none';
-                    card.classList.remove('animate-fade-in');
+                    row.style.display = 'none';
+                    // Hide the family row if it exists
+                    const familyRow = row.nextElementSibling;
+                    if (familyRow && familyRow.id && familyRow.id.startsWith('family-')) {
+                        familyRow.style.display = 'none';
+                    }
                 }
             });
             
-            // Update count
-            if (residentCount) {
-                residentCount.textContent = visibleCount;
-            }
-            
             // Show/hide no results message
-            if (visibleCount === 0 && currentSearch) {
+            if (visibleCount === 0) {
                 if (noResults) noResults.classList.remove('hidden');
-                if (residentsGrid) residentsGrid.classList.add('hidden');
+                if (residentsTable) residentsTable.closest('.bg-white').classList.add('hidden');
             } else {
                 if (noResults) noResults.classList.add('hidden');
-                if (residentsGrid) residentsGrid.classList.remove('hidden');
+                if (residentsTable) residentsTable.closest('.bg-white').classList.remove('hidden');
             }
         }
 
@@ -827,18 +1111,129 @@ foreach ($family_members as $family) {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
+                    entry.target.style.transform = 'translateX(0)';
                 }
             });
         }, observerOptions);
 
-        // Observe all animated elements
-        document.querySelectorAll('.animate-fade-in-up, .animate-fade-in, .animate-slide-in-right').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(20px)';
-            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-            observer.observe(el);
+        // Observe all table rows for animations
+        residentRows.forEach((row, index) => {
+            row.style.opacity = '0';
+            row.style.transform = 'translateX(-20px)';
+            row.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+            setTimeout(() => {
+                observer.observe(row);
+            }, index * 50);
         });
+
+        // Header Functions
+        // Real-time clock update
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+
+        // Update clock every second
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // Night mode functionality
+        function initNightMode() {
+            const toggle = document.getElementById('night-mode-toggle');
+            const body = document.body;
+            
+            if (!toggle) return;
+            
+            // Check for saved theme preference or default to light mode
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            if (currentTheme === 'dark') {
+                body.classList.add('dark');
+                toggle.innerHTML = `
+                    <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
+                    </svg>
+                `;
+            }
+            
+            toggle.addEventListener('click', function() {
+                body.classList.toggle('dark');
+                
+                if (body.classList.contains('dark')) {
+                    localStorage.setItem('theme', 'dark');
+                    toggle.innerHTML = `
+                        <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
+                        </svg>
+                    `;
+                } else {
+                    localStorage.setItem('theme', 'light');
+                    toggle.innerHTML = `
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    `;
+                }
+            });
+        }
+
+        // Profile dropdown functionality
+        function initProfileDropdown() {
+            const toggle = document.getElementById('profile-toggle');
+            const menu = document.getElementById('profile-menu');
+            const arrow = document.getElementById('profile-arrow');
+            
+            if (!toggle || !menu || !arrow) return;
+            
+            toggle.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (menu.classList.contains('hidden')) {
+                    menu.classList.remove('hidden');
+                    arrow.classList.add('rotate-180');
+                } else {
+                    menu.classList.add('hidden');
+                    arrow.classList.remove('rotate-180');
+                }
+            };
+            
+            // Close dropdown when clicking outside
+            if (!window.bhwResidentsProfileDropdownClickHandler) {
+                window.bhwResidentsProfileDropdownClickHandler = function(e) {
+                    const toggle = document.getElementById('profile-toggle');
+                    const menu = document.getElementById('profile-menu');
+                    if (menu && !toggle.contains(e.target) && !menu.contains(e.target)) {
+                        menu.classList.add('hidden');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('click', window.bhwResidentsProfileDropdownClickHandler);
+            }
+            
+            // Close dropdown when pressing Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const menu = document.getElementById('profile-menu');
+                    const arrow = document.getElementById('profile-arrow');
+                    if (menu) menu.classList.add('hidden');
+                    if (arrow) arrow.classList.remove('rotate-180');
+                }
+            });
+        }
+
+        // Initialize night mode and profile dropdown
+        initNightMode();
+        initProfileDropdown();
 
             // Add hover effects to cards (excluding buttons)
             document.querySelectorAll('.hover-lift:not(button)').forEach(card => {
@@ -865,17 +1260,38 @@ foreach ($family_members as $family) {
             }
         });
 
-        // Toggle family members visibility
+        // Toggle family members visibility with smooth animation
         function toggleFamily(residentId) {
             const familySection = document.getElementById('family-' + residentId);
             const toggleText = document.getElementById('toggle-text-' + residentId);
             
+            if (familySection) {
             if (familySection.classList.contains('hidden')) {
                 familySection.classList.remove('hidden');
-                toggleText.textContent = 'Hide Family';
+                    familySection.style.display = '';
+                    // Trigger animation
+                    setTimeout(() => {
+                        familySection.style.opacity = '1';
+                    }, 10);
+                    if (toggleText) toggleText.textContent = 'Hide Family';
+                    
+                    // Animate family member cards
+                    const cards = familySection.querySelectorAll('.family-member-card-modern');
+                    cards.forEach((card, index) => {
+                        setTimeout(() => {
+                            card.style.opacity = '1';
+                            card.style.transform = 'translateY(0)';
+                        }, index * 100);
+                    });
             } else {
+                    // Hide with animation
+                    familySection.style.opacity = '0';
+                    setTimeout(() => {
                 familySection.classList.add('hidden');
-                toggleText.textContent = 'View Family';
+                        familySection.style.display = 'none';
+                    }, 300);
+                    if (toggleText) toggleText.textContent = 'View Family';
+                }
             }
         }
     </script>

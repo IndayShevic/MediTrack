@@ -41,7 +41,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($success) {
             echo json_encode(['success' => true, 'message' => 'Verification code sent to your email']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to send verification code']);
+            // Check if it's a common email delivery issue
+            $domain = substr(strrchr($email, "@"), 1);
+            $commonIssues = [
+                'gmail.com' => 'Gmail delivery issues',
+                'yahoo.com' => 'Yahoo delivery issues', 
+                'hotmail.com' => 'Hotmail delivery issues',
+                'outlook.com' => 'Outlook delivery issues'
+            ];
+            
+            $errorMessage = 'Failed to send verification code. ';
+            
+            // Check if it's a known provider with delivery issues
+            if (isset($commonIssues[$domain])) {
+                $errorMessage .= 'There may be temporary delivery issues with ' . $domain . '. Please try again in a few minutes.';
+            } else {
+                $errorMessage .= 'This email address may not exist or cannot receive emails. Please check your email address and try again.';
+            }
+            
+            echo json_encode(['success' => false, 'message' => $errorMessage]);
         }
         exit;
     }

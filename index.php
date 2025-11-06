@@ -116,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $last = trim($_POST['last_name'] ?? '');
     $middle = trim($_POST['middle_initial'] ?? '');
     $dob = $_POST['date_of_birth'] ?? '';
+    $barangay_id = (int)($_POST['barangay_id'] ?? 0);
     $purok_id = (int)($_POST['purok_id'] ?? 0);
     $phone = trim($_POST['phone'] ?? '');
     $address = trim($_POST['address'] ?? '');
@@ -142,10 +143,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($dob)) {
         $errors[] = 'Please select your date of birth.';
+    } else {
+        // Age validation - must be 18+
+        $birthDate = new DateTime($dob);
+        $today = new DateTime();
+        $age = $today->diff($birthDate)->y;
+        
+        if ($age < 18) {
+            $errors[] = 'You must be at least 18 years old to register.';
+        }
+    }
+    
+    // Middle initial validation - if provided, must be exactly 1 character
+    if (!empty($middle) && strlen(trim($middle)) > 1) {
+        $errors[] = 'Middle initial can only be 1 character.';
     }
     
     if (empty($phone)) {
         $errors[] = 'Please enter your phone number.';
+    }
+    
+    if (empty($barangay_id)) {
+        $errors[] = 'Please select your barangay.';
     }
     
     if (empty($purok_id)) {
@@ -170,6 +189,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (empty($last_name) || strlen($last_name) < 2) {
                     $errors[] = "Family member " . ($index + 1) . ": Last name must be at least 2 characters long.";
+                }
+                
+                // Middle initial validation for family members
+                if (!empty($middle_initial) && strlen(trim($middle_initial)) > 1) {
+                    $errors[] = "Family member " . ($index + 1) . ": Middle initial can only be 1 character.";
                 }
                 
                 if (empty($relationship)) {
@@ -207,11 +231,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
             $hash = password_hash($password, PASSWORD_BCRYPT);
             
-            // Get barangay_id from purok_id
-            $q = db()->prepare('SELECT barangay_id FROM puroks WHERE id = ? LIMIT 1');
-            $q->execute([$purok_id]);
-            $row = $q->fetch();
-            $barangay_id = $row ? (int)$row['barangay_id'] : 0;
+            // Get barangay and purok names for address generation
+            $barangayQuery = db()->prepare('SELECT name FROM barangays WHERE id = ? LIMIT 1');
+            $barangayQuery->execute([$barangay_id]);
+            $barangayRow = $barangayQuery->fetch();
+            $barangayName = $barangayRow ? $barangayRow['name'] : '';
+            
+            $purokQuery = db()->prepare('SELECT name FROM puroks WHERE id = ? LIMIT 1');
+            $purokQuery->execute([$purok_id]);
+            $purokRow = $purokQuery->fetch();
+            $purokName = $purokRow ? $purokRow['name'] : '';
+            
+            // Generate address in format: "Purok X, BarangayName"
+            $address = $purokName && $barangayName ? "$purokName, $barangayName" : '';
             
             // Insert into pending_residents table (email is already verified at this point)
             $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, date_of_birth, phone, address, barangay_id, purok_id, email_verified) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
@@ -295,6 +327,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>MediTrack - Medicine Management - UPDATED WITH SEPARATE NAME FIELDS!</title>
     
     <!-- Favicon -->
@@ -309,8 +344,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="public/assets/css/design-system.css">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="public/assets/css/design-system.css?v=<?php echo time(); ?>">
+    <script src="https://cdn.tailwindcss.com?v=<?php echo time(); ?>"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -656,36 +691,725 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             animation: gradientShift 3s ease infinite;
         }
         
-        /* Scroll reveal animations */
+        /* Enhanced Scroll reveal animations */
         .scroll-reveal {
+            opacity: 0;
+            transform: translateY(50px) scale(0.95);
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .scroll-reveal.active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        .scroll-reveal-left {
+            opacity: 0;
+            transform: translateX(-50px) rotateY(-10deg);
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .scroll-reveal-left.active {
+            opacity: 1;
+            transform: translateX(0) rotateY(0deg);
+        }
+        .scroll-reveal-right {
+            opacity: 0;
+            transform: translateX(50px) rotateY(10deg);
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .scroll-reveal-right.active {
+            opacity: 1;
+            transform: translateX(0) rotateY(0deg);
+        }
+        .scroll-reveal-scale {
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+        .scroll-reveal-scale.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
+        /* Enhanced card animations */
+        .card {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            transform-style: preserve-3d;
+        }
+        
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(139, 92, 246, 0.05));
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        
+        .card:hover::after {
+            opacity: 1;
+        }
+        
+        .card:hover {
+            transform: translateY(-8px) rotateX(2deg);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.1);
+        }
+        
+        /* Enhanced hero text animation */
+        .hero-title {
+            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 50%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 200% auto;
+            animation: gradientShift 4s ease infinite;
+        }
+        
+        /* Floating animation for hero elements */
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        .float-animation-delayed {
+            animation: float 6s ease-in-out infinite;
+            animation-delay: 1.5s;
+        }
+        
+        /* Pulse glow effect */
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(59, 130, 246, 0.6), 0 0 60px rgba(139, 92, 246, 0.4);
+            }
+        }
+        
+        .pulse-glow {
+            animation: pulseGlow 3s ease-in-out infinite;
+        }
+        
+        /* Stagger animation for feature cards */
+        .feature-card {
             opacity: 0;
             transform: translateY(30px);
             transition: opacity 0.6s ease, transform 0.6s ease;
         }
-        .scroll-reveal.active {
+        
+        .feature-card.active {
             opacity: 1;
             transform: translateY(0);
         }
-        .scroll-reveal-left {
+        
+        /* Enhanced button ripple effect */
+        .btn-ripple {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-ripple::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn-ripple:active::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        /* Text typing animation */
+        @keyframes typing {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+        
+        @keyframes blink {
+            from, to { border-color: transparent; }
+            50% { border-color: #3b82f6; }
+        }
+        
+        /* Enhanced navigation */
+        nav {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        nav.scrolled {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        /* Parallax effect */
+        .parallax-element {
+            transition: transform 0.1s ease-out;
+        }
+        
+        /* Gradient border animation */
+        @keyframes borderGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .gradient-border {
+            position: relative;
+            background: white;
+            border-radius: 1rem;
+        }
+        
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 1rem;
+            padding: 2px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+            background-size: 200% 200%;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: borderGradient 3s ease infinite;
             opacity: 0;
-            transform: translateX(-30px);
-            transition: opacity 0.6s ease, transform 0.6s ease;
+            transition: opacity 0.3s ease;
         }
-        .scroll-reveal-left.active {
+        
+        .gradient-border:hover::before {
             opacity: 1;
-            transform: translateX(0);
         }
-        .scroll-reveal-right {
+        
+        /* Shimmer effect */
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+        
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite;
+        }
+        
+        /* Number counter animation */
+        @keyframes countUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .count-up {
+            animation: countUp 0.8s ease forwards;
+        }
+        
+        /* Enhanced modal entrance */
+        @keyframes modalEntrance {
+            0% {
+                opacity: 0;
+                transform: scale(0.8) translateY(-20px);
+                filter: blur(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+                filter: blur(0);
+            }
+        }
+        
+        #loginModal > div, #registerModal > div {
+            animation: modalEntrance 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        
+        /* Magnetic effect for buttons */
+        .magnetic {
+            transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        
+        /* Loading spinner */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            border: 3px solid rgba(59, 130, 246, 0.1);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Text reveal animation */
+        @keyframes textReveal {
+            from {
+                clip-path: inset(0 100% 0 0);
+            }
+            to {
+                clip-path: inset(0 0 0 0);
+            }
+        }
+        
+        .text-reveal {
+            animation: textReveal 1s ease forwards;
+        }
+        
+        /* Enhanced badge animation */
+        .badge-pill {
+            animation: scaleIn 0.6s ease forwards;
+            transition: transform 0.3s ease;
+        }
+        
+        .badge-pill:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Icon rotation on hover */
+        .icon-rotate {
+            transition: transform 0.3s ease;
+        }
+        
+        .icon-rotate:hover {
+            transform: rotate(360deg);
+        }
+        
+        /* 4D Logo Styles */
+        .logo-4d-container {
+            perspective: 1000px;
+            transform-style: preserve-3d;
+        }
+        
+        .logo-4d-panel {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 24px;
+            padding: 3rem;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.3s ease;
+        }
+        
+        .logo-4d-panel:hover {
+            transform: rotateY(-5deg) rotateX(2deg);
+        }
+        
+        .logo-4d-emblem {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 2rem;
+            transform-style: preserve-3d;
+        }
+        
+        .logo-cross {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: translateZ(20px);
+        }
+        
+        .logo-cross::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 28%;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            border-radius: 10px;
+            transform: translateY(-50%);
+            box-shadow: 
+                0 8px 20px rgba(37, 99, 235, 0.4),
+                0 3px 10px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(255, 255, 255, 0.3),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .logo-cross::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 28%;
+            height: 100%;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            border-radius: 10px;
+            transform: translateX(-50%);
+            box-shadow: 
+                0 8px 20px rgba(37, 99, 235, 0.4),
+                0 3px 10px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(255, 255, 255, 0.3),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .logo-pill {
+            position: absolute;
+            width: 35px;
+            height: 80px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) translateZ(30px);
+            box-shadow: 
+                0 10px 25px rgba(0, 0, 0, 0.2),
+                0 5px 10px rgba(0, 0, 0, 0.1),
+                inset 0 2px 4px rgba(255, 255, 255, 0.8),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo-pill-cap {
+            position: absolute;
+            width: 35px;
+            height: 25px;
+            background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+            border-radius: 20px 20px 0 0;
+            top: 0;
+            left: 0;
+            box-shadow: 
+                0 5px 10px rgba(34, 197, 94, 0.3),
+                inset 0 2px 4px rgba(255, 255, 255, 0.4);
+        }
+        
+        .logo-checkmark {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            bottom: 15px;
+            right: 10px;
+            transform: translateZ(40px) rotate(-10deg);
+        }
+        
+        .logo-checkmark::before {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 25px;
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            border-radius: 4px;
+            bottom: 0;
+            left: 12px;
+            transform: rotate(45deg);
+            box-shadow: 
+                0 5px 15px rgba(249, 115, 22, 0.4),
+                0 2px 5px rgba(0, 0, 0, 0.2),
+                inset 0 1px 2px rgba(255, 255, 255, 0.4);
+        }
+        
+        .logo-checkmark::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 18px;
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            border-radius: 4px;
+            bottom: 8px;
+            right: 0;
+            transform: rotate(-45deg);
+            box-shadow: 
+                0 5px 15px rgba(249, 115, 22, 0.4),
+                0 2px 5px rgba(0, 0, 0, 0.2),
+                inset 0 1px 2px rgba(255, 255, 255, 0.4);
+        }
+        
+        .logo-text-3d {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #1e3a8a;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            text-shadow: 
+                0 4px 8px rgba(30, 58, 138, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.2),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+            transform: translateZ(10px);
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 4px 6px rgba(30, 58, 138, 0.3));
+        }
+        
+        .logo-tagline {
+            font-size: 0.875rem;
+            color: #6b7280;
+            text-align: center;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        @keyframes logoFloat {
+            0%, 100% {
+                transform: translateY(0) rotateY(0deg);
+            }
+            50% {
+                transform: translateY(-10px) rotateY(5deg);
+            }
+        }
+        
+        .logo-4d-emblem {
+            animation: logoFloat 6s ease-in-out infinite;
+        }
+        
+        .logo-4d-panel::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+            border-radius: 24px;
+            z-index: -1;
             opacity: 0;
-            transform: translateX(30px);
-            transition: opacity 0.6s ease, transform 0.6s ease;
+            transition: opacity 0.3s ease;
         }
-        .scroll-reveal-right.active {
+        
+        .logo-4d-panel:hover::before {
             opacity: 1;
-            transform: translateX(0);
+        }
+        
+        /* Login Modal Enhancements */
+        .login-modal-header {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #7c3aed 100%);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .login-modal-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        .login-modal-header::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 5s ease-in-out infinite;
+        }
+        
+        /* Mini Logo for Login Modal */
+        .login-logo-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .login-logo-mini {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            transform-style: preserve-3d;
+            animation: logoFloat 4s ease-in-out infinite;
+        }
+        
+        .login-logo-cross-mini {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: translateZ(15px);
+        }
+        
+        .login-logo-cross-mini::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 25%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+            border-radius: 8px;
+            transform: translateY(-50%);
+            box-shadow: 
+                0 6px 15px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(255, 255, 255, 0.5),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .login-logo-cross-mini::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 25%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+            border-radius: 8px;
+            transform: translateX(-50%);
+            box-shadow: 
+                0 6px 15px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(255, 255, 255, 0.5),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .login-logo-pill-mini {
+            position: absolute;
+            width: 24px;
+            height: 55px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.9) 100%);
+            border-radius: 12px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) translateZ(20px);
+            box-shadow: 
+                0 6px 15px rgba(0, 0, 0, 0.25),
+                inset 0 2px 4px rgba(255, 255, 255, 0.9),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .login-logo-pill-cap-mini {
+            position: absolute;
+            width: 24px;
+            height: 18px;
+            background: linear-gradient(180deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.9) 100%);
+            border-radius: 12px 12px 0 0;
+            top: 0;
+            left: 0;
+            box-shadow: 
+                0 3px 8px rgba(34, 197, 94, 0.3),
+                inset 0 1px 3px rgba(255, 255, 255, 0.5);
+        }
+        
+        .login-logo-checkmark-mini {
+            position: absolute;
+            width: 35px;
+            height: 35px;
+            bottom: 10px;
+            right: 8px;
+            transform: translateZ(25px) rotate(-10deg);
+        }
+        
+        .login-logo-checkmark-mini::before {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 18px;
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.95) 0%, rgba(234, 88, 12, 0.95) 100%);
+            border-radius: 3px;
+            bottom: 0;
+            left: 8px;
+            transform: rotate(45deg);
+            box-shadow: 
+                0 3px 10px rgba(249, 115, 22, 0.4),
+                inset 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+        
+        .login-logo-checkmark-mini::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 12px;
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.95) 0%, rgba(234, 88, 12, 0.95) 100%);
+            border-radius: 3px;
+            bottom: 5px;
+            right: 0;
+            transform: rotate(-45deg);
+            box-shadow: 
+                0 3px 10px rgba(249, 115, 22, 0.4),
+                inset 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Login Input Groups */
+        .login-input-group {
+            animation: fadeInUp 0.5s ease forwards;
+        }
+        
+        .login-input-group:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+        
+        .login-input-group:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .login-input-group input:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
+        }
+        
+        /* Login Submit Button */
+        .login-submit-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .login-submit-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .login-submit-btn:hover::before {
+            width: 400px;
+            height: 400px;
+        }
+        
+        /* Register Modal Header Enhancements */
+        .register-modal-header {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #7c3aed 100%);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .register-modal-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        .register-modal-header::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 5s ease-in-out infinite;
+        }
+        
+        /* Smooth fade in for sections */
+        section {
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        
+        section.visible {
+            opacity: 1;
         }
     </style>
-</head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative overflow-x-hidden">
     <!-- Navigation -->
     <nav class="fixed top-0 w-full z-50 border-b border-gray-200 bg-white shadow-sm">
@@ -782,69 +1506,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center">
                 <!-- Left content -->
                 <div class="space-y-4 sm:space-y-6 animate-slide-in-left text-center lg:text-left">
-                    <div class="badge-pill w-max mx-auto lg:mx-0">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <div class="badge-pill w-max mx-auto lg:mx-0 float-animation">
+                        <svg class="w-4 h-4 icon-rotate" viewBox="0 0 24 24" fill="none">
                             <path d="M5 13l4 4L19 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         Barangay-first healthcare
                     </div>
 
-                    <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-gray-900">
+                    <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight hero-title">
                         Protecting your Health,
-                        <span class="block bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">
+                        <span class="block text-gradient animate-gradient">
                             Our Priority
                         </span>
                     </h1>
 
-                    <p class="text-base sm:text-lg lg:text-xl text-gray-600 max-w-xl mx-auto lg:mx-0">
+                    <p class="text-base sm:text-lg lg:text-xl text-gray-600 max-w-xl mx-auto lg:mx-0 scroll-reveal">
                     Track and distribute medicines efficiently at the barangay level—connecting residents, BHWs, and admins in one smart system for faster service, accurate inventory, and healthier communities.
                     </p>
 
                     <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center lg:justify-start">
-                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-6 sm:px-7 py-3 shadow-glow hover:scale-105 transition-transform flex items-center justify-center gap-2 group">
+                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-6 sm:px-7 py-3 shadow-glow hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group btn-ripple magnetic pulse-glow">
                             <span>Get started</span>
                             <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                             </svg>
                         </button>
-                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-6 sm:px-7 py-3 hover:scale-105 transition-transform flex items-center justify-center">
+                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-6 sm:px-7 py-3 hover:scale-105 transition-all duration-300 flex items-center justify-center magnetic">
                             Learn more
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
                         </a>
                     </div>
                     
-                    <div class="flex items-center gap-4 pt-3 text-sm text-gray-600 justify-center lg:justify-start">
+                    <div class="flex items-center gap-4 pt-3 text-sm text-gray-600 justify-center lg:justify-start float-animation-delayed">
                         <div class="flex -space-x-2">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white grid place-items-center font-semibold shadow-md">B</div>
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white grid place-items-center font-semibold shadow-md">H</div>
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white grid place-items-center font-semibold shadow-md">W</div>
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300">B</div>
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300 delay-100">H</div>
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300 delay-200">W</div>
                         </div>
                         <span class="hidden sm:inline">Trusted by barangays and healthcare workers</span>
                         <span class="sm:hidden text-xs">Trusted by barangays</span>
                     </div>
                 </div>
 
-                <!-- Right visual -->
-                <div class="relative animate-slide-in-right">
-                    <div class="glass-card-xl p-6 tilt">
-                        <div class="relative rounded-2xl overflow-hidden">
-                            <div class="absolute -inset-8 bg-gradient-to-tr from-blue-400/20 via-indigo-400/20 to-fuchsia-400/20 blur-2xl"></div>
-                            <img class="relative rounded-xl shadow-2xl w-full"
-                                 src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=1200&auto=format&fit=crop"
-                                 alt="MediTrack preview" />
+                <!-- Right visual - 4D Logo -->
+                <div class="relative animate-slide-in-right float-animation">
+                    <div class="logo-4d-container">
+                        <div class="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-6 shadow-2xl">
+                            <div class="logo-4d-panel">
+                                <div class="logo-4d-emblem">
+                                    <div class="logo-cross"></div>
+                                    <div class="logo-pill">
+                                        <div class="logo-pill-cap"></div>
                                 </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                            <div class="card p-4">
-                                <div class="text-xs text-gray-500">Status</div>
-                                <div class="mt-1 font-semibold text-gray-900">Request approved</div>
+                                    <div class="logo-checkmark"></div>
                                 </div>
-                            <div class="card p-4">
-                                <div class="text-xs text-gray-500">Inventory</div>
-                                <div class="mt-1 font-semibold text-gray-900">FEFO applied</div>
-                            </div>
-                            <div class="card p-4">
-                                <div class="text-xs text-gray-500">Allocation</div>
-                                <div class="mt-1 font-semibold text-gray-900">Seniors updated</div>
+                                <h2 class="logo-text-3d">MediTrack</h2>
+                                <p class="logo-tagline">Medicine Inventory Management</p>
                             </div>
                         </div>
                     </div>
@@ -859,11 +1578,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- Features Section -->
         <section id="features" class="py-12 sm:py-16 lg:py-20 bg-white/60">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left">Powerful Features</h2>
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left scroll-reveal">
+                    <span class="hero-title">Powerful Features</span>
+                </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    <div class="card">
+                    <div class="card scroll-reveal">
                         <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
                                 <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             </div>
                             <div>
@@ -872,9 +1593,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                     </div>
-                    <div class="card">
+                    <div class="card scroll-reveal delay-200">
                         <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
                                 <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </div>
                             <div>
@@ -883,9 +1604,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                     </div>
-                    <div class="card">
+                    <div class="card scroll-reveal delay-400">
                         <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
                                 <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                             </div>
                             <div>
@@ -1075,22 +1796,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Enhanced Registration Modal -->
     <div id="registerModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all duration-300">
-            <!-- Clean White Header -->
-            <div class="relative bg-white border-b border-gray-100 p-8">
-                <button onclick="closeRegisterModal()" class="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors z-10">
+            <!-- Enhanced Header with Logo -->
+            <div class="register-modal-header relative bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 border-b border-gray-100 p-8">
+                <button onclick="closeRegisterModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors z-20 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                 </button>
                 
-                <div class="text-center">
-                    <div class="w-16 h-16 bg-gray-50 rounded-full mx-auto mb-4 flex items-center justify-center">
-                        <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-                        </svg>
+                <div class="relative text-center z-10">
+                    <!-- 4D Logo -->
+                    <div class="login-logo-container">
+                        <div class="login-logo-mini">
+                            <div class="login-logo-cross-mini"></div>
+                            <div class="login-logo-pill-mini">
+                                <div class="login-logo-pill-cap-mini"></div>
                     </div>
-                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Create Resident Account</h2>
-                    <p class="text-gray-600">Join MediTrack to manage your medicine requests</p>
+                            <div class="login-logo-checkmark-mini"></div>
+                        </div>
+                    </div>
+                    
+                    <h2 class="text-3xl font-bold text-white mb-2 drop-shadow-lg">Create Your Account</h2>
+                    <p class="text-blue-100 text-sm">Join MediTrack and start managing your medicine requests</p>
                 </div>
             </div>
                 
@@ -1157,7 +1884,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <input name="middle_initial" 
                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                        placeholder="D." 
-                                       maxlength="10" />
+                                       maxlength="1" 
+                                       id="middle_initial_input" />
                             </div>
                             
                             <!-- Last Name -->
@@ -1179,9 +1907,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
                                         </svg>
                                     </div>
-                                    <input type="email" name="email" required 
-                                           class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
+                                    <input type="email" name="email" id="email-input" required 
+                                           class="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                            placeholder="you@example.com" />
+                                    <!-- Email validation status icon -->
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <div id="email-status-icon" class="hidden">
+                                            <!-- Success icon -->
+                                            <svg id="email-success-icon" class="w-5 h-5 text-green-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                            <!-- Error icon -->
+                                            <svg id="email-error-icon" class="w-5 h-5 text-red-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                            <!-- Loading spinner -->
+                                            <svg id="email-loading-icon" class="w-5 h-5 text-gray-400 animate-spin hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Email validation message -->
+                                <div id="email-validation-message" class="hidden text-sm">
+                                    <p id="email-message-text"></p>
                                 </div>
                             </div>
                             
@@ -1219,6 +1968,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         </svg>
                                     </div>
                                     <input type="date" name="date_of_birth" required 
+                                           id="date_of_birth_input"
+                                           max="<?php echo date('Y-m-d', strtotime('-18 years')); ?>"
                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" />
                                 </div>
                             </div>
@@ -1245,29 +1996,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                         
-                        <!-- Purok -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-gray-700">Purok (Area)</label>
-                            <div class="relative">
-                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    </svg>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Barangay -->
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Barangay</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                        </svg>
+                                    </div>
+                                    <select name="barangay_id" id="barangay-select" required 
+                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none appearance-none bg-white">
+                                        <option value="">Select your Barangay</option>
+                                    <?php
+                                    $barangays = db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll();
+                                    foreach ($barangays as $b): ?>
+                                        <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
                                 </div>
-                                <select name="purok_id" required 
-                                        class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none appearance-none bg-white">
-                                    <option value="">Select your Purok</option>
-                                <?php
-                                $puroks = db()->query('SELECT p.id, p.name, b.name AS barangay FROM puroks p JOIN barangays b ON b.id=p.barangay_id ORDER BY b.name, p.name')->fetchAll();
-                                foreach ($puroks as $p): ?>
-                                    <option value="<?php echo (int)$p['id']; ?>"><?php echo htmlspecialchars($p['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
+                            </div>
+                            
+                            <!-- Purok -->
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Purok (Area)</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <select name="purok_id" id="purok-select" required 
+                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none appearance-none bg-white">
+                                        <option value="">Select your Purok</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1299,28 +2073,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div id="family-members-container">
                             <div class="family-member bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:border-blue-300">
                                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    <!-- First Name -->
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
+                                        <label class="block text-sm font-medium text-gray-700">First Name</label>
                                         <input type="text" name="family_members[0][first_name]" 
-                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
+                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                                placeholder="Juan" />
                                     </div>
+                                    
+                                    <!-- Middle Initial -->
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">M.I.</label>
+                                        <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
                                         <input type="text" name="family_members[0][middle_initial]" 
-                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
-                                               placeholder="D" maxlength="5" />
+                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
+                                               placeholder="D." 
+                                               maxlength="1" />
                                     </div>
+                                    
+                                    <!-- Last Name -->
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
+                                        <label class="block text-sm font-medium text-gray-700">Last Name</label>
                                         <input type="text" name="family_members[0][last_name]" 
-                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" 
+                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
                                                placeholder="Dela Cruz" />
                                     </div>
+                                    
+                                    <!-- Relationship -->
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Relationship</label>
+                                        <label class="block text-sm font-medium text-gray-700">Relationship</label>
                                         <select name="family_members[0][relationship]" 
-                                                class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm">
+                                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white">
                                             <option value="">Select Relationship</option>
                                             <option value="Father">Father</option>
                                             <option value="Mother">Mother</option>
@@ -1333,10 +2115,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <option value="Other">Other</option>
                                         </select>
                                     </div>
+                                    
+                                    <!-- Date of Birth -->
                                     <div class="space-y-2">
-                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
+                                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
                                         <input type="date" name="family_members[0][date_of_birth]" 
-                                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" />
+                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" />
                                     </div>
                                 </div>
                             </div>
@@ -1472,43 +2256,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <!-- Enhanced Login Modal -->
     <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300">
-            <!-- Header with Gradient -->
-            <div class="relative bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 rounded-t-3xl p-8 overflow-hidden">
-                <div class="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full -mr-20 -mt-20"></div>
-                <div class="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -ml-16 -mb-16"></div>
-                
-                <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300 overflow-hidden">
+            <!-- Header with Gradient and Logo -->
+            <div class="login-modal-header rounded-t-3xl p-8 relative">
+                <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors z-20 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 
-                <div class="relative text-center">
-                    <div class="w-20 h-20 bg-white rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-                        <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                        </svg>
+                <div class="relative text-center z-10">
+                    <!-- 4D Logo -->
+                    <div class="login-logo-container">
+                        <div class="login-logo-mini">
+                            <div class="login-logo-cross-mini"></div>
+                            <div class="login-logo-pill-mini">
+                                <div class="login-logo-pill-cap-mini"></div>
                     </div>
-                    <h2 class="text-3xl font-bold text-white mb-2">Welcome Back</h2>
-                    <p class="text-blue-100">Sign in to access your account</p>
+                            <div class="login-logo-checkmark-mini"></div>
+                        </div>
+                    </div>
+                    
+                    <h2 class="text-3xl font-bold text-white mb-2 drop-shadow-lg">Welcome Back</h2>
+                    <p class="text-blue-100 text-sm">Sign in to access your account</p>
                 </div>
                 </div>
                 
             <!-- Form Body -->
-            <div class="p-8">
+            <div class="p-8 bg-gradient-to-b from-white to-gray-50">
                 <form id="loginForm" action="public/login.php" method="post" class="space-y-6">
                     <?php if (!empty($_SESSION['flash'])): ?>
-                        <div class="flex items-start space-x-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-shake">
+                        <div class="flex items-start space-x-3 text-sm text-red-700 bg-red-50 border-2 border-red-200 rounded-xl px-4 py-3 animate-shake shadow-sm">
                             <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            <span><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
+                            <span class="font-medium"><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
                         </div>
                     <?php endif; ?>
                     
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <div class="space-y-2 login-input-group">
+                        <label class="block text-sm font-semibold text-gray-700">Email Address</label>
                         <div class="relative">
                             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1516,13 +2303,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                     </div>
                             <input type="email" name="email" required 
-                                   class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none" 
+                                   class="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none bg-white font-medium" 
                                    placeholder="you@example.com" />
                     </div>
                     </div>
                     
-                       <div class="space-y-2">
-                           <label class="block text-sm font-medium text-gray-700">Password</label>
+                    <div class="space-y-2 login-input-group">
+                        <label class="block text-sm font-semibold text-gray-700">Password</label>
                            <div class="relative">
                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1530,7 +2317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                    </svg>
                                </div>
                                <input type="password" name="password" id="login-password" required 
-                                      class="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none" 
+                                   class="w-full pl-12 pr-12 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none bg-white font-medium" 
                                       placeholder="••••••••" />
                                <button type="button" onclick="togglePasswordVisibility('login-password', 'login-eye-icon')" 
                                        class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
@@ -1543,7 +2330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        </div>
                     
                     <button type="submit" 
-                            class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center space-x-2">
+                            class="login-submit-btn w-full bg-gradient-to-r from-blue-600 via-blue-700 to-purple-600 text-white py-3.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center space-x-2">
                         <span>Sign in</span>
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
@@ -1554,17 +2341,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Divider -->
                 <div class="relative my-6">
                     <div class="absolute inset-0 flex items-center">
-                        <div class="w-full border-t border-gray-200"></div>
+                        <div class="w-full border-t-2 border-gray-200"></div>
                     </div>
                     <div class="relative flex justify-center text-sm">
-                        <span class="px-4 bg-white text-gray-500">New to MediTrack?</span>
+                        <span class="px-4 bg-gradient-to-b from-white to-gray-50 text-gray-500 font-medium">New to MediTrack?</span>
                     </div>
                 </div>
                 
                 <!-- Register Link -->
                 <div class="text-center">
                     <button onclick="closeLoginModal(); openRegisterModal();" 
-                            class="text-blue-600 hover:text-blue-700 font-medium transition-colors inline-flex items-center space-x-2">
+                            class="text-blue-600 hover:text-blue-700 font-semibold transition-all duration-200 inline-flex items-center space-x-2 hover:scale-105">
                         <span>Register as Resident</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
@@ -1577,6 +2364,263 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script>
         let familyMemberCount = 1;
+        let emailValidationTimeout = null;
+        let isEmailValid = false;
+        
+        // Barangay-Purok relationship data
+        let puroksData = <?php echo json_encode(db()->query('SELECT id, name, barangay_id FROM puroks ORDER BY barangay_id, name')->fetchAll()); ?>;
+        let barangaysData = <?php echo json_encode(db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll()); ?>;
+        
+        // Initialize barangay-purok relationship
+        function initializeBarangayPurok() {
+            const barangaySelect = document.getElementById('barangay-select');
+            const purokSelect = document.getElementById('purok-select');
+            
+            if (barangaySelect && purokSelect) {
+                barangaySelect.addEventListener('change', function() {
+                    updatePurokOptions(this.value);
+                });
+            }
+        }
+        
+        // Update purok options based on selected barangay
+        function updatePurokOptions(barangayId) {
+            const purokSelect = document.getElementById('purok-select');
+            if (!purokSelect) return;
+            
+            // Clear existing options
+            purokSelect.innerHTML = '<option value="">Select your Purok</option>';
+            
+            if (!barangayId) return;
+            
+            // Filter puroks by selected barangay
+            const filteredPuroks = puroksData.filter(purok => purok.barangay_id == barangayId);
+            
+            // Add filtered puroks to select
+            filteredPuroks.forEach(purok => {
+                const option = document.createElement('option');
+                option.value = purok.id;
+                option.textContent = purok.name;
+                purokSelect.appendChild(option);
+            });
+        }
+        
+        // Generate address from purok and barangay
+        function generateAddress() {
+            const purokSelect = document.getElementById('purok-select');
+            const barangaySelect = document.getElementById('barangay-select');
+            
+            if (!purokSelect || !barangaySelect) return '';
+            
+            const selectedPurokId = purokSelect.value;
+            const selectedBarangayId = barangaySelect.value;
+            
+            if (!selectedPurokId || !selectedBarangayId) return '';
+            
+            // Find purok and barangay names
+            const purok = puroksData.find(p => p.id == selectedPurokId);
+            const barangay = barangaysData.find(b => b.id == selectedBarangayId);
+            
+            if (purok && barangay) {
+                return `${purok.name}, ${barangay.name}`;
+            }
+            
+            return '';
+        }
+        
+        // Enhanced email validation functions
+        function validateEmail(email) {
+            // First check if email is empty
+            if (!email || email.trim() === '') {
+                return false;
+            }
+            
+            // Check for @ symbol - must have exactly one
+            const atCount = (email.match(/@/g) || []).length;
+            if (atCount !== 1) {
+                return false;
+            }
+            
+            // Check if email starts with @ (invalid)
+            if (email.startsWith('@')) {
+                return false;
+            }
+            
+            // Check if email ends with @ (invalid)
+            if (email.endsWith('@')) {
+                return false;
+            }
+            
+            // Basic regex check - must have @ and proper format
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(email)) {
+                return false;
+            }
+            
+            // Split into parts
+            const parts = email.split('@');
+            if (parts.length !== 2) return false;
+            
+            const [localPart, domainPart] = parts;
+            
+            // Check local part (before @)
+            if (!localPart || localPart.length === 0 || localPart.length > 64) return false;
+            
+            // Check for invalid characters in local part
+            if (!/^[a-zA-Z0-9._%+-]+$/.test(localPart)) return false;
+            
+            // Check domain part (after @)
+            if (!domainPart || domainPart.length === 0 || domainPart.length > 255) return false;
+            
+            // Check if domain has at least one dot
+            if (!domainPart.includes('.')) return false;
+            
+            // Check domain extension (must be at least 2 characters, letters only)
+            const domainParts = domainPart.split('.');
+            const extension = domainParts[domainParts.length - 1];
+            if (extension.length < 2 || !/^[a-zA-Z]+$/.test(extension)) return false;
+            
+            // Check for invalid patterns
+            const invalidPatterns = [
+                /^[^@]+@$/,  // ends with @
+                /^@[^@]+$/,  // starts with @
+                /\.{2,}/,    // consecutive dots
+                /^\.|\.$/,   // starts or ends with dot
+                /@.*@/,      // multiple @ symbols
+                /[()]/,      // parentheses (like in the example)
+                /[<>]/,      // angle brackets
+                /[{}]/,      // curly braces
+                /[\[\]]/,    // square brackets
+                /[|\\]/,     // pipe or backslash
+                /[;:]/,      // semicolon or colon
+                /[,\s]/,     // comma or spaces
+            ];
+            
+            for (const pattern of invalidPatterns) {
+                if (pattern.test(email)) return false;
+            }
+            
+            // Check that local part doesn't start or end with dot
+            if (localPart.startsWith('.') || localPart.endsWith('.')) return false;
+            
+            // Check that domain doesn't start or end with dot
+            if (domainPart.startsWith('.') || domainPart.endsWith('.')) return false;
+            
+            return true;
+        }
+        
+        function showEmailStatus(icon, message, isSuccess) {
+            const statusIcon = document.getElementById('email-status-icon');
+            const successIcon = document.getElementById('email-success-icon');
+            const errorIcon = document.getElementById('email-error-icon');
+            const loadingIcon = document.getElementById('email-loading-icon');
+            const validationMessage = document.getElementById('email-validation-message');
+            const messageText = document.getElementById('email-message-text');
+            const emailInput = document.getElementById('email-input');
+            
+            // Hide all icons first
+            successIcon.classList.add('hidden');
+            errorIcon.classList.add('hidden');
+            loadingIcon.classList.add('hidden');
+            
+            // Show the appropriate icon
+            if (icon === 'loading') {
+                loadingIcon.classList.remove('hidden');
+                statusIcon.classList.remove('hidden');
+            } else if (icon === 'success') {
+                successIcon.classList.remove('hidden');
+                statusIcon.classList.remove('hidden');
+                emailInput.classList.remove('border-red-300');
+                emailInput.classList.add('border-green-300');
+            } else if (icon === 'error') {
+                errorIcon.classList.remove('hidden');
+                statusIcon.classList.remove('hidden');
+                emailInput.classList.remove('border-green-300');
+                emailInput.classList.add('border-red-300');
+            } else {
+                statusIcon.classList.add('hidden');
+                emailInput.classList.remove('border-red-300', 'border-green-300');
+            }
+            
+            // Show/hide message
+            if (message) {
+                messageText.textContent = message;
+                messageText.className = isSuccess ? 'text-green-600' : 'text-red-600';
+                validationMessage.classList.remove('hidden');
+            } else {
+                validationMessage.classList.add('hidden');
+            }
+        }
+        
+        async function checkEmailAvailability(email) {
+            // First check basic format
+            if (!validateEmail(email)) {
+                // Provide more specific error messages
+                if (!email || email.trim() === '') {
+                    showEmailStatus('error', 'Please enter an email address', false);
+                } else if (email.startsWith('@')) {
+                    showEmailStatus('error', 'Email cannot start with @ symbol. Please enter a valid email like user@domain.com', false);
+                } else if (email.endsWith('@')) {
+                    showEmailStatus('error', 'Email cannot end with @ symbol. Please enter a valid email like user@domain.com', false);
+                } else if (!email.includes('@')) {
+                    showEmailStatus('error', 'Email must contain an @ symbol (e.g., user@domain.com)', false);
+                } else if ((email.match(/@/g) || []).length > 1) {
+                    showEmailStatus('error', 'Email can only contain one @ symbol', false);
+                } else if (email.includes('(') || email.includes(')')) {
+                    showEmailStatus('error', 'Email cannot contain parentheses. Please use a valid format like user@domain.com', false);
+                } else if (!email.includes('.')) {
+                    showEmailStatus('error', 'Email must include a domain with extension (e.g., user@domain.com)', false);
+                } else {
+                    showEmailStatus('error', 'Please enter a valid email address format (e.g., user@domain.com)', false);
+                }
+                isEmailValid = false;
+                return false;
+            }
+            
+            showEmailStatus('loading', 'Verifying email address exists and can receive emails...', false);
+            
+            try {
+                // Try the main validation first
+                let response = await fetch('public/validate_email.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+                
+                let result = await response.json();
+                
+                // If main validation fails, try the simpler validation
+                if (!result.success || !result.valid) {
+                    console.log('Main validation failed, trying simple validation...');
+                    response = await fetch('public/validate_email_simple.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ email: email })
+                    });
+                    
+                    result = await response.json();
+                }
+                
+                if (result.success && result.valid) {
+                    showEmailStatus('success', 'Email is valid and can receive verification codes', true);
+                    isEmailValid = true;
+                    return true;
+                } else {
+                    showEmailStatus('error', result.message, false);
+                    isEmailValid = false;
+                    return false;
+                }
+            } catch (error) {
+                console.error('Email validation error:', error);
+                showEmailStatus('error', 'Unable to validate email. Please check your connection and try again.', false);
+                isEmailValid = false;
+                return false;
+            }
+        }
         
         function openRegisterModal() {
             document.getElementById('registerModal').classList.remove('hidden');
@@ -1584,6 +2628,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.body.style.overflow = 'hidden';
             // Reset to step 1
             goToStep(1);
+            
+            // Initialize barangay-purok relationship
+            initializeBarangayPurok();
+            
+            // Add email input event listener for real-time validation
+            const emailInput = document.getElementById('email-input');
+            if (emailInput) {
+                emailInput.addEventListener('input', function() {
+                    const email = this.value.trim();
+                    
+                    // Clear previous timeout
+                    if (emailValidationTimeout) {
+                        clearTimeout(emailValidationTimeout);
+                    }
+                    
+                    // Clear status if email is empty
+                    if (!email) {
+                        showEmailStatus(null, null, false);
+                        isEmailValid = false;
+                        return;
+                    }
+                    
+                    // Debounce the validation (wait 500ms after user stops typing)
+                    emailValidationTimeout = setTimeout(() => {
+                        checkEmailAvailability(email);
+                    }, 500);
+                });
+            }
         }
         
         async function goToStep(step) {
@@ -1626,8 +2698,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const lastName = document.querySelector('input[name="last_name"]').value.trim();
             const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
             const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
+            const email = document.querySelector('input[name="email"]').value.trim();
             
-            console.log('Checking:', firstName, lastName, middleInitial, dateOfBirth);
+            console.log('Checking:', firstName, lastName, middleInitial, dateOfBirth, email);
             
             // SIMPLE CHECK - If it's Jaycho, BLOCK IMMEDIATELY
             if (firstName.toLowerCase() === 'jaycho' && lastName.toLowerCase() === 'carido') {
@@ -1637,8 +2710,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Check if required fields are filled
-            if (!firstName || !lastName || !dateOfBirth) {
-                showToast('Please fill in all required fields!', 'warning');
+            const barangayId = document.querySelector('select[name="barangay_id"]').value;
+            const purokId = document.querySelector('select[name="purok_id"]').value;
+            
+            if (!firstName || !lastName || !dateOfBirth || !email || !barangayId || !purokId) {
+                showToast('Please fill in all required fields including Barangay and Purok!', 'warning');
+                return false;
+            }
+            
+            // Check if email is valid and available
+            if (!isEmailValid) {
+                showToast('Please ensure your email is valid and available before proceeding!', 'error');
+                // Trigger email validation if not already done
+                await checkEmailAvailability(email);
                 return false;
             }
             
@@ -2330,7 +3414,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     alert('Phone number must start with 09 and be exactly 11 digits.\nExample: 0912 345 6789');
                     return false;
                 }
+                
+                // Age validation - must be 18+
+                const dobInput = document.querySelector('input[name="date_of_birth"]');
+                if (dobInput && dobInput.value) {
+                    const birthDate = new Date(dobInput.value);
+                    const today = new Date();
+                    let age = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                        age--;
+                    }
+                    
+                    if (age < 18) {
+                        e.preventDefault();
+                        dobInput.focus();
+                        dobInput.classList.add('border-red-500');
+                        alert('You must be at least 18 years old to register.');
+                        return false;
+                    }
+                }
+                
+                // Middle initial validation - max 1 character if provided
+                const middleInitialInput = document.getElementById('middle_initial_input');
+                if (middleInitialInput && middleInitialInput.value.trim().length > 1) {
+                    e.preventDefault();
+                    middleInitialInput.focus();
+                    middleInitialInput.classList.add('border-red-500');
+                    alert('Middle initial can only be 1 character.');
+                    return false;
+                }
             });
+            
+            // Real-time validation for middle initial
+            const middleInitialInputRealTime = document.getElementById('middle_initial_input');
+            if (middleInitialInputRealTime) {
+                middleInitialInputRealTime.addEventListener('input', function(e) {
+                    const value = e.target.value.trim();
+                    if (value.length > 1) {
+                        e.target.value = value.charAt(0); // Keep only first character
+                        e.target.classList.add('border-red-500');
+                        setTimeout(() => {
+                            e.target.classList.remove('border-red-500');
+                        }, 2000);
+                    } else {
+                        e.target.classList.remove('border-red-500');
+                    }
+                });
+            }
         }
         
         // Add family member functionality
@@ -2345,20 +3476,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][first_name]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="Juan" />
+                        <label class="block text-sm font-medium text-gray-700">First Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][first_name]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="Juan" />
                     </div>
                     <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">M.I.</label>
-                        <input type="text" name="family_members[${familyMemberCount}][middle_initial]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="D" maxlength="5" />
+                        <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
+                        <input type="text" name="family_members[${familyMemberCount}][middle_initial]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="D." maxlength="1" />
                     </div>
                     <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][last_name]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" placeholder="Dela Cruz" />
+                        <label class="block text-sm font-medium text-gray-700">Last Name</label>
+                        <input type="text" name="family_members[${familyMemberCount}][last_name]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="Dela Cruz" />
                     </div>
                     <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Relationship</label>
-                        <select name="family_members[${familyMemberCount}][relationship]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm">
+                        <label class="block text-sm font-medium text-gray-700">Relationship</label>
+                        <select name="family_members[${familyMemberCount}][relationship]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white">
                             <option value="">Select Relationship</option>
                             <option value="Father">Father</option>
                             <option value="Mother">Mother</option>
@@ -2372,8 +3503,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </select>
                     </div>
                     <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
-                        <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 outline-none bg-white shadow-sm" />
+                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
+                        <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" />
                     </div>
                 </div>
             `;
@@ -2483,6 +3614,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 scrollToTopBtn.classList.add('hidden');
             }
         };
+        // Enhanced Scroll Reveal Animations
+        const scrollRevealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    // Also activate feature cards
+                    if (entry.target.classList.contains('feature-card')) {
+                        entry.target.classList.add('active');
+                    }
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        });
+
+        // Observe all scroll reveal elements
+        document.querySelectorAll('.scroll-reveal, .scroll-reveal-left, .scroll-reveal-right, .scroll-reveal-scale, .feature-card').forEach(el => {
+            scrollRevealObserver.observe(el);
+        });
+
+        // Section visibility observer
+        const sectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, {
+            threshold: 0.1
+        });
+
+        document.querySelectorAll('section').forEach(section => {
+            sectionObserver.observe(section);
+        });
+
+        // Navbar scroll effect
+        let lastScroll = 0;
+        const nav = document.querySelector('nav');
+        
+        window.addEventListener('scroll', () => {
+            const currentScroll = window.pageYOffset;
+            
+            if (currentScroll > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+            
+            lastScroll = currentScroll;
+        }, { passive: true });
+
+        // Magnetic button effect
+        document.querySelectorAll('.magnetic').forEach(button => {
+            button.addEventListener('mousemove', (e) => {
+                const rect = button.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+                
+                button.style.transform = `translate(${x * 0.1}px, ${y * 0.1}px)`;
+            });
+            
+            button.addEventListener('mouseleave', () => {
+                button.style.transform = '';
+            });
+        });
+
+        // Parallax effect for hero elements
+        window.addEventListener('scroll', () => {
+            const scrolled = window.pageYOffset;
+            const parallaxElements = document.querySelectorAll('.parallax-element');
+            
+            parallaxElements.forEach(element => {
+                const speed = element.dataset.speed || 0.5;
+                element.style.transform = `translateY(${scrolled * speed}px)`;
+            });
+        }, { passive: true });
+
+        // Activate feature cards on load
+        setTimeout(() => {
+            document.querySelectorAll('.feature-card').forEach((card, index) => {
+                setTimeout(() => {
+                    card.classList.add('active');
+                }, index * 100);
+            });
+        }, 500);
+
         document.addEventListener('scroll', onScroll, { passive: true });
         window.addEventListener('load', onScroll);
         
@@ -2527,30 +3745,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             observer.observe(el);
         });
         
-        // Scroll reveal animations
-        const scrollRevealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('active');
-                    // Optionally unobserve after revealing
-                    scrollRevealObserver.unobserve(entry.target);
-                }
-            });
-        }, {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        });
-        
-        // Observe all scroll-reveal elements
-        document.querySelectorAll('.scroll-reveal, .scroll-reveal-left, .scroll-reveal-right').forEach(el => {
-            scrollRevealObserver.observe(el);
-        });
         
         // Email verification functions
         function showVerificationModal() {
             const modal = document.getElementById('verificationModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            
+            // Show info toast about email verification
+            showToast('Sending verification code to your email...', 'info');
             
             // Request verification code immediately
             requestVerificationCode();
@@ -2591,9 +3794,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (result.success) {
                     showToast('Verification code sent!', 'success');
                 } else {
+                    // Show both toast and modal error
+                    showToast(result.message || 'Failed to send verification code', 'error');
                     showVerificationError(result.message || 'Failed to send verification code');
                 }
             } catch (error) {
+                showToast('Network error. Please check your connection and try again.', 'error');
                 showVerificationError('Error sending verification code');
             }
         }

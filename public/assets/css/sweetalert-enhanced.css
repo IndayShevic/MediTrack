@@ -1,0 +1,447 @@
+/**
+ * Enhanced SweetAlert2 Styles
+ * Modern, animated, and visually appealing design
+ */
+
+/* Enhanced Popup Container */
+.swal2-popup-enhanced {
+    border-radius: 1.5rem !important;
+    padding: 2.5rem !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 
+                0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 10px 40px rgba(59, 130, 246, 0.15) !important;
+    backdrop-filter: blur(20px) !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(59, 130, 246, 0.1) !important;
+    max-width: 500px !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+/* Subtle shine effect */
+.swal2-popup-enhanced::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.4),
+        transparent
+    );
+    animation: shine 3s infinite;
+    pointer-events: none;
+}
+
+/* Enhanced Title */
+.swal2-title-enhanced {
+    font-size: 1.75rem !important;
+    font-weight: 700 !important;
+    color: #1f2937 !important;
+    margin-bottom: 1rem !important;
+    letter-spacing: -0.025em !important;
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    position: relative;
+    animation: titleFadeIn 0.5s ease-out 0.2s both;
+}
+
+/* Enhanced HTML Container */
+.swal2-html-container-enhanced {
+    font-size: 1rem !important;
+    color: #6b7280 !important;
+    line-height: 1.6 !important;
+    margin-top: 0.5rem !important;
+    padding: 0 1rem !important;
+    animation: contentFadeIn 0.5s ease-out 0.3s both;
+}
+
+/* Enhanced Icon */
+.swal2-icon-enhanced {
+    width: 5rem !important;
+    height: 5rem !important;
+    margin: 0 auto 1.5rem !important;
+    border: none !important;
+    position: relative;
+    animation: iconBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.1s both;
+}
+
+.swal2-icon-enhanced.swal2-question {
+    color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%) !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative;
+}
+
+.swal2-icon-enhanced.swal2-question::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+    animation: pulseRing 2s ease-out infinite;
+}
+
+.swal2-icon-enhanced.swal2-question .swal2-icon-content {
+    font-size: 2.5rem !important;
+    font-weight: 700 !important;
+    position: relative;
+    z-index: 1;
+    animation: iconRotate 0.5s ease-out 0.2s both;
+}
+
+/* Enhanced Actions Container */
+.swal2-actions {
+    margin-top: 2rem !important;
+    gap: 0.75rem !important;
+    display: flex !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    animation: buttonsFadeIn 0.5s ease-out 0.4s both;
+}
+
+/* Enhanced Confirm Button */
+.swal2-confirm-enhanced {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%) !important;
+    border: none !important;
+    border-radius: 0.75rem !important;
+    padding: 0.875rem 2rem !important;
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4),
+                0 2px 4px rgba(59, 130, 246, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+    min-width: 140px !important;
+}
+
+.swal2-confirm-enhanced::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    transition: left 0.5s ease;
+}
+
+.swal2-confirm-enhanced:hover {
+    transform: translateY(-2px) scale(1.02) !important;
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.5),
+                0 4px 8px rgba(59, 130, 246, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%) !important;
+}
+
+.swal2-confirm-enhanced:hover::before {
+    left: 100%;
+}
+
+.swal2-confirm-enhanced:active {
+    transform: translateY(0) scale(0.98) !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4) !important;
+}
+
+/* Enhanced Cancel Button */
+.swal2-cancel-enhanced {
+    background: #ffffff !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 0.75rem !important;
+    padding: 0.875rem 2rem !important;
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+    color: #6b7280 !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+    min-width: 140px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.swal2-cancel-enhanced::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(107, 114, 128, 0.1);
+    transform: translate(-50%, -50%);
+    transition: width 0.3s ease, height 0.3s ease;
+}
+
+.swal2-cancel-enhanced:hover {
+    background: #f9fafb !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+    transform: translateY(-2px) scale(1.02) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1),
+                0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.swal2-cancel-enhanced:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.swal2-cancel-enhanced:active {
+    transform: translateY(0) scale(0.98) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Enhanced Backdrop */
+.swal2-backdrop-show-enhanced {
+    background: rgba(0, 0, 0, 0.6) !important;
+    backdrop-filter: blur(8px) saturate(180%) !important;
+    animation: backdropFadeIn 0.3s ease-out !important;
+}
+
+.swal2-backdrop-hide-enhanced {
+    animation: backdropFadeOut 0.2s ease-in !important;
+}
+
+/* Enhanced Show Animation */
+.swal2-show-enhanced {
+    animation: popupShow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Enhanced Hide Animation */
+.swal2-hide-enhanced {
+    animation: popupHide 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19) !important;
+}
+
+/* Keyframe Animations */
+@keyframes shine {
+    0% {
+        left: -100%;
+    }
+    50%, 100% {
+        left: 100%;
+    }
+}
+
+@keyframes titleFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes contentFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes iconBounce {
+    0% {
+        opacity: 0;
+        transform: scale(0.3) rotate(-180deg);
+    }
+    50% {
+        transform: scale(1.1) rotate(10deg);
+    }
+    70% {
+        transform: scale(0.95) rotate(-5deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+    }
+}
+
+@keyframes iconRotate {
+    from {
+        transform: rotate(-180deg);
+        opacity: 0;
+    }
+    to {
+        transform: rotate(0deg);
+        opacity: 1;
+    }
+}
+
+@keyframes pulseRing {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(1.3);
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+@keyframes buttonsFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes popupShow {
+    0% {
+        opacity: 0;
+        transform: scale(0.7) translateY(-30px) rotate(3deg);
+        filter: blur(4px);
+    }
+    50% {
+        transform: scale(1.05) translateY(5px) rotate(-1deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0) rotate(0deg);
+        filter: blur(0);
+    }
+}
+
+@keyframes popupHide {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0) rotate(0deg);
+        filter: blur(0);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.8) translateY(-20px) rotate(-5deg);
+        filter: blur(4px);
+    }
+}
+
+@keyframes backdropFadeIn {
+    from {
+        opacity: 0;
+        backdrop-filter: blur(0px);
+    }
+    to {
+        opacity: 1;
+        backdrop-filter: blur(8px) saturate(180%);
+    }
+}
+
+@keyframes backdropFadeOut {
+    from {
+        opacity: 1;
+        backdrop-filter: blur(8px) saturate(180%);
+    }
+    to {
+        opacity: 0;
+        backdrop-filter: blur(0px);
+    }
+}
+
+/* Loading State Enhancement */
+.swal2-loading .swal2-loader {
+    border-width: 4px !important;
+    border-color: #3b82f6 transparent transparent transparent !important;
+    animation: spinLoader 0.8s linear infinite !important;
+}
+
+@keyframes spinLoader {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+    .swal2-popup-enhanced {
+        padding: 1.5rem !important;
+        margin: 1rem !important;
+        max-width: calc(100% - 2rem) !important;
+    }
+    
+    .swal2-title-enhanced {
+        font-size: 1.5rem !important;
+    }
+    
+    .swal2-confirm-enhanced,
+    .swal2-cancel-enhanced {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+    
+    .swal2-actions {
+        flex-direction: column !important;
+        width: 100% !important;
+    }
+    
+    .swal2-icon-enhanced {
+        width: 4rem !important;
+        height: 4rem !important;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .swal2-popup-enhanced {
+        background: #ffffff !important;
+        border-color: rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    .swal2-title-enhanced {
+        background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .swal2-html-container-enhanced {
+        color: #6b7280 !important;
+    }
+    
+    .swal2-cancel-enhanced {
+        background: #ffffff !important;
+        border-color: #e5e7eb !important;
+        color: #6b7280 !important;
+    }
+    
+    .swal2-cancel-enhanced:hover {
+        background: #f9fafb !important;
+        border-color: #d1d5db !important;
+    }
+}
+

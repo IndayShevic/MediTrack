@@ -76,8 +76,12 @@ try {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+    <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -128,22 +132,7 @@ try {
         .dark .card-header p {
             color: #d1d5db !important;
         }
-        .dark .sidebar {
-            background: #1f2937 !important;
-        }
-        .dark .sidebar-brand span {
-            color: #f9fafb !important;
-        }
-        .dark .sidebar-nav a {
-            color: #d1d5db !important;
-        }
-        .dark .sidebar-nav a:hover {
-            background: #374151 !important;
-        }
-        .dark .sidebar-nav a.active {
-            background: #3b82f6 !important;
-            color: #ffffff !important;
-        }
+        /* Dark mode sidebar styles removed - using design-system.css instead */
         
         /* Profile dropdown styles */
         #profile-menu {
@@ -263,6 +252,10 @@ try {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
                 Analytics
+            </a>
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
             </a>
             <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -955,8 +948,37 @@ try {
             }
         }
 
+        // Force sidebar to always be light (prevent dark mode from affecting it)
+        function forceSidebarLight() {
+            const sidebar = document.querySelector('aside.sidebar');
+            if (sidebar) {
+                sidebar.classList.remove('dark');
+                sidebar.setAttribute('data-no-dark-mode', 'true');
+                // Force styles inline to override everything
+                sidebar.style.background = 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)';
+                sidebar.style.borderRight = '1px solid rgba(229, 231, 235, 0.8)';
+                sidebar.style.boxShadow = '4px 0 24px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02)';
+                
+                // Force brand styles
+                const brand = sidebar.querySelector('.sidebar-brand');
+                if (brand) {
+                    brand.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%)';
+                    brand.style.color = 'white';
+                }
+                
+                // Force nav links
+                const navLinks = sidebar.querySelectorAll('.sidebar-nav a');
+                navLinks.forEach(link => {
+                    link.style.color = '#4b5563';
+                });
+            }
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Force sidebar light BEFORE dark mode initialization
+            forceSidebarLight();
+            
             initCharts();
             
             // Animate stats on load with real data
@@ -986,10 +1008,26 @@ try {
             // Initialize night mode toggle
             initNightMode();
             
+            // Force sidebar light AGAIN after dark mode (in case it was applied)
+            setTimeout(forceSidebarLight, 100);
+            setTimeout(forceSidebarLight, 500);
+            
             // Initialize profile dropdown with a small delay to ensure DOM is ready
             setTimeout(() => {
                 initProfileDropdown();
             }, 100);
+            
+            // Also watch for dark mode changes and re-apply sidebar styles
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        if (document.body.classList.contains('dark')) {
+                            forceSidebarLight();
+                        }
+                    }
+                });
+            });
+            observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
         });
         
         // Real-time clock function
@@ -1101,6 +1139,13 @@ try {
             }
             
         }
+        
+        // Initialize functions when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize profile dropdown
+            initProfileDropdown();
+            // Logout confirmation is now handled by logout-confirmation.js
+        });
     </script>
 </body>
 </html>

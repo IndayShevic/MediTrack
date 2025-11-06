@@ -102,6 +102,8 @@ function require_auth(array $roles = []): void {
 
 // Return BHW user id assigned to the resident's purok; null if none
 function getAssignedBhwIdForResident(int $residentId): ?int {
+    // Get BHW assigned to the same purok as the resident
+    // Since purok_id is unique across the system, this automatically includes barangay filtering
     $sql = 'SELECT u.id FROM residents r JOIN users u ON u.purok_id = r.purok_id AND u.role = "bhw" WHERE r.id = ? LIMIT 1';
     $stmt = db()->prepare($sql);
     $stmt->execute([$residentId]);

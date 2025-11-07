@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('super_admin/batches.php');
 }
 
-$batches = db()->query('SELECT b.id, m.name AS medicine, b.batch_code, b.quantity, b.quantity_available, b.expiry_date, b.received_at FROM medicine_batches b JOIN medicines m ON m.id=b.medicine_id ORDER BY b.expiry_date ASC')->fetchAll();
+$batches = db()->query('SELECT b.id, m.name AS medicine, m.image_path, b.batch_code, b.quantity, b.quantity_available, b.expiry_date, b.received_at FROM medicine_batches b JOIN medicines m ON m.id=b.medicine_id ORDER BY b.expiry_date ASC')->fetchAll();
 
 // Calculate statistics
 $total_batches = count($batches);
@@ -520,11 +520,30 @@ foreach ($batches as $batch) {
                                 <!-- Batch Header -->
                                 <div class="flex items-center justify-between mb-4">
                                     <div class="flex items-center space-x-3">
-                                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                                            </svg>
-                                        </div>
+                                        <?php 
+                                        $image_url = '';
+                                        $image_exists = false;
+                                        if (!empty($b['image_path'])) {
+                                            $image_url = base_url($b['image_path']);
+                                            $full_path = __DIR__ . '/../' . $b['image_path'];
+                                            $image_exists = file_exists($full_path);
+                                        }
+                                        ?>
+                                        <?php if (!empty($b['image_path']) && $image_exists): ?>
+                                            <div class="w-10 h-10 rounded-xl overflow-hidden bg-white shadow-sm flex-shrink-0 border border-gray-200">
+                                                <img src="<?php echo htmlspecialchars($image_url); ?>" 
+                                                     alt="<?php echo htmlspecialchars($b['medicine']); ?>"
+                                                     class="w-full h-full object-cover"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold" style="display: none;">
+                                                    <?php echo strtoupper(substr($b['medicine'], 0, 2)); ?>
+                                                </div>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                <?php echo strtoupper(substr($b['medicine'], 0, 2)); ?>
+                                            </div>
+                                        <?php endif; ?>
                                         <div>
                                             <div class="font-mono text-sm text-gray-600"><?php echo htmlspecialchars($b['batch_code']); ?></div>
                                             <div class="text-xs text-gray-500">Batch Code</div>

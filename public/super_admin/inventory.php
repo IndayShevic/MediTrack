@@ -14,16 +14,19 @@ try {
 }
 
 try {
-    // Low stock medicines (less than 10 total stock)
+    // Low stock medicines (below minimum_stock_level, including 0 stock)
     $low_stock_count = db()->query('
         SELECT COUNT(*) as count 
         FROM (
-            SELECT m.id 
+            SELECT 
+                m.id,
+                COALESCE(SUM(mb.quantity_available), 0) as current_stock,
+                COALESCE(m.minimum_stock_level, 10) as min_level
             FROM medicines m 
             LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id 
-            WHERE mb.quantity_available > 0
-            GROUP BY m.id 
-            HAVING COALESCE(SUM(mb.quantity_available), 0) < 10 AND COALESCE(SUM(mb.quantity_available), 0) > 0
+            WHERE m.is_active = 1
+            GROUP BY m.id, m.minimum_stock_level
+            HAVING current_stock < min_level OR current_stock = 0
         ) as low_stock_meds
     ')->fetch()['count'];
 } catch (Exception $e) {
@@ -62,9 +65,9 @@ try {
     // Column might already exist, continue
 }
 
-// Get detailed inventory summary with enhanced information
+// Get detailed inventory summary with enhanced information (deduplicated)
 try {
-    $inventory_summary = db()->query('
+    $inventory_summary_raw = db()->query('
         SELECT 
             m.id,
             m.name,
@@ -72,8 +75,8 @@ try {
             m.image_path,
             COALESCE(m.minimum_stock_level, 10) as minimum_stock_level,
             COALESCE(SUM(mb.quantity_available), 0) as current_stock,
-            COUNT(mb.id) as total_batches,
-            COUNT(CASE WHEN mb.quantity_available > 0 THEN mb.id END) as active_batches,
+            COUNT(DISTINCT mb.id) as total_batches,
+            COUNT(DISTINCT CASE WHEN mb.quantity_available > 0 THEN mb.id END) as active_batches,
             MIN(CASE WHEN mb.quantity_available > 0 THEN mb.expiry_date END) as earliest_expiry,
             MAX(CASE WHEN mb.quantity_available > 0 THEN mb.expiry_date END) as latest_expiry,
             COALESCE(SUM(mb.quantity), 0) as total_received,
@@ -81,36 +84,53 @@ try {
             CASE 
                 WHEN COALESCE(SUM(mb.quantity_available), 0) = 0 THEN "Out of Stock"
                 WHEN COALESCE(SUM(mb.quantity_available), 0) <= 10 THEN "Low Stock"
-                WHEN MIN(mb.expiry_date) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN "Expiring Soon"
+                WHEN MIN(CASE WHEN mb.quantity_available > 0 THEN mb.expiry_date END) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN "Expiring Soon"
                 ELSE "In Stock"
             END as status,
             CASE 
                 WHEN COALESCE(SUM(mb.quantity_available), 0) = 0 THEN "text-red-600 bg-red-50"
                 WHEN COALESCE(SUM(mb.quantity_available), 0) <= 10 THEN "text-orange-600 bg-orange-50"
-                WHEN MIN(mb.expiry_date) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN "text-yellow-600 bg-yellow-50"
+                WHEN MIN(CASE WHEN mb.quantity_available > 0 THEN mb.expiry_date END) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN "text-yellow-600 bg-yellow-50"
                 ELSE "text-green-600 bg-green-50"
             END as status_class
         FROM medicines m
         LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id
-        GROUP BY m.id, m.name, m.description, m.image_path
+        WHERE m.is_active = 1
+        GROUP BY m.id, m.name, m.description, m.image_path, m.minimum_stock_level
         ORDER BY 
             CASE 
                 WHEN COALESCE(SUM(mb.quantity_available), 0) = 0 THEN 1
                 WHEN COALESCE(SUM(mb.quantity_available), 0) <= 10 THEN 2
-                WHEN MIN(mb.expiry_date) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 3
+                WHEN MIN(CASE WHEN mb.quantity_available > 0 THEN mb.expiry_date END) <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 3
                 ELSE 4
             END,
             current_stock ASC, 
             m.name ASC
     ')->fetchAll();
+    
+    // Deduplicate by medicine ID and name (remove any duplicates)
+    $inventory_summary = [];
+    $seen_ids = [];
+    $seen_names = [];
+    foreach ($inventory_summary_raw as $medicine) {
+        $med_id = (int)$medicine['id'];
+        $name_key = strtolower(trim($medicine['name']));
+        
+        // Skip if we've already seen this ID or name
+        if (!isset($seen_ids[$med_id]) && !isset($seen_names[$name_key])) {
+            $seen_ids[$med_id] = true;
+            $seen_names[$name_key] = true;
+            $inventory_summary[] = $medicine;
+        }
+    }
 } catch (Exception $e) {
     $inventory_summary = [];
 }
 
-// Get recent transactions with more details
+// Get recent transactions with more details (deduplicated)
 try {
     $recent_transactions = db()->query('
-        SELECT 
+        SELECT DISTINCT
             r.id,
             r.created_at,
             m.name as medicine_name,
@@ -137,43 +157,68 @@ try {
     $recent_transactions = [];
 }
 
-// Get low stock medicines details
+// Get low stock medicines details (deduplicated) - includes medicines with 0 stock
 try {
-    $low_stock_medicines = db()->query('
+    $low_stock_medicines_raw = db()->query('
         SELECT 
             m.id,
             m.name,
             m.image_path,
             COALESCE(SUM(mb.quantity_available), 0) as current_stock,
-            COUNT(CASE WHEN mb.quantity_available > 0 THEN mb.id END) as active_batches
+            COALESCE(m.minimum_stock_level, 10) as minimum_stock_level,
+            COUNT(DISTINCT CASE WHEN mb.quantity_available > 0 THEN mb.id END) as active_batches
         FROM medicines m
         LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id
-        WHERE mb.quantity_available > 0
-        GROUP BY m.id, m.name, m.image_path
-        HAVING COALESCE(SUM(mb.quantity_available), 0) < 10 AND COALESCE(SUM(mb.quantity_available), 0) > 0
+        WHERE m.is_active = 1
+        GROUP BY m.id, m.name, m.image_path, m.minimum_stock_level
+        HAVING current_stock < minimum_stock_level OR current_stock = 0
         ORDER BY current_stock ASC
     ')->fetchAll();
+    
+    // Deduplicate by medicine ID
+    $low_stock_medicines = [];
+    $seen_low_stock_ids = [];
+    foreach ($low_stock_medicines_raw as $medicine) {
+        $med_id = (int)$medicine['id'];
+        if (!isset($seen_low_stock_ids[$med_id])) {
+            $seen_low_stock_ids[$med_id] = true;
+            $low_stock_medicines[] = $medicine;
+        }
+    }
 } catch (Exception $e) {
     $low_stock_medicines = [];
 }
 
-// Get expiring medicines details
+// Get expiring medicines details (grouped by medicine to avoid duplicates)
 try {
-    $expiring_medicines = db()->query('
+    $expiring_medicines_raw = db()->query('
         SELECT 
             m.id,
             m.name,
             m.image_path,
-            mb.expiry_date,
-            mb.quantity_available,
-            DATEDIFF(mb.expiry_date, CURDATE()) as days_until_expiry
+            MIN(mb.expiry_date) as expiry_date,
+            SUM(mb.quantity_available) as quantity_available,
+            MIN(DATEDIFF(mb.expiry_date, CURDATE())) as days_until_expiry
         FROM medicines m
         JOIN medicine_batches mb ON m.id = mb.medicine_id
         WHERE mb.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) 
         AND mb.expiry_date > CURDATE() 
         AND mb.quantity_available > 0
-        ORDER BY mb.expiry_date ASC
+        AND m.is_active = 1
+        GROUP BY m.id, m.name, m.image_path
+        ORDER BY expiry_date ASC
     ')->fetchAll();
+    
+    // Deduplicate by medicine ID
+    $expiring_medicines = [];
+    $seen_expiring_ids = [];
+    foreach ($expiring_medicines_raw as $medicine) {
+        $med_id = (int)$medicine['id'];
+        if (!isset($seen_expiring_ids[$med_id])) {
+            $seen_expiring_ids[$med_id] = true;
+            $expiring_medicines[] = $medicine;
+        }
+    }
 } catch (Exception $e) {
     $expiring_medicines = [];
 }
@@ -546,10 +591,10 @@ try {
     $stock_turnover = ['active_medicines' => 0, 'total_dispensed_30d' => 0];
 }
 
-// Get top moving medicines (last 30 days)
+// Get top moving medicines (last 30 days) - deduplicated
 try {
     $top_moving_medicines = db()->query('
-        SELECT 
+        SELECT DISTINCT
             m.id,
             m.name,
             m.image_path,
@@ -558,6 +603,7 @@ try {
         JOIN inventory_transactions it ON m.id = it.medicine_id
         WHERE it.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         AND it.transaction_type = "OUT"
+        AND m.is_active = 1
         GROUP BY m.id, m.name, m.image_path
         ORDER BY units_dispensed DESC
         LIMIT 5
@@ -1387,43 +1433,125 @@ try {
     <main class="main-content">
         <!-- Header -->
         <div class="content-header">
-                <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Inventory Management</h1>
                     <p class="text-gray-600 mt-1">Track medicine stock levels and manage inventory adjustments</p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Current Time Display -->
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">Current Time</div>
+                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
                     </div>
-                <div class="flex items-center space-x-3">
-                    <!-- Alerts Button -->
-                    <button onclick="openAlertsModal()" class="relative flex items-center px-4 py-2 <?php echo $alerts_count > 0 ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'; ?> text-white rounded-lg transition-colors shadow-md">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    
+                    <!-- Night Mode Toggle -->
+                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
                         </svg>
-                        Alerts
-                        <?php if ($alerts_count > 0): ?>
-                            <span class="absolute -top-2 -right-2 bg-yellow-400 text-red-900 text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center border-2 border-white">
-                                <?php echo $alerts_count; ?>
-                            </span>
-                        <?php endif; ?>
-                    </button>
-
-                    <!-- Export Button -->
-                    <button onclick="exportInventoryReport()" class="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Export Report
                     </button>
                     
-                    <!-- Print Button -->
-                    <button onclick="window.print()" class="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-md">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                        </svg>
-                        Print
-                    </button>
+                    <!-- Notifications -->
+                    <div class="relative">
+                        <button onclick="openAlertsModal()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Inventory Alerts">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                            </svg>
+                            <?php if ($alerts_count > 0): ?>
+                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $alerts_count; ?></span>
+                            <?php endif; ?>
+                        </button>
+                    </div>
+                    
+                    <!-- Profile Section -->
+                    <div class="relative" id="profile-dropdown">
+                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                <?php 
+                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                            <div class="text-left">
+                                <div class="text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
+                                </div>
+                                <div class="text-xs text-gray-500">Super Admin</div>
+                            </div>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
+                            <!-- User Info Section -->
+                            <div class="px-4 py-3 border-b border-gray-100">
+                                <div class="text-sm font-semibold text-gray-900">
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
+                                </div>
+                            </div>
+                            
+                            <!-- Menu Items -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('super_admin/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Edit Profile
+                                </a>
+                                <a href="<?php echo base_url('super_admin/settings_brand.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                    Account Settings
+                                </a>
+                                <div class="border-t border-gray-100 my-1"></div>
+                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Logout
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
+            </div>
+        </div>
+        
+        <!-- Inventory Action Buttons -->
+        <div class="mb-6 flex items-center justify-end gap-3">
+            <button onclick="openAlertsModal()" class="relative flex items-center px-4 py-2 <?php echo $alerts_count > 0 ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'; ?> text-white rounded-lg transition-colors shadow-md">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                </svg>
+                View Alerts
+                <?php if ($alerts_count > 0): ?>
+                    <span class="ml-2 bg-yellow-400 text-red-900 text-xs font-bold rounded-full px-2 py-0.5">
+                        <?php echo $alerts_count; ?>
+                    </span>
+                <?php endif; ?>
+            </button>
+            <button onclick="exportInventoryReport()" class="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Export Report
+            </button>
+            <button onclick="window.print()" class="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-md">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                </svg>
+                Print
+            </button>
+        </div>
                 <!-- Filter and Search Bar -->
                 <div class="mt-6 flex flex-col md:flex-row items-center gap-4">
                     <div class="flex-1 w-full relative">
@@ -3286,7 +3414,21 @@ try {
 
         // Acknowledge all alerts
         async function acknowledgeAllAlerts() {
-            if (!confirm('Are you sure you want to acknowledge all alerts?')) {
+            const result = await Swal.fire({
+                title: 'Acknowledge All Alerts?',
+                text: 'Are you sure you want to acknowledge all alerts? This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, Acknowledge All',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true,
+                focusConfirm: false,
+                focusCancel: true
+            });
+            
+            if (!result.isConfirmed) {
                 return;
             }
             
@@ -3297,17 +3439,35 @@ try {
                     body: JSON.stringify({ acknowledge_all: true })
                 });
                 
-                const result = await response.json();
+                const data = await response.json();
                 
-                if (result.success) {
+                if (data.success) {
+                    await Swal.fire({
+                        title: 'Success!',
+                        text: 'All alerts have been acknowledged successfully.',
+                        icon: 'success',
+                        confirmButtonColor: '#2563eb',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
                     // Reload page to update alerts
                     window.location.reload();
                 } else {
-                    alert('Failed to acknowledge alerts: ' + result.message);
+                    await Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to acknowledge alerts: ' + (data.message || 'Unknown error'),
+                        icon: 'error',
+                        confirmButtonColor: '#dc2626'
+                    });
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to acknowledge alerts');
+                await Swal.fire({
+                    title: 'Error',
+                    text: 'Failed to acknowledge alerts. Please try again.',
+                    icon: 'error',
+                    confirmButtonColor: '#dc2626'
+                });
             }
         }
         

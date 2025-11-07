@@ -539,18 +539,8 @@ foreach ($users as $user) {
                 </div>
             </div>
 
-            <!-- Add User Button -->
-            <div class="flex justify-end mb-8">
-                <button onclick="openAddUserModal()" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 animate-fade-in-up">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                                </svg>
-                                Add User
-                            </button>
-                        </div>
-
-            <!-- Search and Filter -->
-            <div class="mb-8">
+            <!-- Toolbar: Search, Filters, and Add User Button -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
                 <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <!-- Search Bar -->
                     <div class="relative flex-1 max-w-md">
@@ -560,163 +550,176 @@ foreach ($users as $user) {
                             </svg>
                         </div>
                         <input type="text" id="searchInput" placeholder="Search users..." 
-                               class="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/50 backdrop-blur-sm placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                               class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm">
                     </div>
                     
-                    <!-- Filter Chips -->
-                    <div class="flex flex-wrap gap-2">
-                        <button class="filter-chip active px-4 py-2 rounded-full text-sm font-medium transition-all duration-200" data-filter="all">
-                            All
-                        </button>
-                        <button class="filter-chip px-4 py-2 rounded-full text-sm font-medium transition-all duration-200" data-filter="super_admin">
-                            Super Admins
-                        </button>
-                        <button class="filter-chip px-4 py-2 rounded-full text-sm font-medium transition-all duration-200" data-filter="bhw">
-                            BHWs
-                        </button>
-                        <button class="filter-chip px-4 py-2 rounded-full text-sm font-medium transition-all duration-200" data-filter="assigned">
-                            Assigned
-                        </button>
-                        <button class="filter-chip px-4 py-2 rounded-full text-sm font-medium transition-all duration-200" data-filter="unassigned">
-                            Unassigned
-                        </button>
+                    <!-- Filter Dropdowns -->
+                    <div class="flex items-center gap-3">
+                        <select id="filterRole" class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="all">All Roles</option>
+                            <option value="super_admin">Super Admin</option>
+                            <option value="bhw">BHW</option>
+                            <option value="resident">Resident</option>
+                        </select>
+                        
+                        <select id="filterStatus" class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="all">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                        
+                        <select id="filterAssignment" class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="all">All Assignments</option>
+                            <option value="assigned">Assigned</option>
+                            <option value="unassigned">Unassigned</option>
+                        </select>
                     </div>
+                    
+                    <!-- Add User Button -->
+                    <button onclick="openAddUserModal()" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-medium rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-sm hover:shadow-md text-sm whitespace-nowrap">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        + Add User
+                    </button>
                 </div>
             </div>
 
-            <!-- Users Section -->
-            <div class="mb-8">
-                <div class="flex items-center justify-between mb-6">
-                    <div>
-                        <h3 class="text-2xl font-bold text-gray-900">System Users</h3>
-                        <p class="text-gray-600">All users with access to the system</p>
-                    </div>
-                    <div class="text-sm text-gray-500">
-                        <span id="user-count-display"><?php echo count($users); ?> users</span>
-                    </div>
-                </div>
-                <!-- Users Grid -->
-                <div id="usersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <?php foreach ($users as $index => $u): ?>
-                        <div class="user-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" 
-                             data-name="<?php echo strtolower(htmlspecialchars($u['name'])); ?>"
-                             data-email="<?php echo strtolower(htmlspecialchars($u['email'])); ?>"
-                             data-role="<?php echo $u['role']; ?>"
-                             data-assigned="<?php echo $u['purok_name'] ? 'assigned' : 'unassigned'; ?>"
-                             style="animation-delay: <?php echo $index * 0.1; ?>s">
-                            
-                            <!-- User Header -->
-                            <div class="flex items-center justify-between mb-6">
-                                            <div class="flex items-center space-x-3">
-                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                                        <span class="text-white font-bold text-sm">
-                                                        <?php echo strtoupper(substr($u['name'], 0, 2)); ?>
-                                                    </span>
-                                                </div>
-                                    <div>
-                                        <h3 class="text-lg font-bold text-gray-900"><?php echo htmlspecialchars($u['name']); ?></h3>
-                                        <p class="text-sm text-gray-600"><?php echo htmlspecialchars($u['email']); ?></p>
-                                    </div>
-                                </div>
-                                
-                                <!-- Status Badge -->
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Active
-                                </span>
-                            </div>
-
-                            <!-- User Details -->
-                            <div class="space-y-4">
-                                <!-- Role -->
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div class="flex items-center space-x-2">
-                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                        </svg>
-                                        <span class="text-sm font-medium text-gray-700">Role</span>
+            <!-- Users Data Table -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="bg-white divide-y divide-gray-200">
+                            <?php foreach ($users as $u): ?>
+                                <tr class="user-row hover:bg-gray-50 transition-colors" 
+                                    data-name="<?php echo strtolower(htmlspecialchars($u['name'])); ?>"
+                                    data-email="<?php echo strtolower(htmlspecialchars($u['email'])); ?>"
+                                    data-role="<?php echo $u['role']; ?>"
+                                    data-assigned="<?php echo $u['purok_name'] ? 'assigned' : 'unassigned'; ?>"
+                                    data-status="active">
+                                    <!-- Name -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0 mr-3">
+                                                <span class="text-white font-semibold text-xs">
+                                                    <?php echo strtoupper(substr($u['name'], 0, 2)); ?>
+                                                </span>
                                             </div>
-                                    <div>
-                                            <?php if ($u['role'] === 'super_admin'): ?>
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                                                    </svg>
-                                                    Super Admin
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                                    </svg>
-                                                    BHW
-                                                </span>
-                                            <?php endif; ?>
-                                    </div>
-                                </div>
-
-                                <!-- Purok Assignment -->
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div class="flex items-center space-x-2">
-                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                        </svg>
-                                        <span class="text-sm font-medium text-gray-700">Assignment</span>
-                                    </div>
-                                    <div class="text-right">
-                                            <?php if ($u['purok_name']): ?>
-                                            <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($u['purok_name']); ?></p>
-                                            <p class="text-xs text-gray-500"><?php echo htmlspecialchars($u['barangay_name']); ?></p>
-                                            <?php else: ?>
-                                            <p class="text-sm text-gray-400 italic">Not assigned</p>
-                                            <?php endif; ?>
-                                    </div>
-                                </div>
-
-                                <!-- Created Date -->
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div class="flex items-center space-x-2">
-                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                        </svg>
-                                        <span class="text-sm font-medium text-gray-700">Created</span>
-                                    </div>
-                                    <span class="text-sm text-gray-600"><?php echo date('M j, Y', strtotime($u['created_at'])); ?></span>
-                                </div>
-                            </div>
-
-                            <!-- Action Button -->
-                            <div class="mt-6 flex justify-end">
-                                <button onclick="openEditModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['name']); ?>', <?php echo $u['purok_id'] ?: 'null'; ?>)" 
-                                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                            <div class="text-sm font-medium text-gray-900">
+                                                <?php echo htmlspecialchars($u['name']); ?>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    
+                                    <!-- Email -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-600"><?php echo htmlspecialchars($u['email']); ?></div>
+                                    </td>
+                                    
+                                    <!-- Role -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <?php if ($u['role'] === 'super_admin'): ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                                Super Admin
+                                            </span>
+                                        <?php elseif ($u['role'] === 'bhw'): ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                BHW
+                                            </span>
+                                        <?php elseif ($u['role'] === 'resident'): ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Resident
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                <?php echo htmlspecialchars(ucfirst($u['role'])); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Assignment -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <?php if ($u['role'] === 'bhw' && $u['purok_name']): ?>
+                                            <div class="text-sm text-gray-900"><?php echo htmlspecialchars($u['purok_name']); ?></div>
+                                            <div class="text-xs text-gray-500"><?php echo htmlspecialchars($u['barangay_name']); ?></div>
+                                        <?php elseif ($u['role'] === 'resident' || $u['role'] === 'super_admin' || !$u['purok_name']): ?>
+                                            <span class="text-sm text-gray-400">—</span>
+                                        <?php else: ?>
+                                            <span class="text-sm text-gray-400">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Status -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                                            Active
+                                        </span>
+                                    </td>
+                                    
+                                    <!-- Created Date -->
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        <?php echo date('M j, Y', strtotime($u['created_at'])); ?>
+                                    </td>
+                                    
+                                    <!-- Actions -->
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div class="relative inline-block text-left">
+                                            <button onclick="toggleActionMenu(<?php echo $u['id']; ?>)" class="inline-flex items-center p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg transition-colors" id="action-btn-<?php echo $u['id']; ?>">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
                                                 </svg>
-                                    Edit User
+                                            </button>
+                                            
+                                            <!-- Action Menu Dropdown -->
+                                            <div id="action-menu-<?php echo $u['id']; ?>" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                                                <button onclick="openEditModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['name']); ?>', <?php echo $u['purok_id'] ?: 'null'; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                    </svg>
+                                                    Edit
+                                                </button>
+                                                <button onclick="deactivateUser(<?php echo $u['id']; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+                                                    </svg>
+                                                    Deactivate
+                                                </button>
+                                                <button onclick="viewUserActivity(<?php echo $u['id']; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                                    </svg>
+                                                    View Activity
                                                 </button>
                                             </div>
-                        </div>
-                                <?php endforeach; ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
                 </div>
-
+                
                 <!-- No Results Message -->
                 <div id="noResults" class="hidden text-center py-12">
-                    <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
                         </svg>
                     </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">No users found</h3>
-                    <p class="text-gray-600 mb-6">Try adjusting your search or filter criteria.</p>
-                    <button onclick="clearFilters()" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Clear Filters
-                    </button>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">No users found</h3>
+                    <p class="text-sm text-gray-600">Try adjusting your search or filter criteria.</p>
                 </div>
             </div>
         </div>
@@ -887,6 +890,57 @@ foreach ($users as $user) {
         </div>
     </div>
 
+    <!-- User Activity Modal -->
+    <div id="activityModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 0; border-radius: 1rem; max-width: 900px; width: 90%; max-height: 90vh; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column;">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold" id="activityModalTitle">User Activity</h3>
+                            <p class="text-blue-100 text-sm" id="activityModalSubtitle">Loading activity data...</p>
+                        </div>
+                    </div>
+                    <button onclick="closeActivityModal()" class="text-white/80 hover:text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Modal Content -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <div id="activityLoading" class="text-center py-12">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p class="mt-4 text-gray-600">Loading activity data...</p>
+                </div>
+                
+                <div id="activityContent" class="hidden">
+                    <div id="activityEmpty" class="hidden text-center py-12">
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-1">No Activity Found</h3>
+                        <p class="text-sm text-gray-600">This user has no recorded activity yet.</p>
+                    </div>
+                    
+                    <div id="activityList" class="space-y-3">
+                        <!-- Activity items will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function openAddUserModal() {
             // Close any other open modals first
@@ -1043,14 +1097,17 @@ foreach ($users as $user) {
 
             // Search and filter functionality
             const searchInput = document.getElementById('searchInput');
-            const filterChips = document.querySelectorAll('.filter-chip');
-            const userCards = document.querySelectorAll('.user-card');
-            const usersGrid = document.getElementById('usersGrid');
+            const filterRole = document.getElementById('filterRole');
+            const filterStatus = document.getElementById('filterStatus');
+            const filterAssignment = document.getElementById('filterAssignment');
+            const userRows = document.querySelectorAll('.user-row');
+            const usersTableBody = document.getElementById('usersTableBody');
             const noResults = document.getElementById('noResults');
-            const userCountDisplay = document.getElementById('user-count-display');
 
-            let currentFilter = 'all';
             let currentSearch = '';
+            let currentRole = 'all';
+            let currentStatus = 'all';
+            let currentAssignment = 'all';
 
             // Search functionality
             if (searchInput) {
@@ -1060,81 +1117,265 @@ foreach ($users as $user) {
                 });
             }
 
-            // Filter functionality
-            filterChips.forEach(chip => {
-                chip.addEventListener('click', function() {
-                    // Update active state
-                    filterChips.forEach(c => c.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    currentFilter = this.dataset.filter;
+            // Filter dropdowns
+            if (filterRole) {
+                filterRole.addEventListener('change', function() {
+                    currentRole = this.value;
                     filterUsers();
                 });
-            });
+            }
+
+            if (filterStatus) {
+                filterStatus.addEventListener('change', function() {
+                    currentStatus = this.value;
+                    filterUsers();
+                });
+            }
+
+            if (filterAssignment) {
+                filterAssignment.addEventListener('change', function() {
+                    currentAssignment = this.value;
+                    filterUsers();
+                });
+            }
 
             function filterUsers() {
                 let visibleCount = 0;
                 
-                userCards.forEach(card => {
-                    const name = card.dataset.name;
-                    const email = card.dataset.email;
-                    const role = card.dataset.role;
-                    const assigned = card.dataset.assigned;
+                userRows.forEach(row => {
+                    const name = row.dataset.name || '';
+                    const email = row.dataset.email || '';
+                    const role = row.dataset.role || '';
+                    const assigned = row.dataset.assigned || '';
+                    const status = row.dataset.status || 'active';
                     
                     let matchesSearch = true;
-                    let matchesFilter = true;
+                    let matchesRole = true;
+                    let matchesStatus = true;
+                    let matchesAssignment = true;
                     
                     // Check search match
                     if (currentSearch) {
                         matchesSearch = name.includes(currentSearch) || email.includes(currentSearch);
                     }
                     
-                    // Check filter match
-                    if (currentFilter !== 'all') {
-                        if (currentFilter === 'assigned' || currentFilter === 'unassigned') {
-                            matchesFilter = assigned === currentFilter;
-                        } else {
-                            matchesFilter = role === currentFilter;
-                        }
+                    // Check role filter
+                    if (currentRole !== 'all') {
+                        matchesRole = role === currentRole;
                     }
                     
-                    if (matchesSearch && matchesFilter) {
-                        card.style.display = 'block';
-                        card.classList.add('animate-fade-in');
+                    // Check status filter
+                    if (currentStatus !== 'all') {
+                        matchesStatus = status === currentStatus;
+                    }
+                    
+                    // Check assignment filter
+                    if (currentAssignment !== 'all') {
+                        matchesAssignment = assigned === currentAssignment;
+                    }
+                    
+                    if (matchesSearch && matchesRole && matchesStatus && matchesAssignment) {
+                        row.style.display = '';
                         visibleCount++;
                     } else {
-                        card.style.display = 'none';
-                        card.classList.remove('animate-fade-in');
+                        row.style.display = 'none';
                     }
                 });
                 
-                // Update count
-                if (userCountDisplay) {
-                    userCountDisplay.textContent = `${visibleCount} users`;
-                }
-                
                 // Show/hide no results message
                 if (visibleCount === 0) {
-                    noResults.classList.remove('hidden');
-                    usersGrid.classList.add('hidden');
+                    if (usersTableBody) usersTableBody.style.display = 'none';
+                    if (noResults) noResults.classList.remove('hidden');
                 } else {
-                    noResults.classList.add('hidden');
-                    usersGrid.classList.remove('hidden');
+                    if (usersTableBody) usersTableBody.style.display = '';
+                    if (noResults) noResults.classList.add('hidden');
                 }
             }
 
-            // Clear filters function
-            window.clearFilters = function() {
-                if (searchInput) {
-                    searchInput.value = '';
+            // Action menu functions
+            window.toggleActionMenu = function(userId) {
+                const menu = document.getElementById('action-menu-' + userId);
+                if (!menu) return;
+                
+                // Close all other menus
+                document.querySelectorAll('[id^="action-menu-"]').forEach(m => {
+                    if (m.id !== 'action-menu-' + userId) {
+                        m.classList.add('hidden');
+                    }
+                });
+                
+                menu.classList.toggle('hidden');
+            };
+
+            window.closeActionMenu = function(userId) {
+                const menu = document.getElementById('action-menu-' + userId);
+                if (menu) menu.classList.add('hidden');
+            };
+
+            // Close menus when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('[id^="action-menu-"]') && !e.target.closest('[id^="action-btn-"]')) {
+                    document.querySelectorAll('[id^="action-menu-"]').forEach(menu => {
+                        menu.classList.add('hidden');
+                    });
                 }
-                currentSearch = '';
-                currentFilter = 'all';
+            });
+
+            // Placeholder functions for action menu items
+            window.deactivateUser = function(userId) {
+                Swal.fire({
+                    title: 'Deactivate User?',
+                    text: 'This will deactivate the user account. They will not be able to log in.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc2626',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Yes, Deactivate',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // TODO: Implement deactivation logic
+                        Swal.fire('Deactivated!', 'User has been deactivated.', 'success');
+                    }
+                });
+            };
+
+            // User Activity Modal Functions
+            window.viewUserActivity = async function(userId) {
+                const modal = document.getElementById('activityModal');
+                const loading = document.getElementById('activityLoading');
+                const content = document.getElementById('activityContent');
+                const empty = document.getElementById('activityEmpty');
+                const list = document.getElementById('activityList');
+                const title = document.getElementById('activityModalTitle');
+                const subtitle = document.getElementById('activityModalSubtitle');
                 
-                filterChips.forEach(c => c.classList.remove('active'));
-                filterChips[0].classList.add('active');
+                if (!modal) return;
                 
-                filterUsers();
+                // Show modal and loading state
+                modal.style.display = 'flex';
+                loading.classList.remove('hidden');
+                content.classList.add('hidden');
+                empty.classList.add('hidden');
+                list.innerHTML = '';
+                
+                try {
+                    const response = await fetch(`get_user_activity.php?user_id=${userId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Update modal title
+                        title.textContent = data.user.name + '\'s Activity';
+                        subtitle.textContent = data.user.email + ' • ' + data.user.role.toUpperCase() + ' • ' + data.count + ' activities';
+                        
+                        // Hide loading
+                        loading.classList.add('hidden');
+                        content.classList.remove('hidden');
+                        
+                        if (data.activities && data.activities.length > 0) {
+                            empty.classList.add('hidden');
+                            
+                            // Display activities
+                            data.activities.forEach((activity, index) => {
+                                const activityCard = document.createElement('div');
+                                activityCard.className = 'bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow';
+                                
+                                // Determine icon and color based on activity type
+                                let iconSvg = '';
+                                let bgColor = 'bg-blue-100';
+                                let iconColor = 'text-blue-600';
+                                
+                                if (activity.type === 'inventory') {
+                                    if (activity.details['Transaction Type'] === 'IN') {
+                                        iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
+                                        bgColor = 'bg-green-100';
+                                        iconColor = 'text-green-600';
+                                    } else {
+                                        iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>';
+                                        bgColor = 'bg-red-100';
+                                        iconColor = 'text-red-600';
+                                    }
+                                } else if (activity.type === 'request') {
+                                    if (activity.details['Status'] === 'Approved' || activity.details['Status'] === 'Claimed') {
+                                        iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                                        bgColor = 'bg-green-100';
+                                        iconColor = 'text-green-600';
+                                    } else if (activity.details['Status'] === 'Rejected') {
+                                        iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                                        bgColor = 'bg-red-100';
+                                        iconColor = 'text-red-600';
+                                    } else {
+                                        iconSvg = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                                        bgColor = 'bg-yellow-100';
+                                        iconColor = 'text-yellow-600';
+                                    }
+                                }
+                                
+                                let detailsHtml = '';
+                                for (const [key, value] of Object.entries(activity.details)) {
+                                    detailsHtml += `
+                                        <div class="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
+                                            <span class="text-sm text-gray-600">${key}:</span>
+                                            <span class="text-sm font-medium text-gray-900">${value}</span>
+                                        </div>
+                                    `;
+                                }
+                                
+                                activityCard.innerHTML = `
+                                    <div class="flex items-start space-x-4">
+                                        <div class="flex-shrink-0">
+                                            <div class="w-10 h-10 ${bgColor} rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 ${iconColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    ${iconSvg}
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center justify-between mb-1">
+                                                <h4 class="text-sm font-semibold text-gray-900">${activity.title}</h4>
+                                                <span class="text-xs text-gray-500 ml-2">${activity.date}</span>
+                                            </div>
+                                            <p class="text-sm text-gray-600 mb-3">${activity.description}</p>
+                                            <div class="bg-gray-50 rounded-lg p-3 text-xs">
+                                                ${detailsHtml}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                
+                                list.appendChild(activityCard);
+                            });
+                        } else {
+                            empty.classList.remove('hidden');
+                        }
+                    } else {
+                        loading.classList.add('hidden');
+                        Swal.fire({
+                            title: 'Error',
+                            text: data.message || 'Failed to load user activity',
+                            icon: 'error',
+                            confirmButtonColor: '#dc2626'
+                        });
+                        closeActivityModal();
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    loading.classList.add('hidden');
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to load user activity. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#dc2626'
+                    });
+                    closeActivityModal();
+                }
+            };
+
+            window.closeActivityModal = function() {
+                const modal = document.getElementById('activityModal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
             };
 
             // Add keyboard navigation for search
@@ -1152,6 +1393,7 @@ foreach ($users as $user) {
             document.addEventListener('click', function(e) {
                 const addModal = document.getElementById('addUserModal');
                 const editModal = document.getElementById('editModal');
+                const activityModal = document.getElementById('activityModal');
                 
                 if (addModal && addModal.style.display === 'flex') {
                     const modalContent = addModal.querySelector('div > div');
@@ -1166,6 +1408,13 @@ foreach ($users as $user) {
                         closeEditModal();
                     }
                 }
+                
+                if (activityModal && activityModal.style.display === 'flex') {
+                    const modalContent = activityModal.querySelector('div > div');
+                    if (modalContent && !modalContent.contains(e.target) && e.target === activityModal) {
+                        closeActivityModal();
+                    }
+                }
             });
 
             // Add escape key to close modals
@@ -1173,11 +1422,14 @@ foreach ($users as $user) {
                 if (e.key === 'Escape') {
                     const addModal = document.getElementById('addUserModal');
                     const editModal = document.getElementById('editModal');
+                    const activityModal = document.getElementById('activityModal');
                     
                     if (addModal && addModal.style.display === 'flex') {
                         closeAddUserModal();
                     } else if (editModal && editModal.style.display === 'flex') {
                         closeEditModal();
+                    } else if (activityModal && activityModal.style.display === 'flex') {
+                        closeActivityModal();
                     }
                 }
             });

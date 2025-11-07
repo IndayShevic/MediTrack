@@ -1313,9 +1313,11 @@ $meds = db()->query('
                     <!-- Proof of Need -->
                     <div>
                         <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Proof of Need <span style="color: #ef4444;">*</span></label>
-                        <div style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; background: #f9fafb;" onmouseover="this.style.borderColor='#6b7280'; this.style.backgroundColor='#f3f4f6';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='#f9fafb';">
-                            <input type="file" name="proof" accept="image/*,application/pdf" required style="display: none;" id="proofFile" />
-                            <label for="proofFile" style="cursor: pointer; display: block;">
+                        
+                        <!-- File Upload Area -->
+                        <div id="proofUploadAreaModal" style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; background: #f9fafb;" onmouseover="this.style.borderColor='#6b7280'; this.style.backgroundColor='#f3f4f6';" onmouseout="this.style.borderColor='#d1d5db'; this.style.backgroundColor='#f9fafb';">
+                            <input type="file" name="proof" accept="image/*,application/pdf" required style="display: none;" id="proofFileModal" />
+                            <label for="proofFileModal" style="cursor: pointer; display: block;">
                                 <div style="width: 48px; height: 48px; background: #6b7280; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
                                     <svg style="width: 24px; height: 24px; color: white;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -1325,6 +1327,30 @@ $meds = db()->query('
                                 <p style="font-size: 12px; color: #6b7280; margin: 0;">JPG, PNG, or PDF (Max 10MB)</p>
                             </label>
                         </div>
+                        
+                        <!-- Preview Area (hidden by default) -->
+                        <div id="proofPreviewModal" style="display: none; margin-top: 12px;">
+                            <div style="background: white; border-radius: 8px; padding: 16px; border: 2px solid #10b981; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                    <h5 style="font-size: 13px; font-weight: 600; color: #059669; display: flex; align-items: center; margin: 0;">
+                                        <svg style="width: 16px; height: 16px; margin-right: 6px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        File Uploaded Successfully
+                                    </h5>
+                                    <button type="button" onclick="removeProofPreviewModal()" style="color: #dc2626; background: none; border: none; cursor: pointer; padding: 4px;">
+                                        <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div id="proofPreviewContentModal" style="margin-top: 12px;">
+                                    <!-- Preview will be inserted here -->
+                                </div>
+                                <p id="proofFileNameModal" style="font-size: 11px; color: #6b7280; margin-top: 8px; text-align: center; margin-bottom: 0;"></p>
+                            </div>
+                        </div>
+                        
                         <p style="font-size: 12px; color: #6b7280; margin: 8px 0 0 0;">Upload temperature reading, medical certificate, or other proof of illness</p>
                     </div>
 
@@ -1418,8 +1444,85 @@ $meds = db()->query('
                 familySelect.appendChild(option);
             });
             
+            // Reset proof preview when opening modal
+            removeProofPreviewModal();
+            
             // Show modal
             modal.style.display = 'flex';
+        }
+        
+        // Setup proof preview for modal (called once on page load)
+        document.addEventListener('DOMContentLoaded', function() {
+            const proofFileInput = document.getElementById('proofFileModal');
+            if (proofFileInput) {
+                proofFileInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        showProofPreviewModal(file);
+                    }
+                });
+            }
+        });
+        
+        function showProofPreviewModal(file) {
+            const proofPreview = document.getElementById('proofPreviewModal');
+            const proofPreviewContent = document.getElementById('proofPreviewContentModal');
+            const proofFileName = document.getElementById('proofFileNameModal');
+            const proofUploadArea = document.getElementById('proofUploadAreaModal');
+            
+            if (!file) return;
+            
+            // Show file name
+            proofFileName.textContent = file.name;
+            
+            // Check if it's an image or PDF
+            if (file.type.startsWith('image/')) {
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    proofPreviewContent.innerHTML = `
+                        <div style="display: flex; justify-content: center;">
+                            <img src="${e.target.result}" alt="Proof Preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; border: 2px solid #e5e7eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); object-fit: contain;">
+                        </div>
+                    `;
+                    proofPreview.style.display = 'block';
+                    proofUploadArea.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            } else if (file.type === 'application/pdf') {
+                // Show PDF icon with file info
+                proofPreviewContent.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: #f9fafb; border-radius: 8px; border: 2px solid #e5e7eb;">
+                        <svg style="width: 64px; height: 64px; color: #dc2626; margin-bottom: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        <p style="font-size: 14px; font-weight: 600; color: #374151; margin: 0;">PDF Document</p>
+                        <p style="font-size: 12px; color: #6b7280; margin-top: 4px; margin-bottom: 0;">${(file.size / 1024).toFixed(2)} KB</p>
+                    </div>
+                `;
+                proofPreview.style.display = 'block';
+                proofUploadArea.style.display = 'none';
+            }
+        }
+        
+        function removeProofPreviewModal() {
+            const proofPreview = document.getElementById('proofPreviewModal');
+            const proofFileInput = document.getElementById('proofFileModal');
+            const proofUploadArea = document.getElementById('proofUploadAreaModal');
+            
+            // Reset file input
+            if (proofFileInput) {
+                proofFileInput.value = '';
+            }
+            
+            // Hide preview and show upload area
+            if (proofPreview) {
+                proofPreview.style.display = 'none';
+            }
+            
+            if (proofUploadArea) {
+                proofUploadArea.style.display = 'block';
+            }
         }
 
         function closeRequestModal() {
@@ -1430,6 +1533,9 @@ $meds = db()->query('
             document.getElementById('requestForm').reset();
             document.getElementById('familyFields').style.display = 'none';
             document.getElementById('familyMemberSelect').style.display = 'none';
+            
+            // Reset proof preview
+            removeProofPreviewModal();
         }
 
         function toggleFamilyFields() {

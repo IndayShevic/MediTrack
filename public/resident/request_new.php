@@ -679,7 +679,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                                 Proof of Need <span class="text-red-600 text-lg">*</span>
                             </h4>
-                            <div class="border-3 border-dashed border-red-300 rounded-2xl p-8 text-center hover:border-red-400 hover:bg-red-50 transition-all duration-300 cursor-pointer bg-white shadow-sm">
+                            
+                            <!-- File Upload Area -->
+                            <div id="proofUploadArea" class="border-3 border-dashed border-red-300 rounded-2xl p-8 text-center hover:border-red-400 hover:bg-red-50 transition-all duration-300 cursor-pointer bg-white shadow-sm">
                                 <input type="file" name="proof" accept="image/*,application/pdf" required class="hidden" id="proofFile" />
                                 <label for="proofFile" class="cursor-pointer block">
                                     <div class="w-16 h-16 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -691,6 +693,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <p class="text-sm text-red-700">JPG, PNG, or PDF (Max 10MB)</p>
                                 </label>
                             </div>
+                            
+                            <!-- Preview Area (hidden by default) -->
+                            <div id="proofPreview" class="hidden mt-4">
+                                <div class="bg-white rounded-xl p-4 border-2 border-green-300 shadow-md">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h5 class="text-sm font-semibold text-green-800 flex items-center">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            File Uploaded Successfully
+                                        </h5>
+                                        <button type="button" onclick="removeProofPreview()" class="text-red-600 hover:text-red-800 transition-colors">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div id="proofPreviewContent" class="mt-3">
+                                        <!-- Preview will be inserted here -->
+                                    </div>
+                                    <p id="proofFileName" class="text-xs text-gray-600 mt-2 text-center"></p>
+                                </div>
+                            </div>
+                            
                             <p class="text-sm text-red-800 mt-4 italic">Upload temperature reading, medical certificate, or other proof of illness</p>
                         </div>
                         
@@ -712,6 +738,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </main>
 <script>
+// Proof Image Preview Functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const proofFileInput = document.getElementById('proofFile');
+    const proofPreview = document.getElementById('proofPreview');
+    const proofPreviewContent = document.getElementById('proofPreviewContent');
+    const proofFileName = document.getElementById('proofFileName');
+    const proofUploadArea = document.getElementById('proofUploadArea');
+    
+    if (proofFileInput) {
+        proofFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                showProofPreview(file);
+            }
+        });
+        
+        // Drag and drop functionality
+        if (proofUploadArea) {
+            proofUploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                proofUploadArea.classList.add('border-red-500', 'bg-red-100');
+            });
+            
+            proofUploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                proofUploadArea.classList.remove('border-red-500', 'bg-red-100');
+            });
+            
+            proofUploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                proofUploadArea.classList.remove('border-red-500', 'bg-red-100');
+                
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+                    proofFileInput.files = e.dataTransfer.files;
+                    showProofPreview(file);
+                } else {
+                    alert('Please upload an image (JPG, PNG) or PDF file.');
+                }
+            });
+        }
+    }
+});
+
+function showProofPreview(file) {
+    const proofPreview = document.getElementById('proofPreview');
+    const proofPreviewContent = document.getElementById('proofPreviewContent');
+    const proofFileName = document.getElementById('proofFileName');
+    const proofUploadArea = document.getElementById('proofUploadArea');
+    
+    if (!file) return;
+    
+    // Show file name
+    proofFileName.textContent = file.name;
+    
+    // Check if it's an image or PDF
+    if (file.type.startsWith('image/')) {
+        // Show image preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            proofPreviewContent.innerHTML = `
+                <div class="flex justify-center">
+                    <img src="${e.target.result}" alt="Proof Preview" class="max-w-full max-h-64 rounded-lg border-2 border-gray-200 shadow-sm object-contain">
+                </div>
+            `;
+            proofPreview.classList.remove('hidden');
+            proofUploadArea.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    } else if (file.type === 'application/pdf') {
+        // Show PDF icon with file info
+        proofPreviewContent.innerHTML = `
+            <div class="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                <svg class="w-16 h-16 text-red-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                </svg>
+                <p class="text-sm font-semibold text-gray-700">PDF Document</p>
+                <p class="text-xs text-gray-500 mt-1">${(file.size / 1024).toFixed(2)} KB</p>
+            </div>
+        `;
+        proofPreview.classList.remove('hidden');
+        proofUploadArea.style.display = 'none';
+    }
+}
+
+function removeProofPreview() {
+    const proofPreview = document.getElementById('proofPreview');
+    const proofFileInput = document.getElementById('proofFile');
+    const proofUploadArea = document.getElementById('proofUploadArea');
+    
+    // Reset file input
+    if (proofFileInput) {
+        proofFileInput.value = '';
+    }
+    
+    // Hide preview and show upload area
+    if (proofPreview) {
+        proofPreview.classList.add('hidden');
+    }
+    
+    if (proofUploadArea) {
+        proofUploadArea.style.display = 'block';
+    }
+}
+
 document.getElementById('reqFor').addEventListener('change', function() {
   const familyFields = document.getElementById('familyFields');
   const familyMemberSelect = document.getElementById('familyMemberSelect');

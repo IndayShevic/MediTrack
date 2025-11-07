@@ -368,21 +368,235 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </script>
     <style>
         html { scroll-behavior: smooth; }
-        .nav-link.active { color: #1d4ed8; font-weight: 600; }
         
-        /* Enhanced Animations */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+        /* Navbar Active Link Styles */
+        .nav-link {
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .nav-link.active {
+            color: #2563eb;
+            background-color: #eff6ff;
+            font-weight: 600;
+        }
+        
+        .nav-link:not(.active) {
+            color: #374151;
+        }
+        
+        .nav-link:not(.active):hover {
+            color: #2563eb;
+            background-color: #f9fafb;
+        }
+        
+        /* Mobile Nav Link Active Styles */
+        .nav-link-mobile {
+            transition: all 0.2s ease;
+        }
+        
+        .nav-link-mobile.active-mobile {
+            color: #2563eb;
+            background-color: #eff6ff;
+            font-weight: 600;
+        }
+        
+        .nav-link-mobile.active-mobile span {
+            background-color: #2563eb;
+        }
+        
+        .nav-link-mobile:not(.active-mobile):hover span {
+            background-color: #d1d5db;
+        }
+        
+        /* Mobile Menu Animation - Simple and Clean */
+        #mobileMenu {
+            max-height: 0;
+            opacity: 0;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            overflow: hidden;
+        }
+        
+        #mobileMenu:not(.hidden) {
+            max-height: 400px;
+            opacity: 1;
+        }
+        
+        /* Mobile Menu Link Styles - Vertical Layout */
+        #mobileMenu .flex.flex-col {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+        
+        .nav-link-mobile {
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+        
+        .nav-link-mobile.active-mobile {
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        
+        /* Ensure mobile menu is hidden on desktop */
+        @media (min-width: 768px) {
+            #mobileMenu {
+                display: none !important;
             }
         }
         
-        @keyframes fadeInDown {
+        /* Mobile menu visibility */
+        @media (max-width: 767px) {
+            #mobileMenu.hidden {
+                display: none;
+            }
+            
+            #mobileMenu:not(.hidden) {
+                display: block;
+            }
+        }
+        
+        /* Responsive Navbar Improvements */
+        nav {
+            overflow-x: hidden;
+        }
+        
+        /* Navbar backdrop blur effect */
+        @supports (backdrop-filter: blur(12px)) {
+            nav {
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+            }
+        }
+        
+        /* Ensure perfect horizontal alignment of logo, text, and hamburger - single row */
+        nav > div > div {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-wrap: nowrap !important;
+        }
+        
+        /* Logo container alignment - stays left */
+        nav > div > div > div:first-child {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            flex-shrink: 0 !important;
+            margin-right: auto !important;
+        }
+        
+        /* Logo text alignment */
+        nav > div > div > div:first-child > span {
+            display: inline-flex !important;
+            align-items: center !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Hamburger button alignment - stays right, hidden on desktop */
+        nav button#mobileMenuBtn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            margin-left: auto !important;
+        }
+        
+        /* Ensure hamburger is hidden on desktop (md and above) */
+        @media (min-width: 768px) {
+            nav button#mobileMenuBtn {
+                display: none !important;
+            }
+        }
+        
+        /* Ensure hamburger is visible on mobile (below md) */
+        @media (max-width: 767px) {
+            nav button#mobileMenuBtn {
+                display: flex !important;
+            }
+        }
+        
+        /* Ensure logo stays left and hamburger stays right - single row */
+        @media (max-width: 767px) {
+            /* Ensure single row layout */
+            nav > div > div {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                flex-wrap: nowrap !important;
+                width: 100% !important;
+            }
+            
+            /* Logo container - left side */
+            nav > div > div > div:first-child {
+                margin-right: auto !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+            }
+            
+            /* Ensure logo icon and text stay side by side */
+            nav > div > div > div:first-child > div,
+            nav > div > div > div:first-child > span {
+                display: inline-flex !important;
+                align-items: center !important;
+                flex-shrink: 0 !important;
+            }
+            
+            /* Hamburger button - right side */
+            nav button#mobileMenuBtn {
+                margin-left: auto !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+        }
+        
+        /* Tablet adjustments */
+        @media (min-width: 768px) and (max-width: 1023px) {
+            nav .hidden.md\\:flex {
+                gap: 1rem;
+            }
+        }
+        
+        /* Desktop enhancements */
+        @media (min-width: 1024px) {
+            nav .nav-link {
+                padding: 0.5rem 1rem;
+            }
+        }
+        
+        /* Hamburger icon animation */
+        #mobileMenuBtn[aria-expanded="true"] #hamburgerIcon {
+            transform: rotate(90deg);
+        }
+        
+            /* Smooth scroll offset for navbar - adjusted for larger navbar */
+            html {
+                scroll-padding-top: 68px;
+            }
+            
+            @media (min-width: 768px) {
+                html {
+                    scroll-padding-top: 76px;
+                }
+            }
+            
+            @media (min-width: 1024px) {
+                html {
+                    scroll-padding-top: 84px;
+                }
+            }
+        
+        /* Enhanced Animations */
+        @keyframes fadeInUp {
             from {
                 opacity: 0;
                 transform: translateY(-40px);
@@ -666,9 +880,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .orb--blue { background:#60a5fa; top:-6rem; right:-6rem; animation: float 12s ease-in-out infinite; }
         .orb--violet { background:#a78bfa; bottom:-8rem; left:-6rem; animation: float 16s ease-in-out infinite reverse; }
         .glass-card-xl { backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-          background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.74));
-          border:1px solid rgba(255,255,255,.45); border-radius:1.5rem;
-          box-shadow: 0 30px 80px -20px rgba(59,130,246,.25), 0 12px 30px rgba(2,6,23,.08);
+          background: linear-gradient(180deg, rgba(239,246,255,.95), rgba(224,242,254,.90));
+          border:1px solid rgba(147,197,253,.3); border-radius:1.5rem;
         }
         .tilt { transform-style: preserve-3d; transition: transform .35s ease, box-shadow .35s ease; }
         .tilt:hover { transform: translateY(-6px) rotateX(2deg) rotateY(-3deg); box-shadow: 0 30px 60px rgba(0,0,0,.12); }
@@ -852,6 +1065,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background: rgba(255, 255, 255, 0.95);
         }
         
+        /* Navbar clean styling */
+        nav {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* Ensure proper alignment */
+        nav > div > div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        /* Responsive navbar improvements */
+        @media (max-width: 640px) {
+            nav {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            
+            /* Prevent logo text overflow on very small screens */
+            nav span[class*="text-base"] {
+                max-width: 150px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+        
+        @media (max-width: 380px) {
+            nav span[class*="text-base"] {
+                font-size: 0.875rem;
+                max-width: 120px;
+            }
+            
+            nav .w-9 {
+                width: 2rem;
+                height: 2rem;
+            }
+        }
+        
+        
         /* Parallax effect */
         .parallax-element {
             transition: transform 0.1s ease-out;
@@ -894,6 +1148,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @keyframes shimmer {
             0% { background-position: -1000px 0; }
             100% { background-position: 1000px 0; }
+        }
+        
+        /* Dancing card animation */
+        @keyframes dance {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+        
+        .dancing-card {
+            animation: dance 2.5s ease-in-out infinite;
+        }
+        
+        /* Mobile Menu Dropdown Styles */
+        #mobileMenu {
+            transition: all 0.3s ease;
+        }
+        
+        #mobileMenu.hidden {
+            display: none;
+        }
+        
+        /* Hamburger Button */
+        #mobileMenuBtn {
+            transition: transform 0.3s ease;
+        }
+        
+        #mobileMenuBtn:hover {
+            transform: scale(1.1);
         }
         
         .shimmer {
@@ -1411,82 +1697,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     </style>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative overflow-x-hidden">
-    <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 border-b border-gray-200 bg-white shadow-sm">
-        <div class="max-w-7xl mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <!-- Logo Left -->
-                <div class="flex items-center space-x-3">
-                    <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name', 'MediTrack'); ?>
-                    <?php if ($logo): ?>
-                        <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" alt="Logo" class="h-11 w-11 rounded-lg shadow-md" />
-                    <?php else: ?>
-                        <div class="w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-                            </svg>
-                        </div>
-                    <?php endif; ?>
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 animate-gradient">
-                            <?php echo htmlspecialchars($brand); ?>.
-                        </span>
-                        <span class="text-[10px] text-gray-500 font-semibold tracking-widest uppercase">Barangay Loon</span>
+     <!-- Navigation -->
+     <nav class="fixed top-0 left-0 right-0 w-full z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8">
+            <div class="flex items-center justify-between py-2.5 sm:py-3 md:py-3.5 lg:py-4 w-full flex-nowrap">
+                <!-- Logo Left - Always visible, forced left alignment -->
+                <div class="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 flex-shrink-0">
+                    <?php $brand = get_setting('brand_name', 'MediTrack'); ?>
+                    <div class="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md flex-shrink-0 transition-transform duration-200 hover:scale-105">
+                        <svg class="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
                     </div>
+                    <span class="text-base sm:text-lg md:text-xl lg:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 whitespace-nowrap flex-shrink-0">
+                        <?php echo htmlspecialchars($brand); ?>.
+                    </span>
                 </div>
 
-                <!-- Nav Links Center -->
-                <div class="hidden md:flex items-center gap-10 absolute left-1/2 transform -translate-x-1/2">
-                    <a href="#home" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Home</a>
-                    <a href="#features" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Features</a>
-                    <a href="#about" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">About</a>
-                    <a href="#contact" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-colors">Contact</a>
+                <!-- Desktop Nav Links - Center -->
+                <div class="hidden md:flex md:items-center gap-x-5 lg:gap-x-7 xl:gap-x-8 flex-1 justify-center mx-4 lg:mx-8">
+                    <a href="#home" id="nav-home" class="nav-link active text-base lg:text-lg font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Home</a>
+                    <a href="#features" id="nav-features" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Features</a>
+                    <a href="#about" id="nav-about" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">About</a>
+                    <a href="#contact" id="nav-contact" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Contact</a>
                 </div>
-                
-                <!-- CTA Right -->
-                <div class="flex items-center gap-3">
-                    <button onclick="openRegisterModal()" class="hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 hover:border-gray-400 transition-all duration-300 hover:shadow-md hover:scale-105 active:scale-95">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                        </svg>
-                        Register
-                    </button>
-                    <button onclick="openLoginModal()" class="hidden md:inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 relative overflow-hidden group">
-                        <span class="relative z-10">Sign in</span>
-                        <svg class="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                        </svg>
-                        <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                    </button>
-                    
-                    <!-- Mobile Menu Button -->
-                    <button id="mobileMenuBtn" class="md:hidden p-2 text-gray-700 hover:text-blue-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
-                    </button>
+
+                <!-- Desktop CTA Buttons - Right -->
+                <div class="hidden md:flex md:items-center gap-2.5 lg:gap-3 flex-shrink-0">
+                    <button onclick="openLoginModal()" class="text-gray-700 text-base lg:text-lg font-semibold hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg hover:bg-gray-50 whitespace-nowrap">Sign in</button>
+                    <button onclick="openRegisterModal()" class="text-white text-base lg:text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 lg:px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 whitespace-nowrap">Register</button>
                 </div>
+
+                <!-- Mobile Hamburger Button - Right, aligned horizontally with logo -->
+                <button id="mobileMenuBtn" class="md:hidden cursor-pointer text-blue-600 hover:text-blue-700 transition-all duration-200 flex-shrink-0 p-2 sm:p-2.5 rounded-lg hover:bg-blue-50 active:bg-blue-100 flex items-center justify-center" aria-label="Toggle menu" aria-expanded="false">
+                    <svg id="hamburgerIcon" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 sm:w-7 sm:h-7 transition-transform duration-200" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12.9499909,17 C12.7183558,18.1411202 11.709479,19 10.5,19 C9.29052104,19 8.28164422,18.1411202 8.05000906,17 L3.5,17 C3.22385763,17 3,16.7761424 3,16.5 C3,16.2238576 3.22385763,16 3.5,16 L8.05000906,16 C8.28164422,14.8588798 9.29052104,14 10.5,14 C11.709479,14 12.7183558,14.8588798 12.9499909,16 L20.5,16 C20.7761424,16 21,16.2238576 21,16.5 C21,16.7761424 20.7761424,17 20.5,17 L12.9499909,17 Z M18.9499909,12 C18.7183558,13.1411202 17.709479,14 16.5,14 C15.290521,14 14.2816442,13.1411202 14.0500091,12 L3.5,12 C3.22385763,12 3,11.7761424 3,11.5 C3,11.2238576 3.22385763,11 3.5,11 L14.0500091,11 C14.2816442,9.85887984 15.290521,9 16.5,9 C17.709479,9 18.7183558,9.85887984 18.9499909,11 L20.5,11 C20.7761424,11 21,11.2238576 21,11.5 C21,11.7761424 20.7761424,12 20.5,12 L18.9499909,12 Z M9.94999094,7 C9.71835578,8.14112016 8.70947896,9 7.5,9 C6.29052104,9 5.28164422,8.14112016 5.05000906,7 L3.5,7 C3.22385763,7 3,6.77614237 3,6.5 C3,6.22385763 3.22385763,6 3.5,6 L5.05000906,6 C5.28164422,4.85887984 6.29052104,4 7.5,4 C8.70947896,4 9.71835578,4.85887984 9.94999094,6 L20.5,6 C20.7761424,6 21,6.22385763 21,6.5 C21,6.77614237 20.7761424,7 20.5,7 L9.94999094,7 Z M7.5,8 C8.32842712,8 9,7.32842712 9,6.5 C9,5.67157288 8.32842712,5 7.5,5 C6.67157288,5 6,5.67157288 6,6.5 C6,7.32842712 6.67157288,8 7.5,8 Z M16.5,13 C17.3284271,13 18,12.3284271 18,11.5 C18,10.6715729 17.3284271,10 16.5,10 C15.6715729,10 15,10.6715729 15,11.5 C15,12.3284271 15.6715729,13 16.5,13 Z M10.5,18 C11.3284271,18 12,17.3284271 12,16.5 C12,15.6715729 11.3284271,15 10.5,15 C9.67157288,15 9,15.6715729 9,16.5 C9,17.3284271 9.67157288,18 10.5,18 Z"/>
+                    </svg>
+                </button>
             </div>
             
-            <!-- Mobile Menu -->
-            <div id="mobileMenu" class="hidden md:hidden border-t border-gray-200 bg-white">
-                <div class="px-4 py-4 space-y-3">
-                    <a href="#home" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Home</a>
-                    <a href="#features" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Features</a>
-                    <a href="#about" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">About</a>
-                    <a href="#contact" class="block px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors font-medium">Contact</a>
-                    <div class="pt-3 space-y-2 border-t border-gray-200">
-                        <button onclick="openRegisterModal()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 transition-all">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                            </svg>
-                            Register
-                        </button>
-                        <button onclick="openLoginModal()" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium shadow-lg">
+            <!-- Mobile Menu Dropdown -->
+            <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
+                <div class="flex flex-col py-3 px-4 space-y-1">
+                    <a href="#home" id="nav-mobile-home" onclick="handleNavClick('home'); closeMobileMenu();" class="nav-link-mobile active-mobile text-base font-medium text-blue-600 bg-blue-50 py-2.5 px-4 rounded-lg transition-colors">
+                        Home
+                    </a>
+                    <a href="#features" id="nav-mobile-features" onclick="handleNavClick('features'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                        Features
+                    </a>
+                    <a href="#about" id="nav-mobile-about" onclick="handleNavClick('about'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                        About
+                    </a>
+                    <a href="#contact" id="nav-mobile-contact" onclick="handleNavClick('contact'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                        Contact
+                    </a>
+                    <div class="flex flex-col gap-2 border-t border-gray-200 pt-3 mt-2">
+                        <button onclick="openLoginModal(); closeMobileMenu();" class="text-base font-medium text-gray-700 hover:text-blue-600 py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-colors text-left">
                             Sign in
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                            </svg>
+                        </button>
+                        <button onclick="openRegisterModal(); closeMobileMenu();" class="text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors text-center">
+                            Register
                         </button>
                     </div>
                 </div>
@@ -1495,7 +1765,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </nav>
 
     <!-- Hero Section -->
-    <section id="home" class="relative overflow-hidden z-10 pt-40 pb-20">
+    <section id="home" class="relative overflow-hidden z-10 pt-28 sm:pt-32 md:pt-36 pb-12 sm:pb-16 md:pb-20">
         <!-- Unique layered background -->
         <div class="aurora"></div>
         <div class="dot-grid absolute inset-0"></div>
@@ -1503,67 +1773,210 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="orb orb--violet"></div>
 
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-14 items-center">
                 <!-- Left content -->
-                <div class="space-y-4 sm:space-y-6 animate-slide-in-left text-center lg:text-left">
-                    <div class="badge-pill w-max mx-auto lg:mx-0 float-animation">
-                        <svg class="w-4 h-4 icon-rotate" viewBox="0 0 24 24" fill="none">
+                <div class="space-y-4 sm:space-y-5 md:space-y-6 animate-slide-in-left text-center lg:text-left">
+                    <div class="badge-pill w-max mx-auto lg:mx-0 text-xs sm:text-sm">
+                        <svg class="w-3 h-3 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none">
                             <path d="M5 13l4 4L19 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         Barangay-first healthcare
                     </div>
 
-                    <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight hero-title">
+                    <h1 class="text-3xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-extrabold leading-tight text-gray-900">
                         Protecting your Health,
-                        <span class="block text-gradient animate-gradient">
+                        <span class="block bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">
                             Our Priority
                         </span>
                     </h1>
 
-                    <p class="text-base sm:text-lg lg:text-xl text-gray-600 max-w-xl mx-auto lg:mx-0 scroll-reveal">
+                    <p class="text-xs sm:text-sm md:text-base lg:text-lg text-gray-600 max-w-xl mx-auto lg:mx-0 leading-relaxed">
                     Track and distribute medicines efficiently at the barangay level—connecting residents, BHWs, and admins in one smart system for faster service, accurate inventory, and healthier communities.
                     </p>
 
-                    <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center lg:justify-start">
-                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-6 sm:px-7 py-3 shadow-glow hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group btn-ripple magnetic pulse-glow">
+                    <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center lg:justify-start items-center">
+                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base shadow-glow hover:scale-105 transition-transform inline-flex items-center justify-center gap-2 group whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
                             <span>Get started</span>
-                            <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                             </svg>
                         </button>
-                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-6 sm:px-7 py-3 hover:scale-105 transition-all duration-300 flex items-center justify-center magnetic">
+                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base hover:scale-105 transition-transform inline-flex items-center justify-center whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
                             Learn more
-                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
                         </a>
-                    </div>
-                    
-                    <div class="flex items-center gap-4 pt-3 text-sm text-gray-600 justify-center lg:justify-start float-animation-delayed">
-                        <div class="flex -space-x-2">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300">B</div>
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300 delay-100">H</div>
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-rose-600 text-white grid place-items-center font-semibold shadow-md hover:scale-110 transition-transform duration-300 delay-200">W</div>
-                        </div>
-                        <span class="hidden sm:inline">Trusted by barangays and healthcare workers</span>
-                        <span class="sm:hidden text-xs">Trusted by barangays</span>
-                    </div>
+                    </div>                    
                 </div>
 
-                <!-- Right visual - 4D Logo -->
-                <div class="relative animate-slide-in-right float-animation">
-                    <div class="logo-4d-container">
-                        <div class="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-6 shadow-2xl">
-                            <div class="logo-4d-panel">
-                                <div class="logo-4d-emblem">
-                                    <div class="logo-cross"></div>
-                                    <div class="logo-pill">
-                                        <div class="logo-pill-cap"></div>
+                <!-- Right visual -->
+                <div class="relative animate-slide-in-right mt-8 lg:mt-0">
+                    <div class="glass-card-xl p-3 sm:p-5 tilt dancing-card">
+                        <div class="relative rounded-2xl overflow-hidden">
+                            <div class="absolute -inset-4 sm:-inset-8 bg-gradient-to-tr from-blue-400/20 via-indigo-400/20 to-fuchsia-400/20 blur-2xl"></div>
+                            <svg class="relative rounded-xl shadow-2xl w-full h-auto max-w-full" viewBox="0 0 600 380" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                                <defs>
+                                    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style="stop-color:#eff6ff;stop-opacity:1" />
+                                        <stop offset="100%" style="stop-color:#ffffff;stop-opacity:1" />
+                                    </linearGradient>
+                                    <linearGradient id="primary-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                        <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    </linearGradient>
+                                    <linearGradient id="pill-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                        <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    </linearGradient>
+                                    <filter id="shadow-main">
+                                        <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+                                        <feOffset dx="0" dy="3" result="offsetblur"/>
+                                        <feComponentTransfer>
+                                            <feFuncA type="linear" slope="0.3"/>
+                                        </feComponentTransfer>
+                                        <feMerge>
+                                            <feMergeNode/>
+                                            <feMergeNode in="SourceGraphic"/>
+                                        </feMerge>
+                                    </filter>
+                                    <filter id="shadow-soft">
+                                        <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+                                        <feOffset dx="0" dy="1" result="offsetblur"/>
+                                        <feComponentTransfer>
+                                            <feFuncA type="linear" slope="0.2"/>
+                                        </feComponentTransfer>
+                                        <feMerge>
+                                            <feMergeNode/>
+                                            <feMergeNode in="SourceGraphic"/>
+                                        </feMerge>
+                                    </filter>
+                                </defs>
+                                
+                                <!-- Background -->
+                                <rect width="600" height="400" fill="url(#bg-gradient)" rx="12"/>
+                                
+                                <!-- Health Center Building -->
+                                <g transform="translate(120, 80)">
+                                    <!-- Building base -->
+                                    <rect x="-50" y="0" width="100" height="80" rx="4" fill="url(#primary-gradient)" opacity="0.9" filter="url(#shadow-main)"/>
+                                    <!-- Building roof -->
+                                    <path d="M -55 0 L 0 -20 L 55 0 Z" fill="#2563eb" opacity="0.9"/>
+                                    <!-- Windows -->
+                                    <rect x="-35" y="20" width="15" height="15" rx="2" fill="#ffffff" opacity="0.9"/>
+                                    <rect x="-10" y="20" width="15" height="15" rx="2" fill="#ffffff" opacity="0.9"/>
+                                    <rect x="15" y="20" width="15" height="15" rx="2" fill="#ffffff" opacity="0.9"/>
+                                    <rect x="-35" y="45" width="15" height="15" rx="2" fill="#60a5fa" opacity="0.7"/>
+                                    <rect x="-10" y="45" width="15" height="15" rx="2" fill="#ffffff" opacity="0.9"/>
+                                    <rect x="15" y="45" width="15" height="15" rx="2" fill="#60a5fa" opacity="0.7"/>
+                                    <!-- Door -->
+                                    <rect x="-12" y="60" width="24" height="20" rx="2" fill="#1e40af" opacity="0.8"/>
+                                    <!-- Medical cross on door -->
+                                    <rect x="-8" y="70" width="4" height="8" rx="2" fill="#ffffff" opacity="0.9"/>
+                                    <rect x="-10" y="72" width="8" height="4" rx="2" fill="#ffffff" opacity="0.9"/>
+                                </g>
+                                
+                                <!-- Inventory Clipboard/Tablet -->
+                                <g transform="translate(320, 60)">
+                                    <!-- Tablet base -->
+                                    <rect x="-60" y="-50" width="120" height="140" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow-main)"/>
+                                    <!-- Screen header -->
+                                    <rect x="-60" y="-50" width="120" height="25" rx="8" fill="url(#primary-gradient)" opacity="0.9"/>
+                                    <!-- Signal bars (real-time indicator) -->
+                                    <g transform="translate(40, -40)">
+                                        <rect x="0" y="8" width="3" height="8" rx="1" fill="#ffffff" opacity="0.8"/>
+                                        <rect x="5" y="5" width="3" height="11" rx="1" fill="#ffffff" opacity="0.8"/>
+                                        <rect x="10" y="2" width="3" height="14" rx="1" fill="#ffffff" opacity="0.8"/>
+                                    </g>
+                                    <!-- Inventory list lines -->
+                                    <line x1="-50" y1="10" x2="50" y2="10" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round"/>
+                                    <line x1="-50" y1="30" x2="50" y2="30" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round"/>
+                                    <line x1="-50" y1="50" x2="50" y2="50" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round"/>
+                                    <line x1="-50" y1="70" x2="50" y2="70" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round"/>
+                                    <!-- Pills on list -->
+                                    <ellipse cx="-35" cy="10" rx="6" ry="3" fill="url(#pill-gradient)" opacity="0.8"/>
+                                    <ellipse cx="-35" cy="30" rx="6" ry="3" fill="#10b981" opacity="0.8"/>
+                                    <ellipse cx="-35" cy="50" rx="6" ry="3" fill="#8b5cf6" opacity="0.8"/>
+                                    <ellipse cx="-35" cy="70" rx="6" ry="3" fill="url(#pill-gradient)" opacity="0.8"/>
+                                </g>
+                                
+                                <!-- Medicine Storage Box -->
+                                <g transform="translate(480, 100)">
+                                    <!-- Box -->
+                                    <rect x="-40" y="-30" width="80" height="60" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow-main)"/>
+                                    <!-- Box lid -->
+                                    <rect x="-42" y="-32" width="84" height="8" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="2"/>
+                                    <!-- Pills inside -->
+                                    <ellipse cx="-20" cy="0" rx="8" ry="4" fill="url(#pill-gradient)" opacity="0.7"/>
+                                    <ellipse cx="0" cy="5" rx="7" ry="3.5" fill="#10b981" opacity="0.7"/>
+                                    <ellipse cx="20" cy="-5" rx="8" ry="4" fill="#8b5cf6" opacity="0.7"/>
+                                    <!-- Label -->
+                                    <rect x="-30" y="-20" width="60" height="12" rx="2" fill="#3b82f6" opacity="0.1"/>
+                                </g>
+                                
+                                <!-- Real-time Tracking Waves -->
+                                <g transform="translate(300, 220)">
+                                    <!-- Wave 1 -->
+                                    <path d="M -100 0 Q -80 -15 -60 0 T -20 0 T 20 0 T 60 0 T 100 0" 
+                                          fill="none" 
+                                          stroke="#3b82f6" 
+                                          stroke-width="3" 
+                                          opacity="0.4" 
+                                          stroke-linecap="round"/>
+                                    <!-- Wave 2 -->
+                                    <path d="M -100 10 Q -80 -5 -60 10 T -20 10 T 20 10 T 60 10 T 100 10" 
+                                          fill="none" 
+                                          stroke="#6366f1" 
+                                          stroke-width="3" 
+                                          opacity="0.3" 
+                                          stroke-linecap="round"/>
+                                    <!-- Wave 3 -->
+                                    <path d="M -100 20 Q -80 5 -60 20 T -20 20 T 20 20 T 60 20 T 100 20" 
+                                          fill="none" 
+                                          stroke="#8b5cf6" 
+                                          stroke-width="3" 
+                                          opacity="0.2" 
+                                          stroke-linecap="round"/>
+                                </g>
+                                
+                                <!-- Medicine Pills Display -->
+                                <g transform="translate(150, 300)">
+                                    <ellipse cx="0" cy="0" rx="22" ry="11" fill="url(#pill-gradient)" opacity="0.9" filter="url(#shadow-soft)"/>
+                                    <line x1="-14" y1="0" x2="14" y2="0" stroke="#ffffff" stroke-width="2" opacity="0.9"/>
+                                    <circle cx="-9" cy="0" r="2.5" fill="#ffffff" opacity="0.8"/>
+                                    <circle cx="9" cy="0" r="2.5" fill="#ffffff" opacity="0.8"/>
+                                </g>
+                                
+                                <g transform="translate(300, 305)">
+                                    <ellipse cx="0" cy="0" rx="20" ry="10" fill="#10b981" opacity="0.9" filter="url(#shadow-soft)"/>
+                                    <line x1="-13" y1="0" x2="13" y2="0" stroke="#ffffff" stroke-width="2" opacity="0.9"/>
+                                </g>
+                                
+                                <g transform="translate(450, 300)">
+                                    <ellipse cx="0" cy="0" rx="22" ry="11" fill="#8b5cf6" opacity="0.9" filter="url(#shadow-soft)"/>
+                                    <line x1="-14" y1="0" x2="14" y2="0" stroke="#ffffff" stroke-width="2" opacity="0.9"/>
+                                    <circle cx="-9" cy="0" r="2.5" fill="#ffffff" opacity="0.8"/>
+                                    <circle cx="9" cy="0" r="2.5" fill="#ffffff" opacity="0.8"/>
+                                </g>
+                                
+                                <!-- Connecting Lines (Network/System) -->
+                                <g transform="translate(300, 190)" opacity="0.3">
+                                    <line x1="-80" y1="0" x2="-20" y2="0" stroke="#3b82f6" stroke-width="2" stroke-dasharray="3,3"/>
+                                    <line x1="20" y1="0" x2="80" y2="0" stroke="#3b82f6" stroke-width="2" stroke-dasharray="3,3"/>
+                                    <circle cx="0" cy="0" r="3" fill="#3b82f6"/>
+                                </g>
+                            </svg>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
+                            <div class="card p-3 sm:p-4">
+                                <div class="text-xs text-gray-500">Easy to Use</div>
+                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Simple Interface</div>
                                 </div>
-                                    <div class="logo-checkmark"></div>
-                                </div>
-                                <h2 class="logo-text-3d">MediTrack</h2>
-                                <p class="logo-tagline">Medicine Inventory Management</p>
+                            <div class="card p-3 sm:p-4">
+                                <div class="text-xs text-gray-500">Fast & Reliable</div>
+                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Real-time Updates</div>
+                            </div>
+                            <div class="card p-3 sm:p-4">
+                                <div class="text-xs text-gray-500">Secure</div>
+                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Protected Data</div>
                             </div>
                         </div>
                     </div>
@@ -1576,42 +1989,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </section>
 
         <!-- Features Section -->
-        <section id="features" class="py-12 sm:py-16 lg:py-20 bg-white/60">
+        <section id="features" class="py-12 sm:py-16 lg:py-24 bg-white/60">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left scroll-reveal">
-                    <span class="hero-title">Powerful Features</span>
-                </h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    <div class="card scroll-reveal">
-                        <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <div class="text-center mb-10 sm:mb-12 lg:mb-16">
+                    <div class="flex items-center justify-center gap-3 mb-4 sm:mb-5">
+                        <div class="h-px w-12 sm:w-16 bg-gradient-to-r from-transparent via-blue-400 to-blue-600"></div>
+                        <div class="w-2 h-2 bg-blue-600 rounded-full"></div>
+                        <div class="w-8 h-px bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600"></div>
+                        <div class="w-2 h-2 bg-purple-600 rounded-full"></div>
+                        <div class="h-px w-12 sm:w-16 bg-gradient-to-l from-transparent via-purple-400 to-purple-600"></div>
+                    </div>
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4 scroll-reveal">
+                        <span class="hero-title">Core Features</span>
+                    </h2>
+                    <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                        Everything you need to manage medicine inventory and requests efficiently
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                    <div class="group relative bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-5 hover:border-blue-500 transition-all duration-300 hover:shadow-lg overflow-hidden">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 -mr-px -mt-px"></div>
+                        <div class="relative z-10">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-600 group-hover:scale-110 transition-all duration-300">
+                                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             </div>
-                            <div>
-                                <div class="font-semibold text-gray-900">Browse & Request</div>
-                                <p class="text-sm text-gray-600">Residents can discover medicines and submit requests with proof and patient info.</p>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-blue-600 transition-colors duration-300">Browse & Request</div>
+                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">Residents can discover medicines and submit requests with proof and patient info.</p>
                             </div>
                         </div>
                     </div>
-                    <div class="card scroll-reveal delay-200">
-                        <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <div class="group relative bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-5 hover:border-green-500 transition-all duration-300 hover:shadow-lg overflow-hidden">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-green-100 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 -mr-px -mt-px"></div>
+                        <div class="relative z-10">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-green-600 group-hover:scale-110 transition-all duration-300">
+                                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </div>
-                            <div>
-                                <div class="font-semibold text-gray-900">BHW Approval</div>
-                                <p class="text-sm text-gray-600">BHWs verify and approve requests, managing residents and families by purok.</p>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-green-600 transition-colors duration-300">BHW Approval</div>
+                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">BHWs verify and approve requests, managing residents and families by purok.</p>
                             </div>
                         </div>
                     </div>
-                    <div class="card scroll-reveal delay-400">
-                        <div class="card-body flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center icon-rotate hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    <div class="group relative bg-white border-2 border-gray-200 rounded-xl p-4 sm:p-5 hover:border-purple-500 transition-all duration-300 hover:shadow-lg overflow-hidden">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-purple-100 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 -mr-px -mt-px"></div>
+                        <div class="relative z-10">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-purple-600 group-hover:scale-110 transition-all duration-300">
+                                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                             </div>
-                            <div>
-                                <div class="font-semibold text-gray-900">Admin Inventory</div>
-                                <p class="text-sm text-gray-600">Super Admins manage medicines, batches, users, and senior allocations with FEFO.</p>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-purple-600 transition-colors duration-300">Admin Inventory</div>
+                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">Super Admins manage medicines, batches, users, and senior allocations with FEFO.</p>
                             </div>
                         </div>
                     </div>
@@ -1620,23 +2048,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- About Section -->
-        <section id="about" class="py-12 sm:py-16 lg:py-20">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6 text-center lg:text-left">About MediTrack</h2>
-                <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-3xl text-center lg:text-left mx-auto lg:mx-0">A barangay-focused medicine inventory and request platform featuring FEFO batch handling, role-based dashboards (Super Admin, BHW, Resident), and a senior citizen maintenance allocation program. Built with PHP, MySQL, and TailwindCSS for reliability and speed.</p>
+        <section id="about" class="py-12 sm:py-16 lg:py-24 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/20 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                <div class="text-center mb-10 sm:mb-12 lg:mb-16">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">
+                        About <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">MediTrack</span>
+                    </h2>
+                    <div class="w-24 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 mx-auto rounded-full"></div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 mb-8 sm:mb-12">
+                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
+                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">What is MediTrack?</h3>
+                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                            MediTrack is a comprehensive web-based solution designed specifically for barangay health centers. It streamlines medicine inventory management and request processing, connecting residents, Barangay Health Workers (BHWs), and administrators in one unified platform.
+                        </p>
+                    </div>
+                    
+                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
+                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Our Purpose</h3>
+                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                            We aim to improve healthcare accessibility at the barangay level by providing a reliable, efficient system for tracking medicine availability, processing requests, and ensuring timely distribution to residents who need them most.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
+                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
+                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">How It Works</h3>
+                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                            Residents can browse available medicines and submit requests with necessary documentation. BHWs review and approve requests, while administrators manage inventory using FEFO (First Expired, First Out) batch handling to ensure medicine quality and safety.
+                        </p>
+                    </div>
+                    
+                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
+                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Why MediTrack Matters</h3>
+                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                            Built with PHP, MySQL, and TailwindCSS, MediTrack offers role-based dashboards for Super Admins, BHWs, and Residents. It features a senior citizen maintenance allocation program and ensures accurate inventory tracking for healthier communities.
+                        </p>
+                    </div>
+                </div>
             </div>
         </section>
 
         <!-- Contact CTA -->
-        <section id="contact" class="py-12 sm:py-16 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <section id="contact" class="py-12 sm:py-16 lg:py-20 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="card">
-                    <div class="card-body flex items-center justify-between flex-col md:flex-row gap-4 text-center md:text-left">
-                        <div>
-                            <h3 class="text-lg sm:text-xl font-semibold text-gray-900">Need help getting started?</h3>
-                            <p class="text-sm sm:text-base text-gray-600">Visit your barangay health center or sign in below.</p>
+                <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 lg:p-10 border border-gray-100">
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+                        <div class="flex-1">
+                            <h3 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 sm:mb-3">Need help getting started?</h3>
+                            <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-2xl mx-auto md:mx-0">Visit your barangay health center or sign in below to access the platform.</p>
                         </div>
-                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg whitespace-nowrap">Sign in</button>
+                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg whitespace-nowrap px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
+                            Sign in
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1644,14 +2111,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
         <!-- Testimonials -->
-        <section id="testimonials" class="py-12 sm:py-16 lg:py-20 bg-white/60 relative overflow-hidden">
+        <section id="testimonials" class="py-12 sm:py-16 lg:py-24 bg-white/60 relative overflow-hidden">
             <div class="absolute top-10 right-10 w-64 h-64 bg-blue-200 rounded-full blur-3xl opacity-20 animate-pulse-slow hidden sm:block"></div>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <div class="text-center mb-8 sm:mb-12 animate-fade-in-up">
-                    <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 sm:mb-3">What users say</h2>
-                    <p class="text-sm sm:text-base text-gray-600">Real feedback from real users</p>
+                <div class="text-center mb-10 sm:mb-12 lg:mb-16 animate-fade-in-up">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">What users say</h2>
+                    <p class="text-sm sm:text-base lg:text-lg text-gray-600">Real feedback from real users</p>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-8">
                     <div class="card testimonial-card animate-fade-in-up delay-100">
                         <div class="card-body">
                             <div class="flex mb-3">
@@ -1744,44 +2211,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- FAQ -->
-        <section id="faq" class="py-12 sm:py-16 lg:py-20">
-            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-6 sm:mb-8 text-center lg:text-left">Frequently Asked Questions</h2>
-                <div class="space-y-4">
-                    <details class="card animate-fade-in">
-                        <summary class="card-body cursor-pointer font-medium text-gray-900">How do residents request medicines?</summary>
-                        <div class="px-6 pb-6 text-gray-700">Residents sign in, browse medicines, and submit a request with a proof image and patient details.</div>
+        <section id="faq" class="py-12 sm:py-16 lg:py-24 bg-gray-50/50">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-10 sm:mb-12 lg:mb-16">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">Frequently Asked Questions</h2>
+                    <p class="text-sm sm:text-base lg:text-lg text-gray-600">Find answers to common questions about MediTrack</p>
+                </div>
+                <div class="space-y-4 sm:space-y-5">
+                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                            <span class="flex items-center justify-between">
+                                <span>How do residents request medicines?</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </span>
+                        </summary>
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                            Residents sign in, browse medicines, and submit a request with a proof image and patient details.
+                        </div>
                     </details>
-                    <details class="card animate-fade-in">
-                        <summary class="card-body cursor-pointer font-medium text-gray-900">How are approvals handled?</summary>
-                        <div class="px-6 pb-6 text-gray-700">BHWs review requests and approve/reject. Approved requests automatically deduct stock FEFO from batches.</div>
+                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                            <span class="flex items-center justify-between">
+                                <span>How are approvals handled?</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </span>
+                        </summary>
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                            BHWs review requests and approve/reject. Approved requests automatically deduct stock FEFO from batches.
+                        </div>
                     </details>
-                    <details class="card animate-fade-in">
-                        <summary class="card-body cursor-pointer font-medium text-gray-900">Do emails send automatically?</summary>
-                        <div class="px-6 pb-6 text-gray-700">Yes. The system emails request and user events via PHPMailer. Email attempts are logged for review.</div>
+                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                            <span class="flex items-center justify-between">
+                                <span>Do emails send automatically?</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </span>
+                        </summary>
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                            Yes. The system emails request and user events via PHPMailer. Email attempts are logged for review.
+                        </div>
                     </details>
                 </div>
             </div>
         </section>
     </main>
 
-    <footer class="border-t py-6 text-center text-sm text-gray-500 bg-white/80 backdrop-blur-sm relative z-10">
-        <div class="max-w-7xl mx-auto px-6">
-            <div class="text-lg font-bold text-gradient mb-2"><?php echo htmlspecialchars($brand); ?></div>
-            <p class="text-gray-600">© <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.</p>
-            <p class="text-gray-500 text-xs mt-2">Making healthcare accessible for everyone.</p>
+    <footer class="border-t border-gray-200 py-8 sm:py-10 bg-white/90 backdrop-blur-sm relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <div class="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 mb-3 sm:mb-4">
+                    <?php echo htmlspecialchars($brand); ?>
+                </div>
+                <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.</p>
+                <p class="text-xs sm:text-sm text-gray-500">Making healthcare accessible for everyone.</p>
+            </div>
         </div>
     </footer>
 
     <!-- Scroll to Top Button -->
-    <button id="scrollToTop" class="fixed bottom-6 right-6 bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-4 rounded-full shadow-glow hidden z-50 hover:shadow-xl transition-all duration-300 hover:scale-110">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <button id="scrollToTop" class="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-3 sm:p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 hidden z-50">
+        <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
         </svg>
     </button>
 
     <!-- Sticky mobile login CTA -->
-    <button onclick="openLoginModal()" class="md:hidden fixed bottom-24 right-6 btn btn-primary shadow-glow z-40">Login</button>
+    <button onclick="openLoginModal()" class="md:hidden fixed bottom-20 sm:bottom-24 right-4 sm:right-6 btn btn-primary shadow-lg z-40 px-4 py-2.5 text-sm font-semibold rounded-lg">Login</button>
 
     <!-- Success Notification -->
     <div id="successNotification" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50">
@@ -3533,30 +4034,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
         
+        // Active Link Management
+        function setActiveLink(sectionId) {
+            // Remove active class from all desktop links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Remove active-mobile class from all mobile links
+            document.querySelectorAll('.nav-link-mobile').forEach(link => {
+                link.classList.remove('active-mobile');
+                // Reset indicator dot
+                const dot = link.querySelector('span');
+                if (dot) {
+                    dot.style.backgroundColor = 'transparent';
+                }
+            });
+            
+            // Add active class to the clicked desktop link
+            const desktopLink = document.getElementById('nav-' + sectionId);
+            if (desktopLink) {
+                desktopLink.classList.add('active');
+            }
+            
+            // Add active-mobile class to the clicked mobile link
+            const mobileLink = document.getElementById('nav-mobile-' + sectionId);
+            if (mobileLink) {
+                mobileLink.classList.add('active-mobile');
+                const dot = mobileLink.querySelector('span');
+                if (dot) {
+                    dot.style.backgroundColor = '#2563eb';
+                }
+            }
+        }
+        
+        // Handle nav link clicks
+        function handleNavClick(sectionId) {
+            setActiveLink(sectionId);
+            // Smooth scroll to section
+            const section = document.getElementById(sectionId);
+            if (section) {
+                const offset = 80;
+                const elementPosition = section.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - offset;
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth'
+                });
+            }
+        }
+        
+        // Make function globally available
+        window.handleNavClick = handleNavClick;
+        
+        // Initialize: Set Home as active by default
+        document.addEventListener('DOMContentLoaded', function() {
+            setActiveLink('home');
+            
+            // Add click handlers to all nav links
+            document.querySelectorAll('.nav-link, .nav-link-mobile').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const sectionId = href.substring(1);
+                        handleNavClick(sectionId);
+                    }
+                });
+            });
+        });
+        
         // Mobile menu toggle
         const mobileMenuBtn = document.getElementById('mobileMenuBtn');
         const mobileMenu = document.getElementById('mobileMenu');
         
-        if (mobileMenuBtn && mobileMenu) {
-            mobileMenuBtn.addEventListener('click', () => {
-                mobileMenu.classList.toggle('hidden');
-                
-                // Toggle icon
-                const icon = mobileMenuBtn.querySelector('svg');
-                if (mobileMenu.classList.contains('hidden')) {
-                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>';
+        // Function to toggle mobile menu
+        function toggleMobileMenu() {
+            if (mobileMenu && mobileMenuBtn) {
+                const isHidden = mobileMenu.classList.contains('hidden');
+                if (isHidden) {
+                    mobileMenu.classList.remove('hidden');
+                    mobileMenuBtn.setAttribute('aria-expanded', 'true');
+                    document.body.style.overflow = 'hidden';
                 } else {
-                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+                    mobileMenu.classList.add('hidden');
+                    mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                    document.body.style.overflow = '';
                 }
+            }
+        }
+        
+        // Function to close mobile menu
+        function closeMobileMenu() {
+            if (mobileMenu && mobileMenuBtn) {
+                mobileMenu.classList.add('hidden');
+                mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                document.body.style.overflow = '';
+            }
+        }
+        
+        // Make functions globally available
+        window.closeMobileMenu = closeMobileMenu;
+        window.toggleMobileMenu = toggleMobileMenu;
+        
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleMobileMenu();
             });
             
             // Close mobile menu when clicking nav links
-            mobileMenu.querySelectorAll('a').forEach(link => {
+            mobileMenu.querySelectorAll('a, button').forEach(link => {
                 link.addEventListener('click', () => {
-                    mobileMenu.classList.add('hidden');
-                    const icon = mobileMenuBtn.querySelector('svg');
-                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>';
+                    closeMobileMenu();
                 });
+            });
+            
+            // Close menu on escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !mobileMenu.classList.contains('hidden')) {
+                    closeMobileMenu();
+                }
+            });
+            
+            // Close menu when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
+                    closeMobileMenu();
+                }
             });
         }
         
@@ -3592,22 +4196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
         
-        // Active link highlighting on scroll
-        const sections = ['home','features','about','contact'];
-        const links = Array.from(document.querySelectorAll('.nav-link'));
-        const sectionEls = sections.map(id => document.getElementById(id));
+        // Show/hide scroll to top button
+        const scrollToTopBtn = document.getElementById('scrollToTop');
         const onScroll = () => {
-            const y = window.scrollY + 100; // offset for navbar
-            let active = 'home';
-            for (const el of sectionEls) {
-                if (!el) continue;
-                const top = el.offsetTop;
-                if (y >= top) active = el.id;
-            }
-            links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + active));
-            
-            // Show/hide scroll to top button
-            const scrollToTopBtn = document.getElementById('scrollToTop');
             if (window.pageYOffset > 300) {
                 scrollToTopBtn.classList.remove('hidden');
             } else {
@@ -3854,5 +4445,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </script>
 </body>
 </html>
+
 
 

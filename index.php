@@ -1716,16 +1716,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Desktop Nav Links - Center -->
                 <div class="hidden md:flex md:items-center gap-x-5 lg:gap-x-7 xl:gap-x-8 flex-1 justify-center mx-4 lg:mx-8">
-                    <a href="#home" id="nav-home" class="nav-link active text-base lg:text-lg font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Home</a>
-                    <a href="#features" id="nav-features" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Features</a>
-                    <a href="#about" id="nav-about" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">About</a>
-                    <a href="#contact" id="nav-contact" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Contact</a>
+                    <a href="#home" id="nav-home" class="nav-link active text-sm sm:text-base font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Home</a>
+                    <a href="#features" id="nav-features" class="nav-link text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Features</a>
+                    <a href="#about" id="nav-about" class="nav-link text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">About</a>
+                    <a href="#contact" id="nav-contact" class="nav-link text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Contact</a>
                 </div>
 
                 <!-- Desktop CTA Buttons - Right -->
                 <div class="hidden md:flex md:items-center gap-2.5 lg:gap-3 flex-shrink-0">
-                    <button onclick="openLoginModal()" class="text-gray-700 text-base lg:text-lg font-semibold hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg hover:bg-gray-50 whitespace-nowrap">Sign in</button>
-                    <button onclick="openRegisterModal()" class="text-white text-base lg:text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 lg:px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 whitespace-nowrap">Register</button>
+                    <button onclick="openLoginModal()" class="text-gray-700 text-sm sm:text-base font-semibold hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg hover:bg-gray-50 whitespace-nowrap">Sign in</button>
+                    <button onclick="openRegisterModal()" class="text-white text-sm sm:text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 lg:px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 whitespace-nowrap">Register</button>
                 </div>
 
                 <!-- Mobile Hamburger Button - Right, aligned horizontally with logo -->
@@ -1739,23 +1739,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- Mobile Menu Dropdown -->
             <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
                 <div class="flex flex-col py-3 px-4 space-y-1">
-                    <a href="#home" id="nav-mobile-home" onclick="handleNavClick('home'); closeMobileMenu();" class="nav-link-mobile active-mobile text-base font-medium text-blue-600 bg-blue-50 py-2.5 px-4 rounded-lg transition-colors">
+                    <a href="#home" id="nav-mobile-home" onclick="handleNavClick('home'); closeMobileMenu();" class="nav-link-mobile active-mobile text-sm sm:text-base font-semibold text-blue-600 bg-blue-50 py-2.5 px-4 rounded-lg transition-colors">
                         Home
                     </a>
-                    <a href="#features" id="nav-mobile-features" onclick="handleNavClick('features'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                    <a href="#features" id="nav-mobile-features" onclick="handleNavClick('features'); closeMobileMenu();" class="nav-link-mobile text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         Features
                     </a>
-                    <a href="#about" id="nav-mobile-about" onclick="handleNavClick('about'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                    <a href="#about" id="nav-mobile-about" onclick="handleNavClick('about'); closeMobileMenu();" class="nav-link-mobile text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         About
                     </a>
-                    <a href="#contact" id="nav-mobile-contact" onclick="handleNavClick('contact'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
+                    <a href="#contact" id="nav-mobile-contact" onclick="handleNavClick('contact'); closeMobileMenu();" class="nav-link-mobile text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         Contact
                     </a>
                     <div class="flex flex-col gap-2 border-t border-gray-200 pt-3 mt-2">
-                        <button onclick="openLoginModal(); closeMobileMenu();" class="text-base font-medium text-gray-700 hover:text-blue-600 py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                        <button onclick="openLoginModal(); closeMobileMenu();" class="text-sm sm:text-base font-semibold text-gray-700 hover:text-blue-600 py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-colors text-left">
                             Sign in
                         </button>
-                        <button onclick="openRegisterModal(); closeMobileMenu();" class="text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors text-center">
+                        <button onclick="openRegisterModal(); closeMobileMenu();" class="text-sm sm:text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors text-center">
                             Register
                         </button>
                     </div>
@@ -1765,43 +1765,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </nav>
 
     <!-- Hero Section -->
-    <section id="home" class="relative overflow-hidden z-10 pt-28 sm:pt-32 md:pt-36 pb-12 sm:pb-16 md:pb-20">
+    <section id="home" class="relative overflow-hidden z-10 pt-28 sm:pt-28 md:pt-34 pb-14 sm:pb-16 md:pb-20 min-h-screen">
         <!-- Unique layered background -->
         <div class="aurora"></div>
         <div class="dot-grid absolute inset-0"></div>
         <div class="orb orb--blue"></div>
         <div class="orb orb--violet"></div>
 
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative mt-8 sm:mt-12 md:mt-16 lg:mt-20">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-14 items-center">
                 <!-- Left content -->
                 <div class="space-y-4 sm:space-y-5 md:space-y-6 animate-slide-in-left text-center lg:text-left">
-                    <div class="badge-pill w-max mx-auto lg:mx-0 text-xs sm:text-sm">
+                    <div class="badge-pill w-max mx-auto lg:mx-0 text-xs sm:text-sm font-medium mb-5">
                         <svg class="w-3 h-3 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none">
                             <path d="M5 13l4 4L19 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         Barangay-first healthcare
                     </div>
 
-                    <h1 class="text-3xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-extrabold leading-tight text-gray-900">
+                    <h1 class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight text-gray-900 mb-4 sm:mb-6">
                         Protecting your Health,
                         <span class="block bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">
                             Our Priority
                         </span>
                     </h1>
 
-                    <p class="text-xs sm:text-sm md:text-base lg:text-lg text-gray-600 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+                    <p class="text-sm sm:text-base md:text-lg text-gray-600 max-w-xl mx-auto lg:mx-0 leading-relaxed mb-6 sm:mb-8">
                     Track and distribute medicines efficiently at the barangay level—connecting residents, BHWs, and admins in one smart system for faster service, accurate inventory, and healthier communities.
                     </p>
 
                     <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center lg:justify-start items-center">
-                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base shadow-glow hover:scale-105 transition-transform inline-flex items-center justify-center gap-2 group whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
+                        <button onclick="openLoginModal()" class="btn btn-lg cta-primary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base font-semibold shadow-glow hover:scale-105 transition-transform inline-flex items-center justify-center gap-2 group whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
                             <span>Get started</span>
                             <svg class="w-4 h-4 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                             </svg>
                         </button>
-                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base hover:scale-105 transition-transform inline-flex items-center justify-center whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
+                        <a href="#features" class="btn btn-lg cta-secondary rounded-full px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base font-semibold hover:scale-105 transition-transform inline-flex items-center justify-center whitespace-nowrap min-w-[140px] sm:min-w-[155px]">
                             Learn more
                         </a>
                     </div>                    
@@ -1809,10 +1809,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Right visual -->
                 <div class="relative animate-slide-in-right mt-8 lg:mt-0">
-                    <div class="glass-card-xl p-3 sm:p-5 tilt dancing-card">
+                    <div class="glass-card-xl p-2 sm:p-3 md:p-4 lg:p-5 tilt dancing-card">
                         <div class="relative rounded-2xl overflow-hidden">
-                            <div class="absolute -inset-4 sm:-inset-8 bg-gradient-to-tr from-blue-400/20 via-indigo-400/20 to-fuchsia-400/20 blur-2xl"></div>
-                            <svg class="relative rounded-xl shadow-2xl w-full h-auto max-w-full" viewBox="0 0 600 380" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                            <div class="absolute -inset-2 sm:-inset-4 md:-inset-6 lg:-inset-8 bg-gradient-to-tr from-blue-400/20 via-indigo-400/20 to-fuchsia-400/20 blur-xl sm:blur-2xl"></div>
+                            <svg class="relative rounded-xl shadow-2xl w-full h-auto" viewBox="0 0 600 380" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
                                 <defs>
                                     <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                                         <stop offset="0%" style="stop-color:#eff6ff;stop-opacity:1" />
@@ -1965,18 +1965,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </svg>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
-                            <div class="card p-3 sm:p-4">
-                                <div class="text-xs text-gray-500">Easy to Use</div>
-                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Simple Interface</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-1.5 md:gap-2 mt-2 sm:mt-3">
+                            <div class="card p-2 sm:p-3 md:p-4">
+                                <div class="text-xs sm:text-sm font-medium text-gray-500">Easy to Use</div>
+                                <div class="mt-1 sm:mt-1.5 text-sm sm:text-base md:text-lg font-semibold text-gray-900">Simple Interface</div>
                                 </div>
-                            <div class="card p-3 sm:p-4">
-                                <div class="text-xs text-gray-500">Fast & Reliable</div>
-                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Real-time Updates</div>
+                            <div class="card p-2 sm:p-3 md:p-4">
+                                <div class="text-xs sm:text-sm font-medium text-gray-500">Fast & Reliable</div>
+                                <div class="mt-1 sm:mt-1.5 text-sm sm:text-base md:text-lg font-semibold text-gray-900">Real-time Updates</div>
                             </div>
-                            <div class="card p-3 sm:p-4">
-                                <div class="text-xs text-gray-500">Secure</div>
-                                <div class="mt-1 text-sm sm:text-base font-semibold text-gray-900">Protected Data</div>
+                            <div class="card p-2 sm:p-3 md:p-4">
+                                <div class="text-xs sm:text-sm font-medium text-gray-500">Secure</div>
+                                <div class="mt-1 sm:mt-1.5 text-sm sm:text-base md:text-lg font-semibold text-gray-900">Protected Data</div>
                             </div>
                         </div>
                     </div>
@@ -1989,20 +1989,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </section>
 
         <!-- Features Section -->
-        <section id="features" class="py-12 sm:py-16 lg:py-24 bg-white/60">
+        <section id="features" class="py-12 sm:py-16 lg:py-24 bg-white/60 mb-4">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center mb-10 sm:mb-12 lg:mb-16">
-                    <div class="flex items-center justify-center gap-3 mb-4 sm:mb-5">
-                        <div class="h-px w-12 sm:w-16 bg-gradient-to-r from-transparent via-blue-400 to-blue-600"></div>
-                        <div class="w-2 h-2 bg-blue-600 rounded-full"></div>
-                        <div class="w-8 h-px bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600"></div>
-                        <div class="w-2 h-2 bg-purple-600 rounded-full"></div>
-                        <div class="h-px w-12 sm:w-16 bg-gradient-to-l from-transparent via-purple-400 to-purple-600"></div>
+                    <div class="flex flex-row items-center justify-center gap-2 sm:gap-3 mb-5 w-full">
+                        <div class="h-px w-10 sm:w-16 bg-gradient-to-r from-transparent via-blue-400 to-blue-600 flex-shrink-0"></div>
+                        <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
+                        <div class="w-6 sm:w-8 h-px bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex-shrink-0"></div>
+                        <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-purple-600 rounded-full flex-shrink-0"></div>
+                        <div class="h-px w-10 sm:w-16 bg-gradient-to-l from-transparent via-purple-400 to-purple-600 flex-shrink-0"></div>
                     </div>
-                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4 scroll-reveal">
+                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6 scroll-reveal">
                         <span class="hero-title">Core Features</span>
                     </h2>
-                    <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                    <p class="text-sm sm:text-base md:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed mb-8 sm:mb-12">
                         Everything you need to manage medicine inventory and requests efficiently
                     </p>
                 </div>
@@ -2014,8 +2014,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-blue-600 transition-colors duration-300">Browse & Request</div>
-                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">Residents can discover medicines and submit requests with proof and patient info.</p>
+                                <h3 class="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-2 sm:mb-3 group-hover:text-blue-600 transition-colors duration-300">Browse & Request</h3>
+                                <p class="text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed">Residents can discover medicines and submit requests with proof and patient info.</p>
                             </div>
                         </div>
                     </div>
@@ -2026,8 +2026,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-green-600 transition-colors duration-300">BHW Approval</div>
-                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">BHWs verify and approve requests, managing residents and families by purok.</p>
+                                <h3 class="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-2 sm:mb-3 group-hover:text-green-600 transition-colors duration-300">BHW Approval</h3>
+                                <p class="text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed">BHWs verify and approve requests, managing residents and families by purok.</p>
                             </div>
                         </div>
                     </div>
@@ -2038,8 +2038,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <svg class="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 group-hover:text-white transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <div class="text-base sm:text-lg font-bold text-gray-900 mb-1.5 group-hover:text-purple-600 transition-colors duration-300">Admin Inventory</div>
-                                <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">Super Admins manage medicines, batches, users, and senior allocations with FEFO.</p>
+                                <h3 class="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-2 sm:mb-3 group-hover:text-purple-600 transition-colors duration-300">Admin Inventory</h3>
+                                <p class="text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed">Super Admins manage medicines, batches, users, and senior allocations with FEFO.</p>
                             </div>
                         </div>
                     </div>
@@ -2052,7 +2052,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                 <div class="text-center mb-10 sm:mb-12 lg:mb-16">
-                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">
+                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">
                         About <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">MediTrack</span>
                     </h2>
                     <div class="w-24 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 mx-auto rounded-full"></div>
@@ -2060,15 +2060,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 mb-8 sm:mb-12">
                     <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">What is MediTrack?</h3>
-                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">What is MediTrack?</h3>
+                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
                             MediTrack is a comprehensive web-based solution designed specifically for barangay health centers. It streamlines medicine inventory management and request processing, connecting residents, Barangay Health Workers (BHWs), and administrators in one unified platform.
                         </p>
                     </div>
                     
                     <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Our Purpose</h3>
-                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">Our Purpose</h3>
+                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
                             We aim to improve healthcare accessibility at the barangay level by providing a reliable, efficient system for tracking medicine availability, processing requests, and ensuring timely distribution to residents who need them most.
                         </p>
                     </div>
@@ -2076,15 +2076,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
                     <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">How It Works</h3>
-                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">How It Works</h3>
+                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
                             Residents can browse available medicines and submit requests with necessary documentation. BHWs review and approve requests, while administrators manage inventory using FEFO (First Expired, First Out) batch handling to ensure medicine quality and safety.
                         </p>
                     </div>
                     
                     <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Why MediTrack Matters</h3>
-                        <p class="text-sm sm:text-base lg:text-lg text-gray-700 text-justify leading-relaxed">
+                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">Why MediTrack Matters</h3>
+                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
                             Built with PHP, MySQL, and TailwindCSS, MediTrack offers role-based dashboards for Super Admins, BHWs, and Residents. It features a senior citizen maintenance allocation program and ensures accurate inventory tracking for healthier communities.
                         </p>
                     </div>
@@ -2098,8 +2098,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 lg:p-10 border border-gray-100">
                     <div class="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
                         <div class="flex-1">
-                            <h3 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 sm:mb-3">Need help getting started?</h3>
-                            <p class="text-sm sm:text-base lg:text-lg text-gray-600 max-w-2xl mx-auto md:mx-0">Visit your barangay health center or sign in below to access the platform.</p>
+                            <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">Need help getting started?</h3>
+                            <p class="text-sm sm:text-base md:text-lg text-gray-600 max-w-2xl mx-auto md:mx-0 leading-relaxed mb-4 sm:mb-6">Visit your barangay health center or sign in below to access the platform.</p>
                         </div>
                         <button onclick="openLoginModal()" class="btn btn-primary btn-lg whitespace-nowrap px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
                             Sign in
@@ -2115,8 +2115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="absolute top-10 right-10 w-64 h-64 bg-blue-200 rounded-full blur-3xl opacity-20 animate-pulse-slow hidden sm:block"></div>
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                 <div class="text-center mb-10 sm:mb-12 lg:mb-16 animate-fade-in-up">
-                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">What users say</h2>
-                    <p class="text-sm sm:text-base lg:text-lg text-gray-600">Real feedback from real users</p>
+                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">What users say</h2>
+                    <p class="text-sm sm:text-base md:text-lg text-gray-600 mb-8 sm:mb-12 leading-relaxed">Real feedback from real users</p>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-8">
                     <div class="card testimonial-card animate-fade-in-up delay-100">
@@ -2138,12 +2138,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
                                 </svg>
                             </div>
-                            <p class="text-gray-700 italic mb-4">"MediTrack made it easy for our seniors to get their monthly maintenance meds on time."</p>
+                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"MediTrack made it easy for our seniors to get their monthly maintenance meds on time."</p>
                             <div class="flex items-center space-x-3">
                                 <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg">JL</div>
                                 <div>
-                                    <div class="font-semibold text-gray-900">Jose L.</div>
-                                    <div class="text-xs text-gray-500">Barangay Captain</div>
+                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Jose L.</div>
+                                    <div class="text-xs sm:text-sm font-medium text-gray-500">Barangay Captain</div>
                                 </div>
                             </div>
                         </div>
@@ -2167,12 +2167,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
                                 </svg>
                             </div>
-                            <p class="text-gray-700 italic mb-4">"Approving requests is straightforward, and stock deduction follows FEFO automatically."</p>
+                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"Approving requests is straightforward, and stock deduction follows FEFO automatically."</p>
                             <div class="flex items-center space-x-3">
                                 <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center font-bold text-white shadow-lg">MA</div>
                                 <div>
-                                    <div class="font-semibold text-gray-900">Maria A.</div>
-                                    <div class="text-xs text-gray-500">BHW</div>
+                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Maria A.</div>
+                                    <div class="text-xs sm:text-sm font-medium text-gray-500">BHW</div>
                                 </div>
                             </div>
                         </div>
@@ -2196,12 +2196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
                                 </svg>
                             </div>
-                            <p class="text-gray-700 italic mb-4">"Inventory, batches, and email notifications work seamlessly for our team."</p>
+                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"Inventory, batches, and email notifications work seamlessly for our team."</p>
                             <div class="flex items-center space-x-3">
                                 <div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg">AN</div>
                                 <div>
-                                    <div class="font-semibold text-gray-900">Ana N.</div>
-                                    <div class="text-xs text-gray-500">Super Admin</div>
+                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Ana N.</div>
+                                    <div class="text-xs sm:text-sm font-medium text-gray-500">Super Admin</div>
                                 </div>
                             </div>
                         </div>
@@ -2214,12 +2214,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <section id="faq" class="py-12 sm:py-16 lg:py-24 bg-gray-50/50">
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center mb-10 sm:mb-12 lg:mb-16">
-                    <h2 class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">Frequently Asked Questions</h2>
-                    <p class="text-sm sm:text-base lg:text-lg text-gray-600">Find answers to common questions about MediTrack</p>
+                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">Frequently Asked Questions</h2>
+                    <p class="text-sm sm:text-base md:text-lg text-gray-600 mb-8 sm:mb-12 leading-relaxed">Find answers to common questions about MediTrack</p>
                 </div>
                 <div class="space-y-4 sm:space-y-5">
                     <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
                             <span class="flex items-center justify-between">
                                 <span>How do residents request medicines?</span>
                                 <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2227,12 +2227,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                             </span>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
                             Residents sign in, browse medicines, and submit a request with a proof image and patient details.
                         </div>
                     </details>
                     <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
                             <span class="flex items-center justify-between">
                                 <span>How are approvals handled?</span>
                                 <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2240,12 +2240,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                             </span>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
                             BHWs review requests and approve/reject. Approved requests automatically deduct stock FEFO from batches.
                         </div>
                     </details>
                     <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
+                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
                             <span class="flex items-center justify-between">
                                 <span>Do emails send automatically?</span>
                                 <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2253,7 +2253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                             </span>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
+                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
                             Yes. The system emails request and user events via PHPMailer. Email attempts are logged for review.
                         </div>
                     </details>

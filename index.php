@@ -368,21 +368,235 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </script>
     <style>
         html { scroll-behavior: smooth; }
-        .nav-link.active { color: #1d4ed8; font-weight: 600; }
         
-        /* Enhanced Animations */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+        /* Navbar Active Link Styles */
+        .nav-link {
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .nav-link.active {
+            color: #2563eb;
+            background-color: #eff6ff;
+            font-weight: 600;
+        }
+        
+        .nav-link:not(.active) {
+            color: #374151;
+        }
+        
+        .nav-link:not(.active):hover {
+            color: #2563eb;
+            background-color: #f9fafb;
+        }
+        
+        /* Mobile Nav Link Active Styles */
+        .nav-link-mobile {
+            transition: all 0.2s ease;
+        }
+        
+        .nav-link-mobile.active-mobile {
+            color: #2563eb;
+            background-color: #eff6ff;
+            font-weight: 600;
+        }
+        
+        .nav-link-mobile.active-mobile span {
+            background-color: #2563eb;
+        }
+        
+        .nav-link-mobile:not(.active-mobile):hover span {
+            background-color: #d1d5db;
+        }
+        
+        /* Mobile Menu Animation - Simple and Clean */
+        #mobileMenu {
+            max-height: 0;
+            opacity: 0;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            overflow: hidden;
+        }
+        
+        #mobileMenu:not(.hidden) {
+            max-height: 400px;
+            opacity: 1;
+        }
+        
+        /* Mobile Menu Link Styles - Vertical Layout */
+        #mobileMenu .flex.flex-col {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+        
+        .nav-link-mobile {
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+        
+        .nav-link-mobile.active-mobile {
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        
+        /* Ensure mobile menu is hidden on desktop */
+        @media (min-width: 768px) {
+            #mobileMenu {
+                display: none !important;
             }
         }
         
-        @keyframes fadeInDown {
+        /* Mobile menu visibility */
+        @media (max-width: 767px) {
+            #mobileMenu.hidden {
+                display: none;
+            }
+            
+            #mobileMenu:not(.hidden) {
+                display: block;
+            }
+        }
+        
+        /* Responsive Navbar Improvements */
+        nav {
+            overflow-x: hidden;
+        }
+        
+        /* Navbar backdrop blur effect */
+        @supports (backdrop-filter: blur(12px)) {
+            nav {
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+            }
+        }
+        
+        /* Ensure perfect horizontal alignment of logo, text, and hamburger - single row */
+        nav > div > div {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-wrap: nowrap !important;
+        }
+        
+        /* Logo container alignment - stays left */
+        nav > div > div > div:first-child {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            flex-shrink: 0 !important;
+            margin-right: auto !important;
+        }
+        
+        /* Logo text alignment */
+        nav > div > div > div:first-child > span {
+            display: inline-flex !important;
+            align-items: center !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Hamburger button alignment - stays right, hidden on desktop */
+        nav button#mobileMenuBtn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            margin-left: auto !important;
+        }
+        
+        /* Ensure hamburger is hidden on desktop (md and above) */
+        @media (min-width: 768px) {
+            nav button#mobileMenuBtn {
+                display: none !important;
+            }
+        }
+        
+        /* Ensure hamburger is visible on mobile (below md) */
+        @media (max-width: 767px) {
+            nav button#mobileMenuBtn {
+                display: flex !important;
+            }
+        }
+        
+        /* Ensure logo stays left and hamburger stays right - single row */
+        @media (max-width: 767px) {
+            /* Ensure single row layout */
+            nav > div > div {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                flex-wrap: nowrap !important;
+                width: 100% !important;
+            }
+            
+            /* Logo container - left side */
+            nav > div > div > div:first-child {
+                margin-right: auto !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+            }
+            
+            /* Ensure logo icon and text stay side by side */
+            nav > div > div > div:first-child > div,
+            nav > div > div > div:first-child > span {
+                display: inline-flex !important;
+                align-items: center !important;
+                flex-shrink: 0 !important;
+            }
+            
+            /* Hamburger button - right side */
+            nav button#mobileMenuBtn {
+                margin-left: auto !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+        }
+        
+        /* Tablet adjustments */
+        @media (min-width: 768px) and (max-width: 1023px) {
+            nav .hidden.md\\:flex {
+                gap: 1rem;
+            }
+        }
+        
+        /* Desktop enhancements */
+        @media (min-width: 1024px) {
+            nav .nav-link {
+                padding: 0.5rem 1rem;
+            }
+        }
+        
+        /* Hamburger icon animation */
+        #mobileMenuBtn[aria-expanded="true"] #hamburgerIcon {
+            transform: rotate(90deg);
+        }
+        
+            /* Smooth scroll offset for navbar - adjusted for larger navbar */
+            html {
+                scroll-padding-top: 68px;
+            }
+            
+            @media (min-width: 768px) {
+                html {
+                    scroll-padding-top: 76px;
+                }
+            }
+            
+            @media (min-width: 1024px) {
+                html {
+                    scroll-padding-top: 84px;
+                }
+            }
+        
+        /* Enhanced Animations */
+        @keyframes fadeInUp {
             from {
                 opacity: 0;
                 transform: translateY(-40px);
@@ -851,26 +1065,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background: rgba(255, 255, 255, 0.95);
         }
         
-        /* Navbar alignment - ensure logo left, hamburger right */
+        /* Navbar clean styling */
+        nav {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* Ensure proper alignment */
         nav > div > div {
-            display: flex !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-            width: 100% !important;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         
-        /* Logo container - force left, no margin issues */
-        nav > div > div > div:first-child {
-            margin-right: auto !important;
-            margin-left: 0 !important;
-            flex-shrink: 0 !important;
+        /* Responsive navbar improvements */
+        @media (max-width: 640px) {
+            nav {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            
+            /* Prevent logo text overflow on very small screens */
+            nav span[class*="text-base"] {
+                max-width: 150px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
         }
         
-        /* Hamburger/CTA container - force right, no margin issues */
-        nav > div > div > div:last-child {
-            margin-left: auto !important;
-            margin-right: 0 !important;
-            flex-shrink: 0 !important;
+        @media (max-width: 380px) {
+            nav span[class*="text-base"] {
+                font-size: 0.875rem;
+                max-width: 120px;
+            }
+            
+            nav .w-9 {
+                width: 2rem;
+                height: 2rem;
+            }
         }
         
         
@@ -932,89 +1164,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             animation: dance 2.5s ease-in-out infinite;
         }
         
-        /* Mobile Menu Overlay Styles */
-        #mobileMenuOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-            z-index: 40;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-        
-        #mobileMenuOverlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-        
+        /* Mobile Menu Dropdown Styles */
         #mobileMenu {
-            position: fixed;
-            top: 0;
-            right: -100%;
-            width: 85%;
-            max-width: 320px;
-            height: 100vh;
-            background: white;
-            z-index: 50;
-            transition: right 0.3s ease;
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
-            overflow-y: auto;
-        }
-        
-        #mobileMenu.active {
-            right: 0;
-        }
-        
-        /* Hamburger Animation */
-        #mobileMenuBtn {
-            position: relative;
-            width: 32px;
-            height: 32px;
-        }
-        
-        #mobileMenuBtn span {
-            display: block;
-            position: absolute;
-            height: 2px;
-            width: 100%;
-            background: currentColor;
-            border-radius: 2px;
-            opacity: 1;
-            left: 0;
-            transform: rotate(0deg);
             transition: all 0.3s ease;
         }
         
-        #mobileMenuBtn span:nth-child(1) {
-            top: 8px;
+        #mobileMenu.hidden {
+            display: none;
         }
         
-        #mobileMenuBtn span:nth-child(2) {
-            top: 16px;
+        /* Hamburger Button */
+        #mobileMenuBtn {
+            transition: transform 0.3s ease;
         }
         
-        #mobileMenuBtn span:nth-child(3) {
-            top: 24px;
-        }
-        
-        #mobileMenuBtn.active span:nth-child(1) {
-            top: 16px;
-            transform: rotate(135deg);
-        }
-        
-        #mobileMenuBtn.active span:nth-child(2) {
-            opacity: 0;
-            left: -20px;
-        }
-        
-        #mobileMenuBtn.active span:nth-child(3) {
-            top: 16px;
-            transform: rotate(-135deg);
+        #mobileMenuBtn:hover {
+            transform: scale(1.1);
         }
         
         .shimmer {
@@ -1533,146 +1698,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative overflow-x-hidden">
      <!-- Navigation -->
-     <nav class="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
-        <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="relative flex items-center justify-between w-full h-16">
-                <!-- Logo Left -->
-                <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+     <nav class="fixed top-0 left-0 right-0 w-full z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8">
+            <div class="flex items-center justify-between py-2.5 sm:py-3 md:py-3.5 lg:py-4 w-full flex-nowrap">
+                <!-- Logo Left - Always visible, forced left alignment -->
+                <div class="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 flex-shrink-0">
                     <?php $brand = get_setting('brand_name', 'MediTrack'); ?>
-                    <div class="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md flex-shrink-0">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <div class="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md flex-shrink-0 transition-transform duration-200 hover:scale-105">
+                        <svg class="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                         </svg>
                     </div>
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-base sm:text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">
-                            <?php echo htmlspecialchars($brand); ?>.
-                        </span>
-                        <span class="text-[9px] sm:text-[10px] text-gray-500 font-semibold tracking-widest uppercase hidden sm:block">Barangay Loon</span>
-                    </div>
+                    <span class="text-base sm:text-lg md:text-xl lg:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 whitespace-nowrap flex-shrink-0">
+                        <?php echo htmlspecialchars($brand); ?>.
+                    </span>
                 </div>
 
-                <!-- Desktop Nav Links Center -->
-                <div class="hidden lg:flex items-center gap-8 xl:gap-10 absolute left-1/2 transform -translate-x-1/2">
-                    <a href="#home" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-all duration-200 relative group">
-                        Home
-                        <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
-                    </a>
-                    <a href="#features" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-all duration-200 relative group">
-                        Features
-                        <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
-                    </a>
-                    <a href="#about" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-all duration-200 relative group">
-                        About
-                        <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
-                    </a>
-                    <a href="#contact" class="nav-link text-gray-700 hover:text-blue-600 font-medium transition-all duration-200 relative group">
-                        Contact
-                        <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
-                    </a>
+                <!-- Desktop Nav Links - Center -->
+                <div class="hidden md:flex md:items-center gap-x-5 lg:gap-x-7 xl:gap-x-8 flex-1 justify-center mx-4 lg:mx-8">
+                    <a href="#home" id="nav-home" class="nav-link active text-base lg:text-lg font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Home</a>
+                    <a href="#features" id="nav-features" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Features</a>
+                    <a href="#about" id="nav-about" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">About</a>
+                    <a href="#contact" id="nav-contact" class="nav-link text-base lg:text-lg font-semibold text-gray-700 hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg whitespace-nowrap">Contact</a>
                 </div>
-                
-                <!-- Desktop CTA + Mobile Hamburger -->
-                <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <!-- Desktop Buttons -->
-                    <button onclick="openRegisterModal()" class="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-all duration-200 hover:shadow-md">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                        </svg>
-                        Register
-                    </button>
-                    <button onclick="openLoginModal()" class="hidden lg:inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-semibold transition-all duration-200 shadow-md hover:shadow-lg">
-                        Sign in
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                        </svg>
-                    </button>
-                    
-                    <!-- Mobile Hamburger Button -->
-                    <button id="mobileMenuBtn" class="lg:hidden relative w-8 h-8 flex flex-col justify-center items-center text-gray-700 hover:text-blue-600 transition-colors" aria-label="Toggle menu">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </button>
+
+                <!-- Desktop CTA Buttons - Right -->
+                <div class="hidden md:flex md:items-center gap-2.5 lg:gap-3 flex-shrink-0">
+                    <button onclick="openLoginModal()" class="text-gray-700 text-base lg:text-lg font-semibold hover:text-blue-600 transition-all duration-200 px-3.5 py-2.5 rounded-lg hover:bg-gray-50 whitespace-nowrap">Sign in</button>
+                    <button onclick="openRegisterModal()" class="text-white text-base lg:text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 lg:px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 whitespace-nowrap">Register</button>
                 </div>
+
+                <!-- Mobile Hamburger Button - Right, aligned horizontally with logo -->
+                <button id="mobileMenuBtn" class="md:hidden cursor-pointer text-blue-600 hover:text-blue-700 transition-all duration-200 flex-shrink-0 p-2 sm:p-2.5 rounded-lg hover:bg-blue-50 active:bg-blue-100 flex items-center justify-center" aria-label="Toggle menu" aria-expanded="false">
+                    <svg id="hamburgerIcon" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 sm:w-7 sm:h-7 transition-transform duration-200" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12.9499909,17 C12.7183558,18.1411202 11.709479,19 10.5,19 C9.29052104,19 8.28164422,18.1411202 8.05000906,17 L3.5,17 C3.22385763,17 3,16.7761424 3,16.5 C3,16.2238576 3.22385763,16 3.5,16 L8.05000906,16 C8.28164422,14.8588798 9.29052104,14 10.5,14 C11.709479,14 12.7183558,14.8588798 12.9499909,16 L20.5,16 C20.7761424,16 21,16.2238576 21,16.5 C21,16.7761424 20.7761424,17 20.5,17 L12.9499909,17 Z M18.9499909,12 C18.7183558,13.1411202 17.709479,14 16.5,14 C15.290521,14 14.2816442,13.1411202 14.0500091,12 L3.5,12 C3.22385763,12 3,11.7761424 3,11.5 C3,11.2238576 3.22385763,11 3.5,11 L14.0500091,11 C14.2816442,9.85887984 15.290521,9 16.5,9 C17.709479,9 18.7183558,9.85887984 18.9499909,11 L20.5,11 C20.7761424,11 21,11.2238576 21,11.5 C21,11.7761424 20.7761424,12 20.5,12 L18.9499909,12 Z M9.94999094,7 C9.71835578,8.14112016 8.70947896,9 7.5,9 C6.29052104,9 5.28164422,8.14112016 5.05000906,7 L3.5,7 C3.22385763,7 3,6.77614237 3,6.5 C3,6.22385763 3.22385763,6 3.5,6 L5.05000906,6 C5.28164422,4.85887984 6.29052104,4 7.5,4 C8.70947896,4 9.71835578,4.85887984 9.94999094,6 L20.5,6 C20.7761424,6 21,6.22385763 21,6.5 C21,6.77614237 20.7761424,7 20.5,7 L9.94999094,7 Z M7.5,8 C8.32842712,8 9,7.32842712 9,6.5 C9,5.67157288 8.32842712,5 7.5,5 C6.67157288,5 6,5.67157288 6,6.5 C6,7.32842712 6.67157288,8 7.5,8 Z M16.5,13 C17.3284271,13 18,12.3284271 18,11.5 C18,10.6715729 17.3284271,10 16.5,10 C15.6715729,10 15,10.6715729 15,11.5 C15,12.3284271 15.6715729,13 16.5,13 Z M10.5,18 C11.3284271,18 12,17.3284271 12,16.5 C12,15.6715729 11.3284271,15 10.5,15 C9.67157288,15 9,15.6715729 9,16.5 C9,17.3284271 9.67157288,18 10.5,18 Z"/>
+                    </svg>
+                </button>
             </div>
-        </div>
-        
-        <!-- Mobile Menu Overlay -->
-        <div id="mobileMenuOverlay" onclick="closeMobileMenu()"></div>
-        
-        <!-- Mobile Menu Sidebar -->
-        <div id="mobileMenu">
-            <div class="p-6">
-                <!-- Mobile Menu Header -->
-                <div class="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="font-bold text-gray-900"><?php echo htmlspecialchars($brand); ?>.</div>
-                            <div class="text-xs text-gray-500">Barangay Loon</div>
-                        </div>
-                    </div>
-                    <button onclick="closeMobileMenu()" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                
-                <!-- Mobile Menu Links -->
-                <nav class="space-y-2 mb-6">
-                    <a href="#home" onclick="closeMobileMenu()" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all duration-200 font-medium group">
-                        <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                        </svg>
+            
+            <!-- Mobile Menu Dropdown -->
+            <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
+                <div class="flex flex-col py-3 px-4 space-y-1">
+                    <a href="#home" id="nav-mobile-home" onclick="handleNavClick('home'); closeMobileMenu();" class="nav-link-mobile active-mobile text-base font-medium text-blue-600 bg-blue-50 py-2.5 px-4 rounded-lg transition-colors">
                         Home
                     </a>
-                    <a href="#features" onclick="closeMobileMenu()" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all duration-200 font-medium group">
-                        <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                    <a href="#features" id="nav-mobile-features" onclick="handleNavClick('features'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         Features
                     </a>
-                    <a href="#about" onclick="closeMobileMenu()" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all duration-200 font-medium group">
-                        <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                    <a href="#about" id="nav-mobile-about" onclick="handleNavClick('about'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         About
                     </a>
-                    <a href="#contact" onclick="closeMobileMenu()" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all duration-200 font-medium group">
-                        <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                        </svg>
+                    <a href="#contact" id="nav-mobile-contact" onclick="handleNavClick('contact'); closeMobileMenu();" class="nav-link-mobile text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 py-2.5 px-4 rounded-lg transition-colors">
                         Contact
                     </a>
-                </nav>
-                
-                <!-- Mobile CTA Buttons -->
-                <div class="pt-6 border-t border-gray-200 space-y-3">
-                    <button onclick="openRegisterModal(); closeMobileMenu();" class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-all duration-200">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                        </svg>
-                        Register
-                    </button>
-                    <button onclick="openLoginModal(); closeMobileMenu();" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                        Sign in
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                        </svg>
-                    </button>
+                    <div class="flex flex-col gap-2 border-t border-gray-200 pt-3 mt-2">
+                        <button onclick="openLoginModal(); closeMobileMenu();" class="text-base font-medium text-gray-700 hover:text-blue-600 py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                            Sign in
+                        </button>
+                        <button onclick="openRegisterModal(); closeMobileMenu();" class="text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors text-center">
+                            Register
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </nav>
 
     <!-- Hero Section -->
-    <section id="home" class="relative overflow-hidden z-10 pt-24 sm:pt-32 md:pt-40 pb-12 sm:pb-16 md:pb-20">
+    <section id="home" class="relative overflow-hidden z-10 pt-28 sm:pt-32 md:pt-36 pb-12 sm:pb-16 md:pb-20">
         <!-- Unique layered background -->
         <div class="aurora"></div>
         <div class="dot-grid absolute inset-0"></div>
@@ -1870,7 +1963,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <circle cx="0" cy="0" r="3" fill="#3b82f6"/>
                                 </g>
                             </svg>
-                                </div>
+                        </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
                             <div class="card p-3 sm:p-4">
@@ -3941,60 +4034,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
         
+        // Active Link Management
+        function setActiveLink(sectionId) {
+            // Remove active class from all desktop links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Remove active-mobile class from all mobile links
+            document.querySelectorAll('.nav-link-mobile').forEach(link => {
+                link.classList.remove('active-mobile');
+                // Reset indicator dot
+                const dot = link.querySelector('span');
+                if (dot) {
+                    dot.style.backgroundColor = 'transparent';
+                }
+            });
+            
+            // Add active class to the clicked desktop link
+            const desktopLink = document.getElementById('nav-' + sectionId);
+            if (desktopLink) {
+                desktopLink.classList.add('active');
+            }
+            
+            // Add active-mobile class to the clicked mobile link
+            const mobileLink = document.getElementById('nav-mobile-' + sectionId);
+            if (mobileLink) {
+                mobileLink.classList.add('active-mobile');
+                const dot = mobileLink.querySelector('span');
+                if (dot) {
+                    dot.style.backgroundColor = '#2563eb';
+                }
+            }
+        }
+        
+        // Handle nav link clicks
+        function handleNavClick(sectionId) {
+            setActiveLink(sectionId);
+            // Smooth scroll to section
+            const section = document.getElementById(sectionId);
+            if (section) {
+                const offset = 80;
+                const elementPosition = section.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - offset;
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth'
+                });
+            }
+        }
+        
+        // Make function globally available
+        window.handleNavClick = handleNavClick;
+        
+        // Initialize: Set Home as active by default
+        document.addEventListener('DOMContentLoaded', function() {
+            setActiveLink('home');
+            
+            // Add click handlers to all nav links
+            document.querySelectorAll('.nav-link, .nav-link-mobile').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const sectionId = href.substring(1);
+                        handleNavClick(sectionId);
+                    }
+                });
+            });
+        });
+        
         // Mobile menu toggle
         const mobileMenuBtn = document.getElementById('mobileMenuBtn');
         const mobileMenu = document.getElementById('mobileMenu');
-        const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
         
-        // Function to open mobile menu
-        function openMobileMenu() {
-            if (mobileMenu) {
-                mobileMenu.classList.add('active');
-                if (mobileMenuOverlay) {
-                    mobileMenuOverlay.classList.add('active');
+        // Function to toggle mobile menu
+        function toggleMobileMenu() {
+            if (mobileMenu && mobileMenuBtn) {
+                const isHidden = mobileMenu.classList.contains('hidden');
+                if (isHidden) {
+                    mobileMenu.classList.remove('hidden');
+                    mobileMenuBtn.setAttribute('aria-expanded', 'true');
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    mobileMenu.classList.add('hidden');
+                    mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                    document.body.style.overflow = '';
                 }
-                if (mobileMenuBtn) {
-                    mobileMenuBtn.classList.add('active');
-                }
-                document.body.style.overflow = 'hidden';
             }
         }
         
         // Function to close mobile menu
         function closeMobileMenu() {
-            if (mobileMenu) {
-                mobileMenu.classList.remove('active');
-                if (mobileMenuOverlay) {
-                    mobileMenuOverlay.classList.remove('active');
-                }
-                if (mobileMenuBtn) {
-                    mobileMenuBtn.classList.remove('active');
-                }
+            if (mobileMenu && mobileMenuBtn) {
+                mobileMenu.classList.add('hidden');
+                mobileMenuBtn.setAttribute('aria-expanded', 'false');
                 document.body.style.overflow = '';
             }
         }
         
         // Make functions globally available
         window.closeMobileMenu = closeMobileMenu;
-        window.openMobileMenu = openMobileMenu;
+        window.toggleMobileMenu = toggleMobileMenu;
         
         if (mobileMenuBtn && mobileMenu) {
             mobileMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (mobileMenu.classList.contains('active')) {
-                    closeMobileMenu();
-                } else {
-                    openMobileMenu();
-                }
+                toggleMobileMenu();
             });
             
-            // Close menu when clicking overlay
-            if (mobileMenuOverlay) {
-                mobileMenuOverlay.addEventListener('click', closeMobileMenu);
-            }
-            
             // Close mobile menu when clicking nav links
-            mobileMenu.querySelectorAll('a').forEach(link => {
+            mobileMenu.querySelectorAll('a, button').forEach(link => {
                 link.addEventListener('click', () => {
                     closeMobileMenu();
                 });
@@ -4002,7 +4151,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Close menu on escape key
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                if (e.key === 'Escape' && !mobileMenu.classList.contains('hidden')) {
+                    closeMobileMenu();
+                }
+            });
+            
+            // Close menu when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
                     closeMobileMenu();
                 }
             });
@@ -4040,22 +4196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
         
-        // Active link highlighting on scroll
-        const sections = ['home','features','about','contact'];
-        const links = Array.from(document.querySelectorAll('.nav-link'));
-        const sectionEls = sections.map(id => document.getElementById(id));
+        // Show/hide scroll to top button
+        const scrollToTopBtn = document.getElementById('scrollToTop');
         const onScroll = () => {
-            const y = window.scrollY + 100; // offset for navbar
-            let active = 'home';
-            for (const el of sectionEls) {
-                if (!el) continue;
-                const top = el.offsetTop;
-                if (y >= top) active = el.id;
-            }
-            links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + active));
-            
-            // Show/hide scroll to top button
-            const scrollToTopBtn = document.getElementById('scrollToTop');
             if (window.pageYOffset > 300) {
                 scrollToTopBtn.classList.remove('hidden');
             } else {
@@ -4302,5 +4445,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </script>
 </body>
 </html>
+
 
 

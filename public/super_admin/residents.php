@@ -3,9 +3,38 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
 
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
+$user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
+
 // Fetch all residents with their family members and location info
 $residents = db()->query('
-    SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address, r.created_at,
+    SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address, r.created_at, r.date_of_birth,
            COUNT(fm.id) as family_count,
            p.name as purok_name,
            b.name as barangay_name,
@@ -20,6 +49,20 @@ $residents = db()->query('
     GROUP BY r.id 
     ORDER BY r.last_name = "Walk-in", b.name, p.name, r.last_name, r.first_name
 ')->fetchAll();
+
+// Calculate age for each resident
+foreach ($residents as &$resident) {
+    if (!empty($resident['date_of_birth'])) {
+        $birth_date = new DateTime($resident['date_of_birth']);
+        $today = new DateTime();
+        $resident['age'] = $today->diff($birth_date)->y;
+        $resident['is_senior'] = $resident['age'] >= 60;
+    } else {
+        $resident['age'] = null;
+        $resident['is_senior'] = false;
+    }
+}
+unset($resident); // Break reference
 
 // Calculate statistics
 $total_residents = count($residents);
@@ -227,12 +270,6 @@ foreach ($residents as $resident) {
                 </svg>
                 Announcements
             </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('super_admin/residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                All Residents
-            </a>
         </nav>
         
         <!-- Sidebar Footer -->
@@ -282,13 +319,27 @@ foreach ($residents as $resident) {
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                                <?php 
-                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                echo strtoupper($firstInitial . $lastInitial); 
-                                ?>
-                            </div>
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
@@ -488,6 +539,21 @@ foreach ($residents as $resident) {
                                                 </svg>
                                                 <span class="text-sm text-gray-500 font-medium">ID: <?php echo (int)$r['id']; ?></span>
                                             </div>
+                                            <?php if (isset($r['age']) && $r['age'] !== null): ?>
+                                                <div class="flex items-center space-x-2">
+                                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                    </svg>
+                                                    <span class="text-sm text-gray-500 font-medium">
+                                                        Age: <?php echo (int)$r['age']; ?>
+                                                        <?php if ($r['is_senior']): ?>
+                                                            <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                                                Senior
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
                                             <?php if ($r['phone']): ?>
                                                 <div class="flex items-center space-x-2">
                                                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

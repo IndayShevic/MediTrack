@@ -2,7 +2,36 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['bhw']);
+
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
+
 $bhw_purok_id = $user['purok_id'] ?? 0;
 
 // Get notification counts for sidebar
@@ -85,6 +114,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     
                     if ($resident_id > 0) {
+                        // Determine requested_for and patient details based on relationship
+                        $is_self = empty($patient_relationship) || strtolower(trim($patient_relationship)) === 'self';
+                        
+                        if ($is_self) {
+                            // Request is for the resident themselves
+                            $requested_for = 'self';
+                            // For registered residents, patient_name should be null when for self
+                            // For walk-in residents, use walkin_name as patient_name
+                            $final_patient_name = ($resident_type === 'walkin' && !empty($walkin_name)) ? $walkin_name : null;
+                            $final_relationship = null;
+                        } else {
+                            // Request is for a family member
+                            $requested_for = 'family';
+                            // Use provided patient_name, or walkin_name for walk-in residents if no patient_name
+                            $final_patient_name = !empty($patient_name) ? $patient_name : (($resident_type === 'walkin' && !empty($walkin_name)) ? $walkin_name : null);
+                            $final_relationship = $patient_relationship;
+                        }
+                        
                         // Create instant request and mark as approved/dispensed
                         $request_stmt = db()->prepare('
                             INSERT INTO requests (resident_id, medicine_id, requested_for, patient_name, relationship, reason, status, bhw_id, created_at, updated_at)
@@ -93,10 +140,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $request_stmt->execute([
                             $resident_id, 
                             $medicine_id, 
-                            'self',
-                            $patient_name ?: $walkin_name,
-                            $patient_relationship,
-                            $reason,
+                            $requested_for,
+                            $final_patient_name,
+                            $final_relationship,
+                            !empty($reason) ? $reason : null,
                             $user['id']
                         ]);
                         
@@ -504,13 +551,27 @@ try {
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                                <?php 
-                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                                echo strtoupper($firstInitial . $lastInitial); 
-                                ?>
-                            </div>
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'BHW'); ?>
@@ -700,13 +761,7 @@ try {
                             <div>
                                 <label for="patient_relationship" class="block text-sm font-semibold text-gray-700 mb-3">Patient Relationship</label>
                                 <select id="patient_relationship" name="patient_relationship" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
-                                    <option value="">Select relationship</option>
-                                    <option value="self">Self</option>
-                                    <option value="spouse">Spouse</option>
-                                    <option value="child">Child</option>
-                                    <option value="parent">Parent</option>
-                                    <option value="sibling">Sibling</option>
-                                    <option value="other">Other</option>
+                                    <?php echo get_relationship_options(); ?>
                                 </select>
                             </div>
                             

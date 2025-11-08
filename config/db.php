@@ -123,6 +123,106 @@ function format_full_name(string $first_name, string $last_name, ?string $middle
     return $name;
 }
 
+// Get all active relationships from database
+function get_relationships(): array {
+    try {
+        // Check if relationships table exists, if not return default list
+        $stmt = db()->query("SHOW TABLES LIKE 'relationships'");
+        if ($stmt->rowCount() === 0) {
+            // Fallback to default relationships if table doesn't exist
+            return [
+                ['name' => 'Self', 'display_order' => 1],
+                ['name' => 'Father', 'display_order' => 2],
+                ['name' => 'Mother', 'display_order' => 3],
+                ['name' => 'Son', 'display_order' => 4],
+                ['name' => 'Daughter', 'display_order' => 5],
+                ['name' => 'Brother', 'display_order' => 6],
+                ['name' => 'Sister', 'display_order' => 7],
+                ['name' => 'Husband', 'display_order' => 8],
+                ['name' => 'Wife', 'display_order' => 9],
+                ['name' => 'Spouse', 'display_order' => 10],
+                ['name' => 'Grandfather', 'display_order' => 11],
+                ['name' => 'Grandmother', 'display_order' => 12],
+                ['name' => 'Uncle', 'display_order' => 13],
+                ['name' => 'Aunt', 'display_order' => 14],
+                ['name' => 'Nephew', 'display_order' => 15],
+                ['name' => 'Niece', 'display_order' => 16],
+                ['name' => 'Cousin', 'display_order' => 17],
+                ['name' => 'Other', 'display_order' => 99],
+            ];
+        }
+        
+        $stmt = db()->query('SELECT name, display_order FROM relationships WHERE is_active = 1 ORDER BY display_order ASC, name ASC');
+        $relationships = $stmt->fetchAll();
+        
+        // If no relationships found, return default list
+        if (empty($relationships)) {
+            return [
+                ['name' => 'Self', 'display_order' => 1],
+                ['name' => 'Father', 'display_order' => 2],
+                ['name' => 'Mother', 'display_order' => 3],
+                ['name' => 'Son', 'display_order' => 4],
+                ['name' => 'Daughter', 'display_order' => 5],
+                ['name' => 'Brother', 'display_order' => 6],
+                ['name' => 'Sister', 'display_order' => 7],
+                ['name' => 'Husband', 'display_order' => 8],
+                ['name' => 'Wife', 'display_order' => 9],
+                ['name' => 'Spouse', 'display_order' => 10],
+                ['name' => 'Grandfather', 'display_order' => 11],
+                ['name' => 'Grandmother', 'display_order' => 12],
+                ['name' => 'Uncle', 'display_order' => 13],
+                ['name' => 'Aunt', 'display_order' => 14],
+                ['name' => 'Nephew', 'display_order' => 15],
+                ['name' => 'Niece', 'display_order' => 16],
+                ['name' => 'Cousin', 'display_order' => 17],
+                ['name' => 'Other', 'display_order' => 99],
+            ];
+        }
+        
+        return $relationships;
+    } catch (Throwable $e) {
+        // Fallback to default relationships on error
+        return [
+            ['name' => 'Self', 'display_order' => 1],
+            ['name' => 'Father', 'display_order' => 2],
+            ['name' => 'Mother', 'display_order' => 3],
+            ['name' => 'Son', 'display_order' => 4],
+            ['name' => 'Daughter', 'display_order' => 5],
+            ['name' => 'Brother', 'display_order' => 6],
+            ['name' => 'Sister', 'display_order' => 7],
+            ['name' => 'Husband', 'display_order' => 8],
+            ['name' => 'Wife', 'display_order' => 9],
+            ['name' => 'Spouse', 'display_order' => 10],
+            ['name' => 'Grandfather', 'display_order' => 11],
+            ['name' => 'Grandmother', 'display_order' => 12],
+            ['name' => 'Uncle', 'display_order' => 13],
+            ['name' => 'Aunt', 'display_order' => 14],
+            ['name' => 'Nephew', 'display_order' => 15],
+            ['name' => 'Niece', 'display_order' => 16],
+            ['name' => 'Cousin', 'display_order' => 17],
+            ['name' => 'Other', 'display_order' => 99],
+        ];
+    }
+}
+
+// Generate HTML options for relationship dropdown
+function get_relationship_options(?string $selected = null, bool $include_empty = true): string {
+    $relationships = get_relationships();
+    $html = '';
+    
+    if ($include_empty) {
+        $html .= '<option value="">Select relationship</option>';
+    }
+    
+    foreach ($relationships as $rel) {
+        $name = htmlspecialchars($rel['name']);
+        $is_selected = ($selected !== null && $selected === $rel['name']) ? ' selected' : '';
+        $html .= "<option value=\"{$name}\"{$is_selected}>{$name}</option>";
+    }
+    
+    return $html;
+}
+
 // FEFO allocate quantity from earliest-expiring batches; returns total allocated
 function fefoAllocate(int $medicineId, int $quantity, int $requestId = 0): int {
     if ($quantity <= 0) return 0;

@@ -838,24 +838,7 @@ function calculateAge($dob) {
                     <select name="relationship" id="relationship_select" required 
                             class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             onchange="handleRelationshipChangeResident(this)">
-                        <option value="">Select Relationship</option>
-                        <option value="Father">Father</option>
-                        <option value="Mother">Mother</option>
-                        <option value="Son">Son</option>
-                        <option value="Daughter">Daughter</option>
-                        <option value="Brother">Brother</option>
-                        <option value="Sister">Sister</option>
-                        <option value="Husband">Husband</option>
-                        <option value="Wife">Wife</option>
-                        <option value="Spouse">Spouse</option>
-                        <option value="Grandfather">Grandfather</option>
-                        <option value="Grandmother">Grandmother</option>
-                        <option value="Uncle">Uncle</option>
-                        <option value="Aunt">Aunt</option>
-                        <option value="Nephew">Nephew</option>
-                        <option value="Niece">Niece</option>
-                        <option value="Cousin">Cousin</option>
-                        <option value="Other">Other</option>
+                        <?php echo get_relationship_options(null, true); ?>
                     </select>
                     <input type="text" 
                            name="relationship_other" 

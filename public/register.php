@@ -625,24 +625,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <div>
                                     <label class="form-label">Relationship</label>
                                     <select name="family_members[0][relationship]" class="form-input" onchange="handleRelationshipChangeRegister(this, 0)">
-                                        <option value="">Select Relationship</option>
-                                        <option value="Father">Father</option>
-                                        <option value="Mother">Mother</option>
-                                        <option value="Son">Son</option>
-                                        <option value="Daughter">Daughter</option>
-                                        <option value="Brother">Brother</option>
-                                        <option value="Sister">Sister</option>
-                                        <option value="Husband">Husband</option>
-                                        <option value="Wife">Wife</option>
-                                        <option value="Spouse">Spouse</option>
-                                        <option value="Grandfather">Grandfather</option>
-                                        <option value="Grandmother">Grandmother</option>
-                                        <option value="Uncle">Uncle</option>
-                                        <option value="Aunt">Aunt</option>
-                                        <option value="Nephew">Nephew</option>
-                                        <option value="Niece">Niece</option>
-                                        <option value="Cousin">Cousin</option>
-                                        <option value="Other">Other</option>
+                                        <?php echo get_relationship_options(null, true); ?>
                                     </select>
                                     <input type="text" 
                                            name="family_members[0][relationship_other]" 
@@ -1417,6 +1400,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
         }
         
+        // Relationships data from database
+        const relationshipsData = <?php echo json_encode(get_relationships()); ?>;
+        
         function setupFamilyMemberManagement() {
             document.getElementById('add-family-member').addEventListener('click', function() {
                 addFamilyMember();
@@ -1427,6 +1413,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const container = document.getElementById('family-members-container');
             const newMember = document.createElement('div');
             newMember.className = 'family-member bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4';
+            
+            // Generate relationship options from database
+            let relationshipOptions = '<option value="">Select Relationship</option>';
+            relationshipsData.forEach(function(rel) {
+                relationshipOptions += '<option value="' + rel.name + '">' + rel.name + '</option>';
+            });
+            
             newMember.innerHTML = `
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-medium text-gray-700">Family Member ${familyMemberCount + 1}</h3>
@@ -1455,24 +1448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div>
                         <label class="form-label">Relationship</label>
                         <select name="family_members[${familyMemberCount}][relationship]" class="form-input" onchange="handleRelationshipChangeRegister(this, ${familyMemberCount})">
-                            <option value="">Select Relationship</option>
-                            <option value="Father">Father</option>
-                            <option value="Mother">Mother</option>
-                            <option value="Son">Son</option>
-                            <option value="Daughter">Daughter</option>
-                            <option value="Brother">Brother</option>
-                            <option value="Sister">Sister</option>
-                            <option value="Husband">Husband</option>
-                            <option value="Wife">Wife</option>
-                            <option value="Spouse">Spouse</option>
-                            <option value="Grandfather">Grandfather</option>
-                            <option value="Grandmother">Grandmother</option>
-                            <option value="Uncle">Uncle</option>
-                            <option value="Aunt">Aunt</option>
-                            <option value="Nephew">Nephew</option>
-                            <option value="Niece">Niece</option>
-                            <option value="Cousin">Cousin</option>
-                            <option value="Other">Other</option>
+                            ${relationshipOptions}
                         </select>
                         <input type="text" 
                                name="family_members[${familyMemberCount}][relationship_other]" 

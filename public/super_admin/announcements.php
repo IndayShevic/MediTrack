@@ -14,33 +14,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $description = trim($_POST['description'] ?? '');
                 $start_date = $_POST['start_date'] ?? '';
                 $end_date = $_POST['end_date'] ?? '';
+                $start_time = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
+                $end_time = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
+                $target_audience = $_POST['target_audience'] ?? 'all';
+                $target_barangay_id = !empty($_POST['target_barangay_id']) ? (int)$_POST['target_barangay_id'] : null;
+                $target_purok_id = !empty($_POST['target_purok_id']) ? (int)$_POST['target_purok_id'] : null;
+                
+                // Validate target_audience
+                if (!in_array($target_audience, ['all', 'residents', 'bhw'])) {
+                    $target_audience = 'all';
+                }
+                
+                // If purok is selected, barangay must also be selected
+                if ($target_purok_id && !$target_barangay_id) {
+                    set_flash('Please select a barangay when selecting a purok.', 'error');
+                    redirect_to('super_admin/announcements.php');
+                    exit;
+                }
                 
                 if (empty($title) || empty($description) || empty($start_date) || empty($end_date)) {
                     set_flash('All fields are required.', 'error');
                 } elseif ($start_date > $end_date) {
-                    set_flash('End date must be after start date.', 'error');
+                    set_flash('End date must be after or equal to start date.', 'error');
                 } elseif ($start_date < date('Y-m-d')) {
                     set_flash('Start date cannot be in the past. Please select today or a future date.', 'error');
+                } elseif ($start_date === $end_date && $start_time && $end_time && $start_time > $end_time) {
+                    set_flash('End time must be after start time when dates are the same.', 'error');
                 } else {
                     try {
-                        $stmt = db()->prepare('INSERT INTO announcements (title, description, start_date, end_date, created_by) VALUES (?, ?, ?, ?, ?)');
-                        $stmt->execute([$title, $description, $start_date, $end_date, $user['id']]);
+                        $stmt = db()->prepare('INSERT INTO announcements (title, description, start_date, end_date, start_time, end_time, created_by, target_audience, target_barangay_id, target_purok_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                        $stmt->execute([$title, $description, $start_date, $end_date, $start_time, $end_time, $user['id'], $target_audience, $target_barangay_id, $target_purok_id]);
                         
-                        // Send email notifications to all users
-                        $emailResults = send_announcement_notification_to_all_users($title, $description, $start_date, $end_date);
+                        // Get the ID of the newly created announcement (cast to int since lastInsertId can return string)
+                        $announcement_id = (int)db()->lastInsertId();
+                        
+                        // Send email notifications to targeted users
+                        $emailResults = send_announcement_notification_to_all_users($title, $description, $start_date, $end_date, $announcement_id, false, null, $start_time, $end_time);
                         
                         if ($emailResults['sent'] > 0) {
                             $message = "Announcement created successfully. Email notifications sent to {$emailResults['sent']} users.";
                             if ($emailResults['failed'] > 0) {
                                 $message .= " ({$emailResults['failed']} emails failed to send)";
                             }
+                            if (!empty($emailResults['errors'])) {
+                                error_log("Announcement email errors: " . implode(", ", $emailResults['errors']));
+                            }
                             set_flash($message, 'success');
                         } else {
-                            set_flash('Announcement created successfully, but no email notifications were sent.', 'warning');
+                            $errorMsg = 'Announcement created successfully, but no email notifications were sent.';
+                            if (!empty($emailResults['errors'])) {
+                                $errorMsg .= ' ' . implode(" ", array_slice($emailResults['errors'], 0, 2));
+                            }
+                            set_flash($errorMsg, 'warning');
                         }
                         
                     } catch (Exception $e) {
                         set_flash('Error creating announcement: ' . $e->getMessage(), 'error');
+                        error_log("Announcement creation error: " . $e->getMessage());
                     }
                 }
                 break;
@@ -51,49 +81,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $description = trim($_POST['description'] ?? '');
                 $start_date = $_POST['start_date'] ?? '';
                 $end_date = $_POST['end_date'] ?? '';
+                $start_time = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
+                $end_time = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
+                $target_audience = $_POST['target_audience'] ?? 'all';
+                $target_barangay_id = !empty($_POST['target_barangay_id']) ? (int)$_POST['target_barangay_id'] : null;
+                $target_purok_id = !empty($_POST['target_purok_id']) ? (int)$_POST['target_purok_id'] : null;
+                
+                // Validate target_audience
+                if (!in_array($target_audience, ['all', 'residents', 'bhw'])) {
+                    $target_audience = 'all';
+                }
+                
+                // If purok is selected, barangay must also be selected
+                if ($target_purok_id && !$target_barangay_id) {
+                    set_flash('Please select a barangay when selecting a purok.', 'error');
+                    redirect_to('super_admin/announcements.php');
+                    exit;
+                }
                 
                 if ($id <= 0 || empty($title) || empty($description) || empty($start_date) || empty($end_date)) {
                     set_flash('All fields are required.', 'error');
                 } elseif ($start_date > $end_date) {
-                    set_flash('End date must be after start date.', 'error');
-                } elseif ($start_date < date('Y-m-d')) {
-                    set_flash('Start date cannot be in the past. Please select today or a future date.', 'error');
+                    set_flash('End date must be after or equal to start date.', 'error');
+                } elseif ($start_date === $end_date && $start_time && $end_time && $start_time > $end_time) {
+                    set_flash('End time must be after start time when dates are the same.', 'error');
                 } else {
                     try {
-                        // Check if this is a significant update (date changes or reactivation)
-                        $oldAnnouncement = db()->prepare('SELECT title, description, start_date, end_date, is_active FROM announcements WHERE id = ?');
-                        $oldAnnouncement->execute([$id]);
-                        $old = $oldAnnouncement->fetch();
+                        // Check if announcement exists and get existing date for validation
+                        $existingAnnouncement = db()->prepare('SELECT start_date, is_active FROM announcements WHERE id = ?');
+                        $existingAnnouncement->execute([$id]);
+                        $existing = $existingAnnouncement->fetch();
                         
-                        $stmt = db()->prepare('UPDATE announcements SET title = ?, description = ?, start_date = ?, end_date = ? WHERE id = ?');
-                        $stmt->execute([$title, $description, $start_date, $end_date, $id]);
-                        
-                        // Send email notification if dates changed significantly or if it was reactivated
-                        $shouldNotify = false;
-                        if ($old) {
-                            $dateChanged = ($old['start_date'] !== $start_date) || ($old['end_date'] !== $end_date);
-                            $wasInactive = !$old['is_active'];
-                            $shouldNotify = $dateChanged || $wasInactive;
-                        }
-                        
-                        if ($shouldNotify) {
-                            $emailResults = send_announcement_notification_to_all_users($title, $description, $start_date, $end_date);
-                            
-                            if ($emailResults['sent'] > 0) {
-                                $message = "Announcement updated successfully. Email notifications sent to {$emailResults['sent']} users.";
-                                if ($emailResults['failed'] > 0) {
-                                    $message .= " ({$emailResults['failed']} emails failed to send)";
-                                }
-                                set_flash($message, 'success');
-                            } else {
-                                set_flash('Announcement updated successfully, but no email notifications were sent.', 'warning');
-                            }
+                        if (!$existing) {
+                            set_flash('Announcement not found.', 'error');
                         } else {
-                            set_flash('Announcement updated successfully.', 'success');
+                            // For editing existing announcements, we allow keeping past dates
+                            // But prevent changing to a date further in the past
+                            $today = date('Y-m-d');
+                            if ($start_date < $today && $start_date < $existing['start_date']) {
+                                set_flash('You cannot change the start date to a date in the past.', 'error');
+                            } else {
+                                // Get old announcement data for comparison
+                                $oldAnnouncement = db()->prepare('SELECT title, description, start_date, end_date, start_time, end_time, is_active, target_audience, target_barangay_id, target_purok_id FROM announcements WHERE id = ?');
+                                $oldAnnouncement->execute([$id]);
+                                $old = $oldAnnouncement->fetch();
+                                
+                                // Update the announcement
+                                $stmt = db()->prepare('UPDATE announcements SET title = ?, description = ?, start_date = ?, end_date = ?, start_time = ?, end_time = ?, target_audience = ?, target_barangay_id = ?, target_purok_id = ? WHERE id = ?');
+                                $stmt->execute([$title, $description, $start_date, $end_date, $start_time, $end_time, $target_audience, $target_barangay_id, $target_purok_id, $id]);
+                                
+                                // Always send email notifications when an announcement is updated (any change)
+                                // Prepare old data for change notification
+                                $oldData = null;
+                                if ($old) {
+                                    $oldData = [
+                                        'title' => $old['title'],
+                                        'description' => $old['description'],
+                                        'start_date' => $old['start_date'],
+                                        'end_date' => $old['end_date'],
+                                        'start_time' => $old['start_time'] ?? null,
+                                        'end_time' => $old['end_time'] ?? null,
+                                        'target_audience' => $old['target_audience'] ?? 'all',
+                                        'target_barangay_id' => $old['target_barangay_id'] ?? null,
+                                        'target_purok_id' => $old['target_purok_id'] ?? null
+                                    ];
+                                }
+                                
+                                // Send email notifications for the update
+                                $emailResults = send_announcement_notification_to_all_users($title, $description, $start_date, $end_date, $id, true, $oldData, $start_time, $end_time);
+                                
+                                if ($emailResults['sent'] > 0) {
+                                    $message = "Announcement updated successfully. Email notifications sent to {$emailResults['sent']} users about the changes.";
+                                    if ($emailResults['failed'] > 0) {
+                                        $message .= " ({$emailResults['failed']} emails failed to send)";
+                                    }
+                                    if (!empty($emailResults['errors'])) {
+                                        error_log("Announcement email errors: " . implode(", ", $emailResults['errors']));
+                                    }
+                                    set_flash($message, 'success');
+                                } else {
+                                    $errorMsg = 'Announcement updated successfully, but no email notifications were sent.';
+                                    if (!empty($emailResults['errors'])) {
+                                        $errorMsg .= ' ' . implode(" ", array_slice($emailResults['errors'], 0, 2));
+                                    }
+                                    set_flash($errorMsg, 'warning');
+                                }
+                            }
                         }
-                        
                     } catch (Exception $e) {
                         set_flash('Error updating announcement: ' . $e->getMessage(), 'error');
+                        error_log("Announcement update error: " . $e->getMessage());
                     }
                 }
                 break;
@@ -131,8 +208,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch announcements
 try {
     $announcements = db()->query('SELECT a.*, CONCAT(IFNULL(u.first_name,"")," ",IFNULL(u.last_name,"")) as created_by_name FROM announcements a LEFT JOIN users u ON a.created_by = u.id ORDER BY a.start_date DESC, a.created_at DESC')->fetchAll();
+    
+    // Ensure targeting fields exist (for announcements created before migration)
+    foreach ($announcements as &$announcement) {
+        if (!isset($announcement['target_audience'])) {
+            $announcement['target_audience'] = 'all';
+        }
+        if (!isset($announcement['target_barangay_id'])) {
+            $announcement['target_barangay_id'] = null;
+        }
+        if (!isset($announcement['target_purok_id'])) {
+            $announcement['target_purok_id'] = null;
+        }
+    }
+    unset($announcement); // Break reference
 } catch (Exception $e) {
     $announcements = [];
+}
+
+// Fetch barangays and puroks for the form
+try {
+    $barangays = db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll();
+} catch (Exception $e) {
+    $barangays = [];
+}
+
+try {
+    $puroks = db()->query('SELECT id, barangay_id, name FROM puroks ORDER BY barangay_id, name')->fetchAll();
+} catch (Exception $e) {
+    $puroks = [];
 }
 
 // Get count of users who will receive email notifications
@@ -1031,13 +1135,19 @@ try {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                 </svg>
                             </div>
-                            <button onclick="openAnnouncementsModal()" class="btn-primary">
+                            <button onclick="openCreateModal()" class="btn-primary">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Add Announcement
+                            </button>
+                            <button onclick="openAnnouncementsModal()" class="btn-primary" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-                                        </svg>
+                                </svg>
                                 View All Announcements
-                                    </button>
-                                </div>
+                            </button>
+                        </div>
                                                 </div>
                     <div id="calendar" class="rounded-lg overflow-hidden"></div>
                 </div>
@@ -1091,7 +1201,22 @@ try {
                                 <div>
                                     <label for="end_date" class="block text-sm font-semibold text-gray-700 mb-3">End Date</label>
                                     <input type="date" id="end_date" name="end_date" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
-                                    <p class="text-xs text-gray-500 mt-1">Must be after start date</p>
+                                    <p class="text-xs text-gray-500 mt-1">Must be after or equal to start date</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Time Fields (Optional) -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="start_time" class="block text-sm font-semibold text-gray-700 mb-3">Start Time (Optional)</label>
+                                    <input type="time" id="start_time" name="start_time" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
+                                    <p class="text-xs text-gray-500 mt-1">Leave empty for all-day events</p>
+                                </div>
+                                
+                                <div>
+                                    <label for="end_time" class="block text-sm font-semibold text-gray-700 mb-3">End Time (Optional)</label>
+                                    <input type="time" id="end_time" name="end_time" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
+                                    <p class="text-xs text-gray-500 mt-1">Leave empty for all-day events</p>
                                 </div>
                             </div>
                             
@@ -1101,6 +1226,39 @@ try {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                     </svg>
                                     <p class="text-sm text-red-800 font-medium" id="dateErrorText"></p>
+                                </div>
+                            </div>
+                            
+                            <!-- Target Audience -->
+                            <div>
+                                <label for="target_audience" class="block text-sm font-semibold text-gray-700 mb-3">Target Audience</label>
+                                <select id="target_audience" name="target_audience" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
+                                    <option value="all">All (Residents and BHW)</option>
+                                    <option value="residents">Residents Only</option>
+                                    <option value="bhw">BHW Only</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Location Filtering -->
+                            <div id="locationFilterSection">
+                                <label class="block text-sm font-semibold text-gray-700 mb-3">Location (Optional)</label>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="target_barangay_id" class="block text-sm font-medium text-gray-600 mb-2">Barangay</label>
+                                        <select id="target_barangay_id" name="target_barangay_id" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
+                                            <option value="">All Barangays</option>
+                                            <?php foreach ($barangays as $barangay): ?>
+                                                <option value="<?php echo $barangay['id']; ?>"><?php echo htmlspecialchars($barangay['name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="target_purok_id" class="block text-sm font-medium text-gray-600 mb-2">Purok</label>
+                                        <select id="target_purok_id" name="target_purok_id" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400" disabled>
+                                            <option value="">All Puroks</option>
+                                        </select>
+                                        <p class="text-xs text-gray-500 mt-1">Select a barangay first</p>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -1157,6 +1315,23 @@ try {
     </div>
 
     <script>
+        // Puroks data for dynamic filtering
+        const puroksData = <?php echo json_encode($puroks); ?>;
+        
+        // Store announcements data globally for edit function
+        const announcementsData = <?php echo json_encode($announcements, JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        
+        // Helper function to edit announcement by ID (used by buttons in the list)
+        function editAnnouncementById(announcementId) {
+            const announcement = announcementsData.find(a => a.id == announcementId);
+            if (announcement) {
+                editAnnouncement(announcement);
+            } else {
+                console.error('Announcement not found with ID:', announcementId);
+                alert('Error: Announcement not found. Please refresh the page and try again.');
+            }
+        }
+        
         // Initialize FullCalendar
         document.addEventListener('DOMContentLoaded', function() {
             const calendarEl = document.getElementById('calendar');
@@ -1184,9 +1359,21 @@ try {
                     <?php endforeach; ?>
                 ],
                 eventClick: function(info) {
-                    const announcement = <?php echo json_encode($announcements); ?>.find(a => a.id == info.event.id);
+                    const announcement = announcementsData.find(a => a.id == info.event.id);
                     if (announcement) {
                         viewAnnouncement(announcement);
+                    }
+                },
+                dateClick: function(info) {
+                    // Only allow clicking on today or future dates
+                    const clickedDate = new Date(info.dateStr);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    if (clickedDate >= today) {
+                        openCreateModal(info.dateStr);
+                    } else {
+                        alert('You cannot create announcements for past dates. Please select today or a future date.');
                     }
                 },
                 dayMaxEvents: 3,
@@ -1201,20 +1388,36 @@ try {
                 }
             });
             calendar.render();
+            
+            // Store calendar instance globally for potential future use
+            window.announcementCalendar = calendar;
         });
 
         // Modal functions
-        function openCreateModal() {
+        function openCreateModal(selectedDate = null) {
             document.getElementById('modalTitle').textContent = 'Create Announcement';
             document.getElementById('formAction').value = 'create';
             document.getElementById('submitText').textContent = 'Create Announcement';
             document.getElementById('announcementForm').reset();
             document.getElementById('formId').value = '';
             
+            // Reset target audience and location fields
+            document.getElementById('target_audience').value = 'all';
+            document.getElementById('target_barangay_id').value = '';
+            document.getElementById('target_purok_id').innerHTML = '<option value="">All Puroks</option>';
+            document.getElementById('target_purok_id').disabled = true;
+            
             // Set minimum date to today
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('start_date').min = today;
             document.getElementById('end_date').min = today;
+            
+            // If a date was clicked on the calendar, set it as the start date
+            if (selectedDate) {
+                document.getElementById('start_date').value = selectedDate;
+                document.getElementById('end_date').value = selectedDate;
+                document.getElementById('end_date').min = selectedDate;
+            }
             
             // Hide any previous error messages
             document.getElementById('dateError').classList.add('hidden');
@@ -1232,14 +1435,106 @@ try {
         }
 
         function editAnnouncement(announcement) {
-            document.getElementById('modalTitle').textContent = 'Edit Announcement';
-            document.getElementById('formAction').value = 'update';
-            document.getElementById('submitText').textContent = 'Update Announcement';
-            document.getElementById('formId').value = announcement.id;
-            document.getElementById('title').value = announcement.title;
-            document.getElementById('description').value = announcement.description;
-            document.getElementById('start_date').value = announcement.start_date;
-            document.getElementById('end_date').value = announcement.end_date;
+            // Validate announcement data
+            if (!announcement || !announcement.id) {
+                console.error('Invalid announcement data:', announcement);
+                alert('Error: Invalid announcement data. Please try again.');
+                return;
+            }
+            
+            // Close view modal if open
+            if (document.getElementById('viewModal') && !document.getElementById('viewModal').classList.contains('hidden')) {
+                closeViewModal();
+            }
+            
+            // Check if modal elements exist
+            const modalTitle = document.getElementById('modalTitle');
+            const formAction = document.getElementById('formAction');
+            const submitText = document.getElementById('submitText');
+            const formId = document.getElementById('formId');
+            const titleInput = document.getElementById('title');
+            const descriptionInput = document.getElementById('description');
+            const startDateInput = document.getElementById('start_date');
+            const endDateInput = document.getElementById('end_date');
+            
+            if (!modalTitle || !formAction || !submitText || !formId || !titleInput || !descriptionInput || !startDateInput || !endDateInput) {
+                console.error('Required form elements not found');
+                alert('Error: Form elements not found. Please refresh the page and try again.');
+                return;
+            }
+            
+            try {
+                modalTitle.textContent = 'Edit Announcement';
+                formAction.value = 'update';
+                submitText.textContent = 'Update Announcement';
+                formId.value = announcement.id;
+                titleInput.value = announcement.title || '';
+                descriptionInput.value = announcement.description || '';
+                startDateInput.value = announcement.start_date || '';
+                endDateInput.value = announcement.end_date || '';
+                
+                // Set time fields
+                const startTimeInput = document.getElementById('start_time');
+                const endTimeInput = document.getElementById('end_time');
+                if (startTimeInput) {
+                    startTimeInput.value = announcement.start_time || '';
+                }
+                if (endTimeInput) {
+                    endTimeInput.value = announcement.end_time || '';
+                }
+            } catch (e) {
+                console.error('Error setting form values:', e);
+                alert('Error setting form values. Please try again.');
+                return;
+            }
+            
+            // Set target audience (default to 'all' if not set)
+            const targetAudience = announcement.target_audience || 'all';
+            document.getElementById('target_audience').value = targetAudience;
+            
+            // Handle barangay and purok (handle null values)
+            const barangayId = (announcement.target_barangay_id && announcement.target_barangay_id !== null) ? String(announcement.target_barangay_id) : '';
+            const purokId = (announcement.target_purok_id && announcement.target_purok_id !== null) ? String(announcement.target_purok_id) : '';
+            
+            document.getElementById('target_barangay_id').value = barangayId;
+            
+            // Populate puroks if barangay is selected
+            if (barangayId) {
+                // Wait a bit for the DOM to be ready, then update purok options
+                setTimeout(function() {
+                    updatePurokOptions(barangayId, purokId);
+                }, 50);
+            } else {
+                document.getElementById('target_purok_id').innerHTML = '<option value="">All Puroks</option>';
+                document.getElementById('target_purok_id').disabled = true;
+                document.getElementById('target_purok_id').value = '';
+            }
+            
+            // For editing, allow past dates if the announcement already has a past date
+            // But set minimum to today for new dates
+            const today = new Date().toISOString().split('T')[0];
+            const announcementDate = new Date(announcement.start_date);
+            const todayDate = new Date(today);
+            
+            // If announcement is in the past, allow editing it (set min to a very old date)
+            // Otherwise, enforce today as minimum
+            if (announcementDate < todayDate) {
+                // Allow past dates for existing past announcements
+                document.getElementById('start_date').removeAttribute('min');
+            } else {
+                // For future announcements, enforce today as minimum
+                document.getElementById('start_date').min = today;
+            }
+            
+            // Ensure end_date min is at least start_date
+            if (announcement.start_date) {
+                document.getElementById('end_date').min = announcement.start_date;
+            } else {
+                document.getElementById('end_date').min = today;
+            }
+            
+            // Hide any previous error messages
+            document.getElementById('dateError').classList.add('hidden');
             
             const modal = document.getElementById('announcementModal');
             const modalContent = document.getElementById('modalContent');
@@ -1251,6 +1546,40 @@ try {
                 modalContent.classList.remove('scale-95', 'opacity-0');
                 modalContent.classList.add('scale-100', 'opacity-100');
             }, 10);
+        }
+        
+        // Function to update purok options based on selected barangay
+        function updatePurokOptions(barangayId, selectedPurokId = '') {
+            const purokSelect = document.getElementById('target_purok_id');
+            if (!purokSelect) return;
+            
+            purokSelect.innerHTML = '<option value="">All Puroks</option>';
+            
+            if (barangayId) {
+                // Convert to number for comparison
+                const barangayIdNum = parseInt(barangayId);
+                const selectedPurokIdNum = selectedPurokId ? parseInt(selectedPurokId) : null;
+                
+                const barangayPuroks = puroksData.filter(p => parseInt(p.barangay_id) === barangayIdNum);
+                barangayPuroks.forEach(purok => {
+                    const option = document.createElement('option');
+                    option.value = purok.id;
+                    option.textContent = purok.name;
+                    if (selectedPurokIdNum && parseInt(purok.id) === selectedPurokIdNum) {
+                        option.selected = true;
+                    }
+                    purokSelect.appendChild(option);
+                });
+                purokSelect.disabled = false;
+                
+                // Set the selected value if it exists
+                if (selectedPurokIdNum) {
+                    purokSelect.value = selectedPurokIdNum;
+                }
+            } else {
+                purokSelect.disabled = true;
+                purokSelect.value = '';
+            }
         }
 
         function closeModal() {
@@ -1286,8 +1615,11 @@ try {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                             </svg>
                             <div>
-                                <p class="text-sm text-gray-500">Start Date</p>
-                                <p class="font-medium text-gray-900">${new Date(announcement.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                <p class="text-sm text-gray-500">Start Date${announcement.start_time ? ' & Time' : ''}</p>
+                                <p class="font-medium text-gray-900">
+                                    ${new Date(announcement.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    ${announcement.start_time ? '<br><span class="text-sm text-gray-600">' + formatTime(announcement.start_time) + '</span>' : ''}
+                                </p>
                             </div>
                         </div>
                         
@@ -1296,8 +1628,11 @@ try {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                             </svg>
                             <div>
-                                <p class="text-sm text-gray-500">End Date</p>
-                                <p class="font-medium text-gray-900">${new Date(announcement.end_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                <p class="text-sm text-gray-500">End Date${announcement.end_time ? ' & Time' : ''}</p>
+                                <p class="font-medium text-gray-900">
+                                    ${new Date(announcement.end_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    ${announcement.end_time ? '<br><span class="text-sm text-gray-600">' + formatTime(announcement.end_time) + '</span>' : ''}
+                                </p>
                             </div>
                         </div>
                         
@@ -1323,7 +1658,7 @@ try {
                     </div>
                     
                     <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-                        <button onclick="editAnnouncement(${JSON.stringify(announcement)})" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        <button onclick="closeViewModal(); editAnnouncementById(${announcement.id});" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                             Edit Announcement
                         </button>
                     </div>
@@ -1452,7 +1787,7 @@ try {
                 }
                 
                 if (endDate < startDate) {
-                    errorText.textContent = 'End date must be after the start date.';
+                    errorText.textContent = 'End date must be after or equal to the start date.';
                     errorDiv.classList.remove('hidden');
                     return false;
                 }
@@ -1461,42 +1796,109 @@ try {
             return true;
         }
 
-        // Add date validation event listeners
-        document.getElementById('start_date').addEventListener('change', function() {
-            const startDate = this.value;
+        // Add date validation and barangay change event listeners (after DOM is loaded)
+        setTimeout(function() {
+            const startDateInput = document.getElementById('start_date');
             const endDateInput = document.getElementById('end_date');
+            const barangaySelect = document.getElementById('target_barangay_id');
             
-            if (startDate) {
-                endDateInput.min = startDate;
-                if (endDateInput.value && endDateInput.value < startDate) {
-                    endDateInput.value = startDate;
-                }
+            if (startDateInput) {
+                startDateInput.addEventListener('change', function() {
+                    const startDate = this.value;
+                    const today = new Date().toISOString().split('T')[0];
+                    
+                    // Ensure start date is not in the past
+                    if (startDate && startDate < today) {
+                        this.value = today;
+                        const errorDiv = document.getElementById('dateError');
+                        const errorText = document.getElementById('dateErrorText');
+                        errorText.textContent = 'Start date cannot be in the past. Date has been set to today.';
+                        errorDiv.classList.remove('hidden');
+                        setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+                    }
+                    
+                    if (startDate && endDateInput) {
+                        endDateInput.min = startDate;
+                        if (endDateInput.value && endDateInput.value < startDate) {
+                            endDateInput.value = startDate;
+                        }
+                    }
+                    validateDates();
+                });
             }
-            validateDates();
-        });
-
-        document.getElementById('end_date').addEventListener('change', validateDates);
+            
+            if (endDateInput) {
+                endDateInput.addEventListener('change', validateDates);
+            }
+            
+            // Time input validation
+            const startTimeInput = document.getElementById('start_time');
+            const endTimeInput = document.getElementById('end_time');
+            
+            if (startTimeInput) {
+                startTimeInput.addEventListener('change', function() {
+                    validateDates();
+                    // If start date and end date are the same, ensure end time is after start time
+                    const startDate = document.getElementById('start_date').value;
+                    const endDate = document.getElementById('end_date').value;
+                    if (startDate === endDate && this.value && endTimeInput.value && this.value > endTimeInput.value) {
+                        endTimeInput.value = this.value;
+                    }
+                });
+            }
+            
+            if (endTimeInput) {
+                endTimeInput.addEventListener('change', validateDates);
+            }
+            
+            // Barangay change event listener
+            if (barangaySelect) {
+                barangaySelect.addEventListener('change', function() {
+                    const barangayId = this.value;
+                    updatePurokOptions(barangayId);
+                });
+            }
+        }, 100);
 
         // Add loading states to forms
-        document.getElementById('announcementForm').addEventListener('submit', function(e) {
-            // Validate dates before submitting
-            if (!validateDates()) {
-                e.preventDefault();
-                return false;
+        setTimeout(function() {
+            const form = document.getElementById('announcementForm');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    // Validate dates before submitting
+                    const startDate = document.getElementById('start_date').value;
+                    const endDate = document.getElementById('end_date').value;
+                    const today = new Date().toISOString().split('T')[0];
+                    
+                    // Prevent past dates
+                    if (startDate < today) {
+                        e.preventDefault();
+                        const errorDiv = document.getElementById('dateError');
+                        const errorText = document.getElementById('dateErrorText');
+                        errorText.textContent = 'Start date cannot be in the past. Please select today or a future date.';
+                        errorDiv.classList.remove('hidden');
+                        return false;
+                    }
+                    
+                    if (!validateDates()) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    
+                    const submitBtn = this.querySelector('button[type="submit"]');
+                    const originalText = submitBtn.innerHTML;
+                    
+                    submitBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Processing...';
+                    submitBtn.disabled = true;
+                    
+                    // Re-enable after 3 seconds (fallback)
+                    setTimeout(() => {
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                    }, 3000);
+                });
             }
-            
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            
-            submitBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Processing...';
-            submitBtn.disabled = true;
-            
-            // Re-enable after 3 seconds (fallback)
-            setTimeout(() => {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            }, 3000);
-        });
+        }, 100);
 
         // Function to check if announcement is in the past
         function isAnnouncementPast(announcement) {
@@ -1775,7 +2177,7 @@ try {
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                                 </svg>
                                             </button>
-                                            <button onclick="editAnnouncement(<?php echo htmlspecialchars(json_encode($announcement)); ?>); closeAnnouncementsModal();" class="action-btn p-3 text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-300 hover:scale-110" title="Edit">
+                                            <button onclick="editAnnouncementById(<?php echo $announcement['id']; ?>); closeAnnouncementsModal();" class="action-btn p-3 text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-300 hover:scale-110" title="Edit">
                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                                 </svg>

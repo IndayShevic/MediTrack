@@ -9,29 +9,67 @@ $stmt = db()->prepare('SELECT * FROM users WHERE id = ?');
 $stmt->execute([$user['id']]);
 $user_data = $stmt->fetch();
 
-// Fetch real dashboard data with error handling
+// Fetch real dashboard data with error handling - Improved with accurate data
 try {
-    $total_medicines = db()->query('SELECT COUNT(*) as count FROM medicines')->fetch()['count'];
+    $total_medicines = db()->query('SELECT COUNT(*) as count FROM medicines WHERE is_active = 1')->fetch()['count'];
 } catch (Exception $e) {
     $total_medicines = 0;
 }
 
 try {
-    $expiring_batches = db()->query('SELECT COUNT(*) as count FROM medicine_batches WHERE expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND expiry_date > CURDATE()')->fetch()['count'];
+    // Total stock units (available, non-expired)
+    $total_stock_result = db()->query('
+        SELECT COALESCE(SUM(quantity_available), 0) as total 
+        FROM medicine_batches 
+        WHERE quantity_available > 0 AND expiry_date > CURDATE()
+    ')->fetch();
+    $total_stock_units = (int)($total_stock_result['total'] ?? 0);
 } catch (Exception $e) {
-    $expiring_batches = 0;
+    $total_stock_units = 0;
 }
 
 try {
-    $pending_requests = db()->query('SELECT COUNT(*) as count FROM requests WHERE status = "pending"')->fetch()['count'];
+    // Low stock medicines (below minimum_stock_level or 0 stock)
+    $low_stock_result = db()->query('
+        SELECT COUNT(DISTINCT m.id) as count 
+        FROM medicines m 
+        LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id 
+        WHERE m.is_active = 1
+        AND (mb.expiry_date IS NULL OR mb.expiry_date > CURDATE())
+        GROUP BY m.id, m.minimum_stock_level
+        HAVING COALESCE(SUM(mb.quantity_available), 0) < COALESCE(m.minimum_stock_level, 10) 
+        OR COALESCE(SUM(mb.quantity_available), 0) = 0
+    ')->fetchAll();
+    $low_stock_medicines = count($low_stock_result);
+} catch (Exception $e) {
+    $low_stock_medicines = 0;
+}
+
+try {
+    // Today's dispensed units
+    $today_dispensed_result = db()->query('
+        SELECT COALESCE(SUM(ABS(quantity)), 0) as total 
+        FROM inventory_transactions 
+        WHERE transaction_type = "OUT" 
+        AND DATE(created_at) = CURDATE()
+    ')->fetch();
+    $today_dispensed = (int)($today_dispensed_result['total'] ?? 0);
+} catch (Exception $e) {
+    $today_dispensed = 0;
+}
+
+try {
+    // Total requests (all time)
+    $total_requests = db()->query('SELECT COUNT(*) as count FROM requests')->fetch()['count'];
+} catch (Exception $e) {
+    $total_requests = 0;
+}
+
+try {
+    // Pending requests
+    $pending_requests = db()->query('SELECT COUNT(*) as count FROM requests WHERE status = "submitted"')->fetch()['count'];
 } catch (Exception $e) {
     $pending_requests = 0;
-}
-
-try {
-    $total_allocations = db()->query('SELECT COUNT(*) as count FROM allocations')->fetch()['count'];
-} catch (Exception $e) {
-    $total_allocations = 0;
 }
 
 // Fetch recent activity data with error handling
@@ -53,17 +91,115 @@ try {
     $recent_requests = [];
 }
 
-// Fetch chart data with error handling
+// Fetch comprehensive chart data with error handling
 try {
-    $request_trends = db()->query('SELECT DATE(created_at) as date, COUNT(*) as count FROM requests WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(created_at) ORDER BY date')->fetchAll();
+    // Last 30 days: Requests and Dispensed (for combination chart)
+    // Generate date range first, then join data
+    $request_dispensed_trends = [];
+    for ($i = 29; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        
+        // Get request count for this date
+        $req_stmt = db()->prepare('SELECT COUNT(*) as count FROM requests WHERE DATE(created_at) = ?');
+        $req_stmt->execute([$date]);
+        $req_result = $req_stmt->fetch();
+        $request_count = (int)($req_result['count'] ?? 0);
+        
+        // Get dispensed units for this date
+        $disp_stmt = db()->prepare('
+            SELECT COALESCE(SUM(ABS(quantity)), 0) as total 
+            FROM inventory_transactions 
+            WHERE transaction_type = "OUT" AND DATE(created_at) = ?
+        ');
+        $disp_stmt->execute([$date]);
+        $disp_result = $disp_stmt->fetch();
+        $dispensed_units = (int)($disp_result['total'] ?? 0);
+        
+        $request_dispensed_trends[] = [
+            'date' => $date,
+            'request_count' => $request_count,
+            'dispensed_units' => $dispensed_units
+        ];
+    }
 } catch (Exception $e) {
-    $request_trends = [];
+    $request_dispensed_trends = [];
 }
 
 try {
-    $medicine_distribution = db()->query('SELECT m.name, COUNT(r.id) as request_count FROM medicines m LEFT JOIN requests r ON m.id = r.medicine_id GROUP BY m.id, m.name ORDER BY request_count DESC LIMIT 5')->fetchAll();
+    // Top medicines by dispensed quantity (last 30 days)
+    $top_dispensed_medicines = db()->query('
+        SELECT 
+            m.name,
+            COALESCE(SUM(CASE WHEN it.transaction_type = "OUT" THEN ABS(it.quantity) ELSE 0 END), 0) as dispensed_units
+        FROM medicines m
+        LEFT JOIN inventory_transactions it ON m.id = it.medicine_id 
+            AND it.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            AND it.transaction_type = "OUT"
+        WHERE m.is_active = 1
+        GROUP BY m.id, m.name
+        HAVING dispensed_units > 0
+        ORDER BY dispensed_units DESC
+        LIMIT 10
+    ')->fetchAll();
 } catch (Exception $e) {
-    $medicine_distribution = [];
+    $top_dispensed_medicines = [];
+}
+
+try {
+    // Stock levels distribution (histogram data)
+    $stock_distribution = db()->query('
+        SELECT 
+            CASE 
+                WHEN COALESCE(SUM(mb.quantity_available), 0) = 0 THEN "Out of Stock"
+                WHEN COALESCE(SUM(mb.quantity_available), 0) <= 10 THEN "1-10 units"
+                WHEN COALESCE(SUM(mb.quantity_available), 0) <= 50 THEN "11-50 units"
+                WHEN COALESCE(SUM(mb.quantity_available), 0) <= 100 THEN "51-100 units"
+                ELSE "100+ units"
+            END as stock_range,
+            COUNT(DISTINCT m.id) as medicine_count
+        FROM medicines m
+        LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id 
+            AND mb.expiry_date > CURDATE()
+        WHERE m.is_active = 1
+        GROUP BY m.id
+    ')->fetchAll();
+} catch (Exception $e) {
+    $stock_distribution = [];
+}
+
+try {
+    // Monthly trends (last 6 months)
+    $monthly_trends = db()->query('
+        SELECT 
+            DATE_FORMAT(created_at, "%Y-%m") as month,
+            DATE_FORMAT(created_at, "%b %Y") as month_label,
+            COUNT(*) as request_count,
+            COALESCE((
+                SELECT SUM(ABS(quantity)) 
+                FROM inventory_transactions 
+                WHERE transaction_type = "OUT" 
+                AND DATE_FORMAT(created_at, "%Y-%m") = DATE_FORMAT(r.created_at, "%Y-%m")
+            ), 0) as dispensed_units
+        FROM requests r
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+        GROUP BY DATE_FORMAT(created_at, "%Y-%m"), DATE_FORMAT(created_at, "%b %Y")
+        ORDER BY month
+    ')->fetchAll();
+} catch (Exception $e) {
+    $monthly_trends = [];
+}
+
+try {
+    // Request status distribution
+    $request_status_dist = db()->query('
+        SELECT 
+            status,
+            COUNT(*) as count
+        FROM requests
+        GROUP BY status
+    ')->fetchAll();
+} catch (Exception $e) {
+    $request_status_dist = [];
 }
 ?>
 <!DOCTYPE html>
@@ -405,18 +541,18 @@ try {
                     <div class="card-body">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Total Medicines</p>
-                                <p class="text-3xl font-bold text-gray-900" id="stat-meds">0</p>
+                                <p class="text-sm font-medium text-gray-600">Total Stock Units</p>
+                                <p class="text-3xl font-bold text-gray-900" id="stat-stock">0</p>
                             </div>
                             <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                                 <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                                 </svg>
                             </div>
                         </div>
                         <div class="mt-4">
-                            <span class="text-sm text-green-600 font-medium">+12%</span>
-                            <span class="text-sm text-gray-500 ml-2">from last month</span>
+                            <span class="text-sm text-blue-600 font-medium">Available units</span>
+                            <span class="text-sm text-gray-500 ml-2">in inventory</span>
                         </div>
                     </div>
                 </div>
@@ -425,18 +561,18 @@ try {
                     <div class="card-body">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Expiring Soon</p>
-                                <p class="text-3xl font-bold text-gray-900" id="stat-expiring">0</p>
+                                <p class="text-sm font-medium text-gray-600">Low Stock Medicines</p>
+                                <p class="text-3xl font-bold text-gray-900" id="stat-low">0</p>
                             </div>
                             <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                                 <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                                 </svg>
                             </div>
                         </div>
                         <div class="mt-4">
-                            <span class="text-sm text-orange-600 font-medium">Needs attention</span>
-                            <span class="text-sm text-gray-500 ml-2">within 30 days</span>
+                            <span class="text-sm text-orange-600 font-medium">Needs restocking</span>
+                            <span class="text-sm text-gray-500 ml-2">below threshold</span>
                         </div>
                     </div>
                 </div>
@@ -445,18 +581,18 @@ try {
                     <div class="card-body">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Pending Requests</p>
-                                <p class="text-3xl font-bold text-gray-900" id="stat-pending">0</p>
+                                <p class="text-sm font-medium text-gray-600">Today's Dispensed</p>
+                                <p class="text-3xl font-bold text-gray-900" id="stat-dispensed">0</p>
                             </div>
-                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                             </div>
                         </div>
                         <div class="mt-4">
-                            <span class="text-sm text-purple-600 font-medium">Awaiting review</span>
-                            <span class="text-sm text-gray-500 ml-2">by BHWs</span>
+                            <span class="text-sm text-green-600 font-medium">Units dispensed</span>
+                            <span class="text-sm text-gray-500 ml-2">today</span>
                         </div>
                     </div>
                 </div>
@@ -465,18 +601,18 @@ try {
                     <div class="card-body">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Senior Allocations</p>
-                                <p class="text-3xl font-bold text-gray-900" id="stat-alloc">0</p>
+                                <p class="text-sm font-medium text-gray-600">Total Requests</p>
+                                <p class="text-3xl font-bold text-gray-900" id="stat-requests">0</p>
                             </div>
-                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                 </svg>
                             </div>
                         </div>
                         <div class="mt-4">
-                            <span class="text-sm text-green-600 font-medium">Active programs</span>
-                            <span class="text-sm text-gray-500 ml-2">this month</span>
+                            <span class="text-sm text-purple-600 font-medium"><?php echo $pending_requests; ?> pending</span>
+                            <span class="text-sm text-gray-500 ml-2">awaiting review</span>
                         </div>
                     </div>
                 </div>
@@ -484,23 +620,58 @@ try {
 
             <!-- Charts Section -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Combination Chart: Requests vs Dispensed -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="text-lg font-semibold text-gray-900">Request Trends</h3>
-                        <p class="text-sm text-gray-600">Last 7 days</p>
+                        <h3 class="text-lg font-semibold text-gray-900">Requests vs Dispensed</h3>
+                        <p class="text-sm text-gray-600">Last 30 days trend</p>
                     </div>
                     <div class="card-body">
-                        <canvas id="requestChart" height="200"></canvas>
+                        <canvas id="requestDispensedChart" height="250"></canvas>
                     </div>
                 </div>
 
+                <!-- Request Status Distribution -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="text-lg font-semibold text-gray-900">Medicine Distribution</h3>
-                        <p class="text-sm text-gray-600">Top 5 medicines</p>
+                        <h3 class="text-lg font-semibold text-gray-900">Request Status</h3>
+                        <p class="text-sm text-gray-600">Distribution by status</p>
                     </div>
                     <div class="card-body">
-                        <canvas id="medicineChart" height="200"></canvas>
+                        <canvas id="statusChart" height="250"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Dispensed Medicines (Bar Chart) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="text-lg font-semibold text-gray-900">Top Dispensed Medicines</h3>
+                        <p class="text-sm text-gray-600">Last 30 days</p>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="topMedicinesChart" height="250"></canvas>
+                    </div>
+                </div>
+
+                <!-- Stock Distribution (Histogram) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="text-lg font-semibold text-gray-900">Stock Levels Distribution</h3>
+                        <p class="text-sm text-gray-600">Current inventory levels</p>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="stockDistributionChart" height="250"></canvas>
+                    </div>
+                </div>
+
+                <!-- Monthly Trends -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="text-lg font-semibold text-gray-900">Monthly Trends</h3>
+                        <p class="text-sm text-gray-600">Last 6 months overview</p>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="monthlyTrendsChart" height="100"></canvas>
                     </div>
                 </div>
             </div>
@@ -746,34 +917,208 @@ try {
     <script>
         // Initialize charts
         function initCharts() {
-            // Request Trends Chart
-            const requestCtx = document.getElementById('requestChart').getContext('2d');
+            // 1. Combination Chart: Requests vs Dispensed (Line + Bar)
+            const requestDispensedCtx = document.getElementById('requestDispensedChart').getContext('2d');
+            const requestDispensedData = <?php echo json_encode($request_dispensed_trends); ?>;
             
-            // Prepare chart data
-            const last7Days = [];
-            const requestData = [];
-            for (let i = 6; i >= 0; i--) {
+            // Prepare labels and data
+            const labels = [];
+            const requestCounts = [];
+            const dispensedCounts = [];
+            
+            // Generate last 30 days
+            for (let i = 29; i >= 0; i--) {
                 const date = new Date();
                 date.setDate(date.getDate() - i);
                 const dateStr = date.toISOString().split('T')[0];
-                last7Days.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
+                labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
                 
-                // Find data for this date
-                const dayData = <?php echo json_encode($request_trends); ?>.find(item => item.date === dateStr);
-                requestData.push(dayData ? parseInt(dayData.count) : 0);
+                const dayData = requestDispensedData.find(item => item.date === dateStr);
+                requestCounts.push(dayData ? parseInt(dayData.request_count) : 0);
+                dispensedCounts.push(dayData ? parseInt(dayData.dispensed_units) : 0);
             }
             
-            new Chart(requestCtx, {
-                type: 'line',
+            new Chart(requestDispensedCtx, {
+                type: 'bar',
                 data: {
-                    labels: last7Days,
+                    labels: labels,
                     datasets: [{
                         label: 'Requests',
-                        data: requestData,
+                        data: requestCounts,
+                        type: 'line',
                         borderColor: 'rgb(59, 130, 246)',
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         tension: 0.4,
-                        fill: true
+                        fill: false,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Dispensed Units',
+                        data: dispensedCounts,
+                        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                        borderColor: 'rgb(16, 185, 129)',
+                        borderWidth: 1,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Requests'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Dispensed Units'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Request Status Distribution (Doughnut Chart)
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            const statusData = <?php echo json_encode($request_status_dist); ?>;
+            
+            const statusLabels = statusData.map(item => {
+                return item.status.charAt(0).toUpperCase() + item.status.slice(1).replace('_', ' ');
+            });
+            const statusCounts = statusData.map(item => parseInt(item.count));
+            
+            new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: statusLabels,
+                    datasets: [{
+                        data: statusCounts,
+                        backgroundColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(16, 185, 129)',
+                            'rgb(245, 158, 11)',
+                            'rgb(239, 68, 68)',
+                            'rgb(139, 69, 19)',
+                            'rgb(156, 163, 175)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // 3. Top Dispensed Medicines (Horizontal Bar Chart)
+            const topMedicinesCtx = document.getElementById('topMedicinesChart').getContext('2d');
+            const topMedicinesData = <?php echo json_encode($top_dispensed_medicines); ?>;
+            
+            const medicineLabels = topMedicinesData.map(item => item.name.length > 20 ? item.name.substring(0, 20) + '...' : item.name);
+            const medicineUnits = topMedicinesData.map(item => parseInt(item.dispensed_units));
+            
+            new Chart(topMedicinesCtx, {
+                type: 'bar',
+                data: {
+                    labels: medicineLabels,
+                    datasets: [{
+                        label: 'Dispensed Units',
+                        data: medicineUnits,
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 4. Stock Distribution (Histogram/Bar Chart)
+            const stockDistCtx = document.getElementById('stockDistributionChart').getContext('2d');
+            const stockDistData = <?php echo json_encode($stock_distribution); ?>;
+            
+            // Group by stock range
+            const stockRanges = ['Out of Stock', '1-10 units', '11-50 units', '51-100 units', '100+ units'];
+            const stockCounts = stockRanges.map(range => {
+                const found = stockDistData.find(item => item.stock_range === range);
+                return found ? parseInt(found.medicine_count) : 0;
+            });
+            
+            new Chart(stockDistCtx, {
+                type: 'bar',
+                data: {
+                    labels: stockRanges,
+                    datasets: [{
+                        label: 'Number of Medicines',
+                        data: stockCounts,
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(139, 69, 19, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(239, 68, 68)',
+                            'rgb(245, 158, 11)',
+                            'rgb(59, 130, 246)',
+                            'rgb(16, 185, 129)',
+                            'rgb(139, 69, 19)'
+                        ],
+                        borderWidth: 1
                     }]
                 },
                 options: {
@@ -800,44 +1145,77 @@ try {
                 }
             });
 
-            // Medicine Distribution Chart
-            const medicineCtx = document.getElementById('medicineChart').getContext('2d');
+            // 5. Monthly Trends (Combination Chart)
+            const monthlyTrendsCtx = document.getElementById('monthlyTrendsChart').getContext('2d');
+            const monthlyData = <?php echo json_encode($monthly_trends); ?>;
             
-            // Prepare medicine distribution data
-            const medicineData = <?php echo json_encode($medicine_distribution); ?>;
-            const medicineLabels = medicineData.map(item => item.name);
-            const medicineCounts = medicineData.map(item => parseInt(item.request_count));
+            const monthLabels = monthlyData.map(item => item.month_label);
+            const monthRequests = monthlyData.map(item => parseInt(item.request_count));
+            const monthDispensed = monthlyData.map(item => parseInt(item.dispensed_units));
             
-            // If no data, show placeholder
-            if (medicineLabels.length === 0) {
-                medicineLabels.push('No requests yet');
-                medicineCounts.push(1);
-            }
-            
-            new Chart(medicineCtx, {
-                type: 'doughnut',
+            new Chart(monthlyTrendsCtx, {
+                type: 'bar',
                 data: {
-                    labels: medicineLabels,
+                    labels: monthLabels,
                     datasets: [{
-                        data: medicineCounts,
-                        backgroundColor: [
-                            'rgb(59, 130, 246)',
-                            'rgb(16, 185, 129)',
-                            'rgb(245, 158, 11)',
-                            'rgb(239, 68, 68)',
-                            'rgb(156, 163, 175)',
-                            'rgb(139, 69, 19)',
-                            'rgb(75, 0, 130)',
-                            'rgb(255, 20, 147)'
-                        ]
+                        label: 'Requests',
+                        data: monthRequests,
+                        type: 'line',
+                        borderColor: 'rgb(139, 69, 19)',
+                        backgroundColor: 'rgba(139, 69, 19, 0.1)',
+                        tension: 0.4,
+                        fill: false,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Dispensed Units',
+                        data: monthDispensed,
+                        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        borderWidth: 1,
+                        yAxisID: 'y1'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
                         legend: {
-                            position: 'bottom'
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Requests'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Dispensed Units'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
                         }
                     }
                 }
@@ -982,8 +1360,8 @@ try {
             initCharts();
             
             // Animate stats on load with real data
-            const stats = ['stat-meds', 'stat-expiring', 'stat-pending', 'stat-alloc'];
-            const values = [<?php echo $total_medicines; ?>, <?php echo $expiring_batches; ?>, <?php echo $pending_requests; ?>, <?php echo $total_allocations; ?>];
+            const stats = ['stat-stock', 'stat-low', 'stat-dispensed', 'stat-requests'];
+            const values = [<?php echo $total_stock_units; ?>, <?php echo $low_stock_medicines; ?>, <?php echo $today_dispensed; ?>, <?php echo $total_requests; ?>];
             
             stats.forEach((statId, index) => {
                 const element = document.getElementById(statId);

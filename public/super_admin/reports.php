@@ -21,7 +21,8 @@ $date_to = $_GET['date_to'] ?? date('Y-m-d');
 $batch_id = isset($_GET['batch_id']) ? (int)$_GET['batch_id'] : 0;
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $current_page = $page; // Alias for display purposes
-$per_page = 50;
+$print_all = isset($_GET['print_all']) && $_GET['print_all'] == '1';
+$per_page = $print_all ? 999999 : 50; // Fetch all records if printing
 $offset = ($page - 1) * $per_page;
 
 // Get batches for selected medicine
@@ -65,12 +66,28 @@ if ($has_inventory_transactions) {
 
 if ($selected_medicine_id > 0 && !empty($report_type)) {
     $medicine_name = '';
+    $medicine_details = null;
     foreach ($medicines as $med) {
         if ($med['id'] == $selected_medicine_id) {
             $medicine_name = $med['name'];
             break;
         }
     }
+    
+    // Get full medicine details for print header
+    try {
+        $med_stmt = db()->prepare('SELECT name, generic_name, dosage, form FROM medicines WHERE id = ? LIMIT 1');
+        $med_stmt->execute([$selected_medicine_id]);
+        $medicine_details = $med_stmt->fetch();
+    } catch (Throwable $e) {
+        error_log("Error fetching medicine details: " . $e->getMessage());
+    }
+    
+    // Get location info for header
+    $health_center_name = get_setting('health_center_name', 'Health Center');
+    $barangay_name = get_setting('barangay_name', 'Barangay Loon');
+    $province_name = get_setting('province_name', 'Bohol');
+    $municipality_name = get_setting('municipality_name', 'Loon');
     
     // Build WHERE clause
     $where_conditions = ['medicine_id = ?'];
@@ -694,25 +711,545 @@ $total_pages = ceil($total_records / $per_page);
             color: #6b7280;
         }
         
+        /* Print-optimized styles */
+        .print-header {
+            display: none;
+        }
+        
+        .official-print-header {
+            display: none;
+            border-bottom: 3px solid #000;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .official-print-header .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .official-print-header .logo-left {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+        }
+        
+        .official-print-header .header-center {
+            text-align: center;
+            flex: 1;
+            margin: 0 20px;
+        }
+        
+        .official-print-header .header-center h1 {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .official-print-header .header-center h2 {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .official-print-header .header-center h3 {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .official-print-header .header-center p {
+            font-size: 11px;
+            margin: 2px 0;
+        }
+        
+        .official-print-header .logo-right {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+        }
+        
+        .print-report-title {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px 0;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+        }
+        
+        .print-report-title h1 {
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        
+        .print-report-title h2 {
+            font-size: 13px;
+            font-weight: 600;
+            font-style: italic;
+            margin-top: 5px;
+            color: #333;
+        }
+        
+        .print-medicine-details {
+            display: none;
+            margin: 12px 0;
+            padding: 10px;
+            border: 1px solid #000;
+            background: #f9f9f9;
+        }
+        
+        .print-medicine-details h3 {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        
+        .print-medicine-details .details-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px 15px;
+            font-size: 10px;
+        }
+        
+        .print-medicine-details .detail-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 18px;
+        }
+        
+        .print-medicine-details .detail-label {
+            font-weight: 600;
+            text-align: left;
+            min-width: 110px;
+        }
+        
+        .print-medicine-details .detail-item span:last-child {
+            text-align: right;
+            flex: 1;
+        }
+        
+        .print-summary-table {
+            display: none;
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            border: 2px solid #000;
+        }
+        
+        .print-summary-table th,
+        .print-summary-table td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: center;
+            font-size: 10px;
+        }
+        
+        .print-summary-table th {
+            background-color: #e5e5e5;
+            font-weight: bold;
+        }
+        
+        .print-summary-table td {
+            font-weight: 600;
+        }
+        
+        .print-executive-summary {
+            display: none;
+            margin: 12px 0;
+            padding: 10px;
+            border: 1px solid #000;
+            background: #f9f9f9;
+        }
+        
+        .print-executive-summary h3 {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        
+        .print-executive-summary .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        
+        .print-executive-summary .summary-item {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+            background: white;
+        }
+        
+        .print-executive-summary .summary-label {
+            font-size: 9px;
+            font-weight: normal;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            color: #555;
+        }
+        
+        .print-executive-summary .summary-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000;
+        }
+        
+        .print-legend {
+            display: none;
+            margin: 15px 0 0 0;
+            padding: 10px;
+            border: 1px solid #000;
+            background: #f9f9f9;
+            page-break-after: always;
+        }
+        
+        .print-legend h3 {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        
+        .print-legend ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 9px;
+        }
+        
+        .print-legend li {
+            margin: 3px 0;
+            padding-left: 12px;
+            position: relative;
+        }
+        
+        .print-legend li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+        
+        .print-signatures {
+            display: none;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #000;
+        }
+        
+        .print-signatures .signature-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .print-signatures .signature-header span {
+            width: 45%;
+        }
+        
+        .print-signatures .signature-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+        }
+        
+        .print-signatures .signature-box {
+            text-align: center;
+            width: 45%;
+        }
+        
+        .print-signatures .signature-line {
+            border-top: 1px solid #000;
+            margin: 0 0 5px 0;
+            padding-top: 5px;
+            min-height: 50px;
+        }
+        
+        .print-signatures .signature-label {
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        
+        .print-signatures .signature-position {
+            font-size: 9px;
+            color: #555;
+        }
+        
+        .print-footer-custom {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            margin-top: 20px;
+            padding: 8px 0;
+            border-top: 1px solid #000;
+            text-align: center;
+            font-size: 8px;
+            background: white;
+        }
+        
+        .print-footer-custom .footer-line1 {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .print-footer-custom .footer-line2 {
+            color: #555;
+        }
+        
         @media print {
-            .no-print { display: none !important; }
-            .content-header { position: static !important; }
-            body { background: white !important; margin: 0; padding: 0; }
-            .sidebar { display: none !important; }
-            .main-content { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
-            .report-container { padding: 20px 30px !important; box-shadow: none !important; }
-            .bg-white { background: white !important; }
-            .shadow-lg { box-shadow: none !important; }
-            table { page-break-inside: auto !important; border-collapse: collapse !important; width: 100% !important; }
-            tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-            thead { display: table-header-group !important; }
-            tfoot { display: table-footer-group !important; }
-            @page { 
-                margin: 2cm 1.5cm;
-                size: A4;
+            .print-footer-custom {
+                position: fixed;
+                bottom: 0;
             }
+        }
+        
+        @media print {
+            /* First, ensure everything is visible by default */
+            * {
+                visibility: visible !important;
+            }
+            
+            /* Hide ONLY specific UI elements */
+            .sidebar,
+            .sidebar-footer,
+            .content-header,
+            .no-print,
+            button,
+            a[href],
+            form,
+            select,
+            input,
+            nav {
+                display: none !important;
+                visibility: hidden !important;
+            }
+            
+            /* Ensure main content and report are visible */
+            body {
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                font-size: 12px !important;
+            }
+            
+            .main-content {
+                margin-left: 0 !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                display: block !important;
+            }
+            
+            .content-body {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            /* Explicitly show report container and all its children */
+            .content-body .report-container,
+            .content-body .bg-white.report-container {
+                display: block !important;
+                visibility: visible !important;
+            }
+            
+            .content-body .report-container * {
+                visibility: visible !important;
+            }
+            
+            /* Show official print header and hide regular headers */
+            .official-print-header,
+            .print-report-title,
+            .print-medicine-details,
+            .print-executive-summary,
+            .print-legend,
+            .print-signatures,
+            .print-footer-custom {
+                display: block !important;
+            }
+            
+            .print-header {
+                display: none !important;
+            }
+            
+            /* Hide regular headers and UI elements during print */
+            .report-header,
+            .content-header,
+            nav,
+            .sidebar,
+            .sidebar-footer {
+                display: none !important;
+            }
+            
+            /* Hide filter form and navigation */
+            .content-body > .bg-white.rounded-lg.shadow-lg:first-child,
+            .content-body > form {
+                display: none !important;
+            }
+            
+            /* Minimize blank spaces */
+            .report-container {
+                padding: 10px 15px !important;
+                margin: 0 !important;
+            }
+            
+            /* Remove excessive margins */
+            .print-report-title {
+                margin: 10px 0 !important;
+                padding: 10px 0 !important;
+            }
+            
+            .print-medicine-details {
+                margin: 10px 0 !important;
+                padding: 10px !important;
+            }
+            
+            .print-summary-table {
+                margin: 10px 0 !important;
+            }
+            
+            .print-legend {
+                margin: 10px 0 !important;
+                padding: 10px !important;
+            }
+            
+            /* Ensure no blank pages */
             .report-section {
+                margin-bottom: 15px !important;
+            }
+            
+            /* Page break before detailed table */
+            .report-section:has(#report-table),
+            .report-section:has(table#report-table) {
+                page-break-before: always !important;
+                margin-top: 0 !important;
+            }
+            
+            /* Hide empty spaces */
+            .bg-white.rounded-lg.shadow-lg {
+                margin-bottom: 0 !important;
+            }
+            
+            /* Ensure legend appears only once */
+            .print-legend {
+                page-break-after: always !important;
+            }
+            
+            /* Reduce spacing between sections */
+            .print-executive-summary + .print-legend {
+                margin-top: 10px !important;
+            }
+            
+            /* Ensure all report sections are visible */
+            .report-section {
+                display: block !important;
+                visibility: visible !important;
                 page-break-inside: avoid;
+            }
+            
+            .print-summary {
+                display: block !important;
+                visibility: visible !important;
+                page-break-inside: avoid;
+                border: 1px solid #000 !important;
+                background: #f9f9f9 !important;
+                padding: 15px !important;
+                margin-bottom: 20px !important;
+            }
+            
+            /* Tables - ensure they're visible */
+            table,
+            #report-table {
+                display: table !important;
+                visibility: visible !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                margin: 10px 0 !important;
+            }
+            
+            thead {
+                display: table-header-group !important;
+                visibility: visible !important;
+            }
+            
+            tbody {
+                display: table-row-group !important;
+                visibility: visible !important;
+            }
+            
+            tfoot {
+                display: table-footer-group !important;
+                visibility: visible !important;
+            }
+            
+            tr {
+                display: table-row !important;
+                visibility: visible !important;
+                page-break-inside: avoid !important;
+            }
+            
+            th,
+            td {
+                display: table-cell !important;
+                visibility: visible !important;
+                border: 1px solid #000 !important;
+                padding: 6px 8px !important;
+                font-size: 10px !important;
+                color: #000 !important;
+                background: white !important;
+            }
+            
+            th {
+                background-color: #e5e5e5 !important;
+                font-weight: bold !important;
+                text-align: center !important;
+            }
+            
+            td {
+                text-align: center !important;
+            }
+            
+            /* Footer */
+            .report-footer {
+                display: block !important;
+                visibility: visible !important;
+                page-break-inside: avoid;
+                margin-top: 30px;
+                padding-top: 15px;
+                border-top: 1px solid #000;
+                text-align: center;
+                font-size: 9px;
+                color: #000;
+            }
+            
+            /* Remove colors */
+            .text-blue-600,
+            .text-red-600,
+            .text-green-600,
+            .text-orange-600 {
+                color: #000 !important;
+            }
+            
+            /* Page settings */
+            @page {
+                margin: 1cm;
+                size: A4;
             }
         }
     </style>
@@ -922,6 +1459,159 @@ $total_pages = ceil($total_records / $per_page);
             <!-- Report Results -->
             <?php if ($selected_medicine_id > 0 && !empty($report_type)): ?>
             <div class="bg-white report-container">
+                <!-- Official Government-Style Print Header -->
+                <div class="official-print-header">
+                    <div class="header-top">
+                        <img src="<?php echo htmlspecialchars(base_url('uploads/logoloon.png')); ?>" alt="LGU Logo" class="logo-left" onerror="this.style.display='none';">
+                        <div class="header-center">
+                            <h1>REPUBLIC OF THE PHILIPPINES</h1>
+                            <h2><?php echo htmlspecialchars($municipality_name); ?> City Health Office</h2>
+                            <h3><?php echo htmlspecialchars($health_center_name); ?></h3>
+                            <p><?php echo htmlspecialchars($barangay_name); ?></p>
+                            <p><?php echo htmlspecialchars($province_name); ?></p>
+                        </div>
+                        <div class="logo-right">
+                            <!-- DOH/CHO Logo can be added here if available -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Report Title -->
+                <div class="print-report-title">
+                    <h1><?php 
+                        $report_titles = [
+                            'dispensed' => 'DISPENSED REPORT',
+                            'remaining_stocks' => 'REMAINING STOCKS REPORT',
+                            'expiry' => 'EXPIRY REPORT',
+                            'restocking' => 'RESTOCKING HISTORY REPORT',
+                            'low_stock' => 'LOW STOCK ALERTS REPORT',
+                            'activity_logs' => 'ACTIVITY LOGS REPORT',
+                            'patient_requests' => 'PATIENT REQUESTS REPORT'
+                        ];
+                        echo $report_titles[$report_type] ?? 'INVENTORY REPORT';
+                    ?></h1>
+                    <h2>Medicine Name: <?php echo strtoupper(htmlspecialchars($medicine_name)); ?></h2>
+                </div>
+                
+                <!-- Medicine Details Block -->
+                <div class="print-medicine-details">
+                    <h3>Medicine Details</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Generic Name:</span>
+                            <span><?php echo htmlspecialchars($medicine_details['generic_name'] ?? $medicine_name); ?></span>
+                        </div>
+                        <?php if (!empty($medicine_details['dosage'])): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">Dosage:</span>
+                            <span><?php echo htmlspecialchars($medicine_details['dosage']); ?></span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($medicine_details['form'])): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">Form:</span>
+                            <span><?php echo htmlspecialchars($medicine_details['form']); ?></span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ($batch_id > 0): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">Batch No.:</span>
+                            <span><?php 
+                                foreach ($batches as $b) {
+                                    if ($b['id'] == $batch_id) {
+                                        echo htmlspecialchars($b['batch_code']);
+                                        break;
+                                    }
+                                }
+                            ?></span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($date_from) || !empty($date_to)): ?>
+                        <div class="detail-item">
+                            <span class="detail-label">Date Range:</span>
+                            <span><?php echo $date_from ? date('F d, Y', strtotime($date_from)) : 'Start'; ?> 
+                                <?php echo $date_to ? ' to ' . date('F d, Y', strtotime($date_to)) : ''; ?></span>
+                        </div>
+                        <?php endif; ?>
+                        <div class="detail-item">
+                            <span class="detail-label">Generated:</span>
+                            <span><?php echo date('F d, Y h:i A'); ?> PHT (GMT+8)</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Officer:</span>
+                            <span><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?> (<?php echo ucfirst(str_replace('_', ' ', $user['role'])); ?>)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Executive Summary (2-column format) -->
+                <?php if (!empty($report_summary) || $total_records > 0): ?>
+                <div class="print-header">
+                    <div class="print-executive-summary">
+                        <h3>Executive Summary</h3>
+                        <div class="summary-grid">
+                            <?php 
+                            // Calculate beginning stock
+                            $beginning_stock = 0;
+                            if (!empty($date_from) && isset($report_summary['total_received'])) {
+                                $beginning_stock = ($report_summary['total_received'] ?? 0) - ($report_summary['total_dispensed'] ?? 0);
+                            } else {
+                                $beginning_stock = ($report_summary['total_stock'] ?? $report_summary['final_stock'] ?? 0) + ($report_summary['total_dispensed'] ?? 0) - ($report_summary['total_received'] ?? 0);
+                            }
+                            ?>
+                            <?php if (isset($report_summary['total_dispensed'])): ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Total Dispensed</div>
+                                <div class="summary-value"><?php echo number_format($report_summary['total_dispensed'] ?? 0); ?> units</div>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (isset($report_summary['total_received'])): ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Total Received</div>
+                                <div class="summary-value"><?php echo number_format($report_summary['total_received'] ?? 0); ?> units</div>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (isset($report_summary['total_expired'])): ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Total Expired</div>
+                                <div class="summary-value"><?php echo number_format($report_summary['total_expired'] ?? 0); ?> units</div>
+                            </div>
+                            <?php endif; ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Ending Stock (Current)</div>
+                                <div class="summary-value"><?php echo number_format($report_summary['total_stock'] ?? $report_summary['final_stock'] ?? 0); ?> units</div>
+                            </div>
+                            <?php if (isset($report_summary['total_received'])): ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Beginning Stock</div>
+                                <div class="summary-value"><?php echo number_format(max(0, $beginning_stock)); ?> units</div>
+                            </div>
+                            <?php endif; ?>
+                            <div class="summary-item">
+                                <div class="summary-label">Total Records</div>
+                                <div class="summary-value"><?php echo number_format($total_records); ?> rows</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Report Legend (moved to bottom of page 1) -->
+                <div class="print-legend">
+                    <h3>Legend</h3>
+                    <ul>
+                        <li><strong>Total Received:</strong> All stocks received within date range</li>
+                        <li><strong>Total Dispensed:</strong> All stocks given to patients</li>
+                        <li><strong>Total Expired:</strong> Stocks disposed due to expiry</li>
+                        <li><strong>Current Stock:</strong> Final balance as of report generation</li>
+                    </ul>
+                </div>
+                
+                <!-- Old Printable Header (hidden) -->
+                <div class="print-header" style="display: none;">
+                    <!-- Old header content hidden -->
+                </div>
+                
                 <!-- Report Header - PDF Style -->
                 <?php if ($report_type === 'dispensed'): ?>
                 <div class="report-header text-center mb-8">
@@ -930,7 +1620,7 @@ $total_pages = ceil($total_records / $per_page);
                 </div>
                 
                 <!-- Export Buttons -->
-                <?php if (!empty($report_data) || !empty($report_summary)): ?>
+                <?php if ((!empty($report_data) || !empty($report_summary)) && !$print_all): ?>
                 <div class="flex justify-end space-x-2 mb-6 no-print">
                     <button onclick="exportPDF()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200 flex items-center space-x-2 text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -944,11 +1634,11 @@ $total_pages = ceil($total_records / $per_page);
                         </svg>
                         <span>Export CSV</span>
                     </button>
-                    <button onclick="window.print()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors duration-200 flex items-center space-x-2 text-sm">
+                    <button onclick="printReport()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2 text-sm font-medium shadow-md hover:shadow-lg" title="Tip: Uncheck 'Headers and Footers' in print dialog to remove browser URL and timestamps">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
                         </svg>
-                        <span>Print</span>
+                        <span>Print Report</span>
                     </button>
                 </div>
                 <?php endif; ?>
@@ -1358,15 +2048,48 @@ $total_pages = ceil($total_records / $per_page);
                     </table>
                 </div>
                 
-                <!-- Report Footer -->
-                <div class="report-footer">
+                <!-- Prepared By / Verified By Section -->
+                <div class="print-signatures">
+                    <div class="signature-header">
+                        <span>Prepared by:</span>
+                        <span>Verified by:</span>
+                    </div>
+                    <div class="signature-row">
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-label">Name / Position</div>
+                            <div class="signature-position"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?><br><?php 
+                                $role_titles = [
+                                    'super_admin' => 'Administrator',
+                                    'bhw' => 'Barangay Health Worker',
+                                    'resident' => 'Resident'
+                                ];
+                                echo $role_titles[$user['role']] ?? ucfirst(str_replace('_', ' ', $user['role']));
+                            ?></div>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line"></div>
+                            <div class="signature-label">Name / Position</div>
+                            <div class="signature-position">_______________________</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Custom Footer -->
+                <div class="print-footer-custom">
+                    <div class="footer-line1"><?php echo htmlspecialchars(get_setting('brand_name', 'MediTrack')); ?> – Medicine Inventory Management System | Generated Automatically</div>
+                    <div class="footer-line2">Page <span class="page-number"></span> of <span class="total-pages"></span></div>
+                </div>
+                
+                <!-- Old Report Footer (hidden) -->
+                <div class="report-footer" style="display: none;">
                     <p><strong><?php echo htmlspecialchars(get_setting('brand_name', 'MediTrack')); ?></strong> - Medicine Inventory Management System</p>
-                    <p>Report Generated: <?php echo date('F d, Y h:i A'); ?> | Page <?php echo $current_page; ?> of <?php echo max(1, $total_pages); ?></p>
+                    <p>Report Generated: <?php echo date('F d, Y h:i A'); ?><?php if (!$print_all && $total_pages > 1): ?> | Page <?php echo $current_page; ?> of <?php echo max(1, $total_pages); ?><?php endif; ?></p>
                     <p class="mt-2 text-xs">This is an automated report generated by the system. For inquiries, please contact the system administrator.</p>
                 </div>
 
                 <!-- Pagination -->
-                <?php if ($total_pages > 1): ?>
+                <?php if ($total_pages > 1 && !$print_all): ?>
                 <div class="mt-6 flex items-center justify-between no-print">
                     <div class="text-sm text-gray-700">
                         Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $per_page, $total_records); ?> of <?php echo number_format($total_records); ?> results
@@ -1503,6 +2226,69 @@ $total_pages = ceil($total_records / $per_page);
             window.print();
         }
         
+        // Print Report Function - Enhanced with support for printing all pages
+        function printReport() {
+            const totalPages = <?php echo max(1, $total_pages ?? 1); ?>;
+            const currentPage = <?php echo $current_page ?? 1; ?>;
+            const totalRecords = <?php echo $total_records ?? 0; ?>;
+            
+            // Update page numbers in footer
+            const pageNumberSpans = document.querySelectorAll('.page-number');
+            const totalPagesSpans = document.querySelectorAll('.total-pages');
+            pageNumberSpans.forEach(span => span.textContent = currentPage);
+            totalPagesSpans.forEach(span => span.textContent = totalPages);
+            
+            // Show instruction about browser headers/footers
+            const printTip = 'IMPORTANT: For a clean professional report, please:\n\n' +
+                '1. In the print dialog, click "More settings"\n' +
+                '2. Uncheck "Headers and footers"\n' +
+                '3. This will remove the browser URL and timestamps\n\n' +
+                (totalPages > 1 ? 
+                    `This report has ${totalPages} pages (${totalRecords.toLocaleString()} total records).\n\n` +
+                    'Click OK to print ALL pages, or Cancel to print only the current page.' :
+                    'Click OK to continue printing.');
+            
+            // If there are multiple pages, ask user if they want to print all data
+            if (totalPages > 1) {
+                const printAll = confirm(printTip);
+                
+                if (printAll) {
+                    // Open a new window with print_all parameter to fetch all data
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.set('print_all', '1');
+                    currentUrl.searchParams.delete('page'); // Remove page parameter
+                    
+                    const printWindow = window.open(currentUrl.toString(), '_blank');
+                    
+                    if (printWindow) {
+                        // Wait for the page to load, then trigger print
+                        printWindow.onload = function() {
+                            setTimeout(function() {
+                                // Try to minimize margins before printing
+                                const style = printWindow.document.createElement('style');
+                                style.textContent = '@page { margin: 0.3cm !important; }';
+                                printWindow.document.head.appendChild(style);
+                                printWindow.print();
+                            }, 500);
+                        };
+                    } else {
+                        alert('Please allow pop-ups for this site to print all pages.');
+                    }
+                    return;
+                }
+            } else {
+                // Single page - show tip
+                if (!confirm(printTip)) {
+                    return;
+                }
+            }
+            
+            // Print current page
+            setTimeout(function() {
+                window.print();
+            }, 100);
+        }
+        
         // Initialize functions when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             // Logout confirmation is now handled by logout-confirmation.js
@@ -1510,4 +2296,5 @@ $total_pages = ceil($total_records / $per_page);
     </script>
 </body>
 </html>
+
 

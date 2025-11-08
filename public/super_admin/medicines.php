@@ -136,7 +136,24 @@ if ($editingId > 0) {
     $editing = $s->fetch();
 }
 
-$meds = db()->query('SELECT m.id, m.name, m.image_path, m.created_at, c.name as category_name FROM medicines m LEFT JOIN categories c ON m.category_id = c.id ORDER BY m.name ASC')->fetchAll();
+// Enhanced query with stock, expiry, and status data
+$meds = db()->query('
+    SELECT 
+        m.id,
+        m.name,
+        m.image_path,
+        m.created_at,
+        m.is_active,
+        c.name as category_name,
+        COALESCE(SUM(CASE WHEN mb.quantity_available > 0 AND mb.expiry_date > CURDATE() THEN mb.quantity_available ELSE 0 END), 0) as current_stock,
+        MIN(CASE WHEN mb.quantity_available > 0 AND mb.expiry_date > CURDATE() THEN mb.expiry_date END) as earliest_expiry,
+        COALESCE(m.minimum_stock_level, 10) as minimum_stock_level
+    FROM medicines m
+    LEFT JOIN categories c ON m.category_id = c.id
+    LEFT JOIN medicine_batches mb ON m.id = mb.medicine_id
+    GROUP BY m.id, m.name, m.image_path, m.created_at, m.is_active, c.name, m.minimum_stock_level
+    ORDER BY m.name ASC
+')->fetchAll();
 $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -411,106 +428,247 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
                 </div>
             <?php endif; ?>
 
-            <!-- Add Medicine Button -->
-            <div class="flex justify-end mb-8">
-                <button onclick="openAddModal()" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 animate-fade-in-up">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                    Add Medicine
-                </button>
+            <!-- Toolbar -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <!-- Search and Filters -->
+                    <div class="flex flex-col sm:flex-row gap-3 flex-1">
+                        <!-- Search Bar -->
+                        <div class="relative flex-1 max-w-md">
+                            <input type="text" id="searchInput" placeholder="Search medicines..." 
+                                   class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        
+                        <!-- Category Filter -->
+                        <select id="filterCategory" class="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white">
+                            <option value="">All Categories</option>
+                            <?php foreach ($categories as $cat): ?>
+                                <option value="<?php echo htmlspecialchars(strtolower($cat['name'])); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        
+                        <!-- Stock Status Filter -->
+                        <select id="filterStock" class="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white">
+                            <option value="">All Stock Status</option>
+                            <option value="in_stock">In Stock</option>
+                            <option value="low_stock">Low Stock</option>
+                            <option value="out_of_stock">Out of Stock</option>
+                            <option value="expiring_soon">Expiring Soon</option>
+                        </select>
+                        
+                        <!-- Sort By -->
+                        <select id="sortBy" class="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white">
+                            <option value="name">Sort by Name</option>
+                            <option value="stock">Sort by Stock</option>
+                            <option value="expiry">Sort by Expiry</option>
+                            <option value="date">Sort by Date Added</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Add Medicine Button -->
+                    <button onclick="openAddModal()" class="inline-flex items-center px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        + Add Medicine
+                    </button>
+                </div>
             </div>
 
-            <!-- Medicine Catalog -->
-            <div class="medicine-catalog-card hover-lift animate-fade-in-up p-8 rounded-2xl shadow-lg">
-                <div class="flex items-center space-x-3 mb-6">
-                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-2xl font-bold text-gray-900">Medicine Catalog</h3>
-                        <p class="text-gray-600">All medicines in your inventory</p>
-                    </div>
-                </div>
-
+            <!-- Medicine Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <?php if (empty($meds)): ?>
-                    <div class="text-center py-12">
-                        <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                            <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="text-center py-16">
+                        <div class="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
                             </svg>
                         </div>
-                        <h4 class="text-xl font-semibold text-gray-900 mb-2">No medicines yet</h4>
-                        <p class="text-gray-600">Start by adding your first medicine to the catalog.</p>
+                        <h4 class="text-lg font-semibold text-gray-900 mb-2">No medicines found</h4>
+                        <p class="text-gray-600 mb-4">Start by adding your first medicine to the catalog.</p>
+                        <button onclick="openAddModal()" class="inline-flex items-center px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-200">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Add Medicine
+                        </button>
                     </div>
                 <?php else: ?>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <?php foreach ($meds as $index => $m): ?>
-                            <div class="medicine-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg border border-gray-100 hover:border-blue-200 transition-all duration-300" 
-                                 style="animation-delay: <?php echo $index * 0.1; ?>s">
-                                
-                                <!-- Medicine Image -->
-                                <div class="relative mb-4">
-                                    <?php if (!empty($m['image_path'])): ?>
-                                        <div class="relative overflow-hidden rounded-xl">
-                                            <img src="<?php echo htmlspecialchars(base_url($m['image_path'])); ?>" 
-                                                 class="h-32 w-full object-cover transition-transform duration-300 hover:scale-105" 
-                                                 alt="<?php echo htmlspecialchars($m['name']); ?>" />
-                                            <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="h-32 bg-gradient-to-br from-blue-100 via-purple-100 to-cyan-100 rounded-xl flex items-center justify-center relative overflow-hidden">
-                                            <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                            </svg>
-                                            <div class="absolute inset-0 bg-gradient-to-t from-blue-500/20 to-transparent"></div>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-
-                                <!-- Medicine Info -->
-                                <div class="mb-4">
-                                    <h4 class="text-lg font-bold text-gray-900 mb-2"><?php echo htmlspecialchars($m['name']); ?></h4>
-                                    <?php if (!empty($m['category_name'])): ?>
-                                        <div class="mb-2">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                                                </svg>
-                                                <?php echo htmlspecialchars($m['category_name']); ?>
-                                            </span>
-                                        </div>
-                                    <?php endif; ?>
-                                    <div class="flex items-center space-x-2 text-sm text-gray-500">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                        </svg>
-                                        <span>Added <?php echo date('M j, Y', strtotime($m['created_at'])); ?></span>
-                                    </div>
-                                </div>
-
-                                <!-- Actions -->
-                                <div class="flex items-center space-x-2">
-                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php?edit=' . (int)$m['id'])); ?>" 
-                                       class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium rounded-lg hover:from-blue-100 hover:to-blue-200 transition-all duration-200">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                        </svg>
-                                        Edit
-                                    </a>
-                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php?delete=' . (int)$m['id'])); ?>" 
-                                       onclick="return confirm('Delete this medicine?');" 
-                                       class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 text-red-700 font-medium rounded-lg hover:from-red-100 hover:to-red-200 transition-all duration-200">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                        </svg>
-                                        Delete
-                                    </a>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Medicine</th>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock</th>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry Date</th>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Added Date</th>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="medicinesTableBody" class="bg-white divide-y divide-gray-200">
+                                <?php foreach ($meds as $m): 
+                                    $current_stock = (int)($m['current_stock'] ?? 0);
+                                    $min_stock = (int)($m['minimum_stock_level'] ?? 10);
+                                    $is_low_stock = $current_stock > 0 && $current_stock <= $min_stock;
+                                    $is_out_of_stock = $current_stock === 0;
+                                    
+                                    $earliest_expiry = $m['earliest_expiry'] ?? null;
+                                    $is_expiring_soon = false;
+                                    if ($earliest_expiry) {
+                                        $expiry_date = new DateTime($earliest_expiry);
+                                        $today = new DateTime();
+                                        $days_until_expiry = $today->diff($expiry_date)->days;
+                                        $is_expiring_soon = $days_until_expiry <= 30 && $days_until_expiry > 0;
+                                    }
+                                    
+                                    $stock_status = 'in_stock';
+                                    if ($is_out_of_stock) {
+                                        $stock_status = 'out_of_stock';
+                                    } elseif ($is_low_stock) {
+                                        $stock_status = 'low_stock';
+                                    } elseif ($is_expiring_soon) {
+                                        $stock_status = 'expiring_soon';
+                                    }
+                                ?>
+                                    <tr class="medicine-row hover:bg-gray-50 transition-colors duration-150" 
+                                        data-name="<?php echo htmlspecialchars(strtolower($m['name'])); ?>"
+                                        data-category="<?php echo htmlspecialchars(strtolower($m['category_name'] ?? '')); ?>"
+                                        data-stock="<?php echo $stock_status; ?>"
+                                        data-stock-value="<?php echo $current_stock; ?>"
+                                        data-expiry="<?php echo $earliest_expiry ? date('Y-m-d', strtotime($earliest_expiry)) : ''; ?>"
+                                        data-date="<?php echo date('Y-m-d', strtotime($m['created_at'])); ?>">
+                                        <!-- Medicine (Thumbnail + Name) -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center space-x-3">
+                                                <?php 
+                                                $image_url = '';
+                                                $image_exists = false;
+                                                if (!empty($m['image_path'])) {
+                                                    $image_url = base_url($m['image_path']);
+                                                    $full_path = __DIR__ . '/../' . $m['image_path'];
+                                                    $image_exists = file_exists($full_path);
+                                                }
+                                                ?>
+                                                <?php if (!empty($m['image_path']) && $image_exists): ?>
+                                                    <div class="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200">
+                                                        <img src="<?php echo htmlspecialchars($image_url); ?>" 
+                                                             alt="<?php echo htmlspecialchars($m['name']); ?>"
+                                                             class="w-full h-full object-cover">
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                        <?php echo strtoupper(substr($m['name'], 0, 2)); ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                                <div>
+                                                    <div class="text-sm font-semibold text-gray-900"><?php echo htmlspecialchars($m['name']); ?></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        
+                                        <!-- Category -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if (!empty($m['category_name'])): ?>
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                                    <?php echo htmlspecialchars($m['category_name']); ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-sm text-gray-400">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        
+                                        <!-- Stock -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-sm font-medium text-gray-900"><?php echo number_format($current_stock); ?> units</span>
+                                                <?php if ($is_low_stock): ?>
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                                        ⚠️ Low Stock
+                                                    </span>
+                                                <?php elseif ($is_out_of_stock): ?>
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                                        Out of Stock
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        
+                                        <!-- Expiry Date -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if ($earliest_expiry): ?>
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="text-sm text-gray-900"><?php echo date('M j, Y', strtotime($earliest_expiry)); ?></span>
+                                                    <?php if ($is_expiring_soon): ?>
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                                            ⚠️ Soon
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-sm text-gray-400">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        
+                                        <!-- Added Date -->
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                            <?php echo date('M j, Y', strtotime($m['created_at'])); ?>
+                                        </td>
+                                        
+                                        <!-- Status -->
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if ($m['is_active']): ?>
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                                                    Active
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">
+                                                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full mr-1.5"></span>
+                                                    Inactive
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        
+                                        <!-- Actions -->
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div class="flex items-center justify-end space-x-2">
+                                                <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php?edit=' . (int)$m['id'])); ?>" 
+                                                   class="inline-flex items-center px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors duration-150"
+                                                   title="Edit">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                    </svg>
+                                                </a>
+                                                <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php?delete=' . (int)$m['id'])); ?>" 
+                                                   onclick="return confirm('Delete this medicine?');" 
+                                                   class="inline-flex items-center px-3 py-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors duration-150"
+                                                   title="Delete">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                    </svg>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- No Results Message (Hidden by default) -->
+                    <div id="noResults" class="hidden text-center py-12">
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-1">No medicines found</h3>
+                        <p class="text-sm text-gray-600">Try adjusting your search or filter criteria.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -691,6 +849,124 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
     </main>
 
     <script>
+        // Filter and Search Functionality
+        function filterMedicines() {
+            const searchInput = document.getElementById('searchInput');
+            const filterCategory = document.getElementById('filterCategory');
+            const filterStock = document.getElementById('filterStock');
+            const sortBy = document.getElementById('sortBy');
+            const rows = document.querySelectorAll('.medicine-row');
+            const noResults = document.getElementById('noResults');
+            const tableBody = document.getElementById('medicinesTableBody');
+            
+            if (!rows.length) return;
+            
+            const searchTerm = (searchInput?.value || '').toLowerCase();
+            const categoryFilter = (filterCategory?.value || '').toLowerCase();
+            const stockFilter = (filterStock?.value || '');
+            const sortValue = (sortBy?.value || 'name');
+            
+            let visibleCount = 0;
+            const visibleRows = [];
+            
+            rows.forEach(row => {
+                const name = row.getAttribute('data-name') || '';
+                const category = row.getAttribute('data-category') || '';
+                const stock = row.getAttribute('data-stock') || '';
+                
+                const matchesSearch = !searchTerm || name.includes(searchTerm);
+                const matchesCategory = !categoryFilter || category === categoryFilter;
+                const matchesStock = !stockFilter || stock === stockFilter;
+                
+                if (matchesSearch && matchesCategory && matchesStock) {
+                    row.style.display = '';
+                    visibleCount++;
+                    visibleRows.push(row);
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Show/hide no results message
+            if (visibleCount === 0 && noResults && tableBody) {
+                tableBody.style.display = 'none';
+                noResults.classList.remove('hidden');
+            } else {
+                if (noResults) noResults.classList.add('hidden');
+                if (tableBody) tableBody.style.display = '';
+            }
+            
+            // Sort visible rows
+            if (visibleRows.length > 0) {
+                visibleRows.sort((a, b) => {
+                    let aVal, bVal;
+                    
+                    switch(sortValue) {
+                        case 'name':
+                            aVal = a.getAttribute('data-name') || '';
+                            bVal = b.getAttribute('data-name') || '';
+                            return aVal.localeCompare(bVal);
+                        case 'stock':
+                            aVal = parseInt(a.getAttribute('data-stock-value') || '0');
+                            bVal = parseInt(b.getAttribute('data-stock-value') || '0');
+                            return bVal - aVal; // Descending
+                        case 'expiry':
+                            aVal = a.getAttribute('data-expiry') || '9999-12-31';
+                            bVal = b.getAttribute('data-expiry') || '9999-12-31';
+                            return aVal.localeCompare(bVal);
+                        case 'date':
+                            aVal = a.getAttribute('data-date') || '';
+                            bVal = b.getAttribute('data-date') || '';
+                            return bVal.localeCompare(aVal); // Descending (newest first)
+                        default:
+                            return 0;
+                    }
+                });
+                
+                // Reorder rows in DOM
+                const tbody = visibleRows[0].parentElement;
+                visibleRows.forEach(row => {
+                    tbody.appendChild(row);
+                });
+            }
+        }
+        
+        // Initialize filtering
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const filterCategory = document.getElementById('filterCategory');
+            const filterStock = document.getElementById('filterStock');
+            const sortBy = document.getElementById('sortBy');
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', filterMedicines);
+            }
+            if (filterCategory) {
+                filterCategory.addEventListener('change', filterMedicines);
+            }
+            if (filterStock) {
+                filterStock.addEventListener('change', filterMedicines);
+            }
+            if (sortBy) {
+                sortBy.addEventListener('change', filterMedicines);
+            }
+            
+            // Initial filter
+            filterMedicines();
+            
+            // Initialize profile dropdown and time update
+            if (typeof initProfileDropdown === 'function') {
+                setTimeout(initProfileDropdown, 100);
+            }
+            if (typeof updateTime === 'function') {
+                updateTime();
+                setInterval(updateTime, 1000);
+            }
+            if (typeof initNightMode === 'function') {
+                initNightMode();
+            }
+        });
+        
         function openAddModal() {
             console.log('Opening add modal...');
             const modal = document.getElementById('addModal');

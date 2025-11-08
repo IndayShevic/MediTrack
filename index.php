@@ -904,6 +904,246 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #3b82f6;
         }
         
+        /* Modern CTA Section Styles */
+        .cta-modern-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.5);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cta-modern-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+            background-size: 200% 100%;
+            animation: gradientFlow 3s ease infinite;
+        }
+        
+        @keyframes gradientFlow {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+        
+        .cta-modern-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 25px 70px rgba(99, 102, 241, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+        }
+        
+        @media (max-width: 640px) {
+            .cta-modern-card:hover {
+                transform: translateY(-2px);
+            }
+        }
+        
+        .cta-modern-button {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            background-size: 200% 200%;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            min-height: 44px; /* Better touch target on mobile */
+        }
+        
+        .cta-modern-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        .cta-modern-button:hover {
+            background-position: 100% 0%;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+        }
+        
+        .cta-modern-button:hover::before {
+            left: 100%;
+        }
+        
+        .cta-modern-button:active {
+            transform: translateY(0);
+        }
+        
+        @media (max-width: 640px) {
+            .cta-modern-button:hover {
+                transform: translateY(-1px);
+            }
+        }
+        
+        .cta-title-modern {
+            background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Simple Visual FAQ Styles */
+        .faq-modern {
+            background: #f9fafb;
+        }
+        
+        .faq-item {
+            background: #ffffff;
+            border-left: 4px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .faq-item:hover {
+            border-left-color: #3b82f6;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(4px);
+        }
+        
+        .faq-item[open] {
+            border-left-color: #3b82f6;
+            border-left-width: 5px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+            background: #eff6ff;
+        }
+        
+        .faq-summary {
+            position: relative;
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .faq-summary::-webkit-details-marker {
+            display: none;
+        }
+        
+        .faq-summary::marker {
+            display: none;
+        }
+        
+        .faq-icon {
+            transition: transform 0.3s ease;
+            color: #6b7280;
+            flex-shrink: 0;
+            margin: 0;
+            padding: 0;
+            display: inline-block;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        
+        .faq-item[open] .faq-icon {
+            transform: rotate(180deg);
+            color: #3b82f6;
+        }
+        
+        .faq-question {
+            transition: color 0.3s ease;
+            color: #111827;
+            font-weight: 600;
+            word-wrap: break-word;
+            hyphens: auto;
+        }
+        
+        .faq-item:hover .faq-question {
+            color: #3b82f6;
+        }
+        
+        .faq-item[open] .faq-question {
+            color: #3b82f6;
+        }
+        
+        .faq-answer {
+            animation: fadeIn 0.3s ease-out;
+            color: #4b5563;
+            word-wrap: break-word;
+            hyphens: auto;
+        }
+        
+        .faq-question {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: left !important;
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+            display: inline-block;
+            max-width: 100%;
+        }
+        
+        .faq-summary {
+            text-align: left;
+        }
+        
+        .faq-summary > div {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            flex-wrap: nowrap;
+            flex-direction: row;
+        }
+        
+        /* Ensure justify-between works on mobile */
+        @media (max-width: 640px) {
+            .faq-summary > div {
+                justify-content: space-between;
+                gap: 0.5rem;
+            }
+            
+            .faq-question {
+                flex: 1 1 auto;
+                min-width: 0;
+                margin-right: 0.5rem;
+            }
+            
+            .faq-icon {
+                flex-shrink: 0;
+                margin-left: auto;
+                align-self: center;
+                vertical-align: middle;
+            }
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        
+        .faq-divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 0;
+            border: none;
+        }
+        
+        /* Minimalist Footer Styles */
+        .footer-modern {
+            background: #ffffff;
+        }
+        
         /* Testimonial card enhance */
         .testimonial-card {
             transition: all 0.4s ease;
@@ -2097,103 +2337,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- About Section -->
-        <section id="about" class="py-20 sm:py-24 lg:py-32 bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
-            <!-- Decorative Background Elements -->
-            <div class="absolute top-0 right-0 w-96 h-96 bg-blue-100/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-            <div class="absolute bottom-0 left-0 w-96 h-96 bg-indigo-100/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
-            
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <!-- Header Section -->
-                <div class="text-center mb-16 sm:mb-20 lg:mb-24">
-                    <div class="relative inline-block mb-6">
-                        <span class="text-6xl sm:text-7xl lg:text-8xl font-bold text-blue-600/10 select-none">01</span>
-                        <h2 class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 whitespace-nowrap">
-                            About MediTrack
-                        </h2>
-                    </div>
-                    <p class="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mt-6">
-                        Transforming barangay healthcare through intelligent medicine management
-                    </p>
-                </div>
-                
-                <!-- Main Content - Split Layout -->
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-16">
-                    <!-- Left Side - Main Description -->
-                    <div class="lg:col-span-7 about-content">
-                        <div class="bg-white rounded-2xl lg:rounded-3xl p-8 sm:p-10 lg:p-12 shadow-xl border border-gray-100 hover:shadow-2xl transition-all duration-500 relative overflow-hidden group">
-                            <!-- Accent Line -->
-                            <div class="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 group-hover:w-2 transition-all duration-500"></div>
-                            
-                            <div class="relative z-10">
-                                <h3 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">
-                                    Empowering Communities Through Technology
-                                </h3>
-                                <div class="space-y-5 text-gray-700 leading-relaxed">
-                                    <p class="text-base sm:text-lg">
-                                        <strong class="text-gray-900">MediTrack</strong> is a comprehensive web-based platform designed specifically for barangay health centers. Our system revolutionizes medicine management by connecting residents, health workers, and administrators in one seamless ecosystem.
-                                    </p>
-                                    <p class="text-base sm:text-lg">
-                                        We streamline every aspect of the medicine request process—from initial submission to inventory tracking and distribution. Our platform ensures transparency, efficiency, and most importantly, timely access to essential medicines for those who need them most.
-                                    </p>
-                                    <p class="text-base sm:text-lg">
-                                        Built with cutting-edge technology and user-centered design, MediTrack employs FEFO (First Expired, First Out) batch handling to guarantee medicine quality and safety while maintaining accurate real-time inventory tracking.
-                                    </p>
-                                </div>
-                            </div>
+        <section id="about" class="py-12 sm:py-16 lg:py-20 bg-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="sm:flex items-center gap-8 lg:gap-12">
+                    <div class="sm:w-1/2 p-8 sm:p-10 lg:p-12">
+                        <div class="image object-center text-center">
+                            <img src="uploads/aboutus.png" alt="About MediTrack" class="mx-auto w-full max-w-lg lg:max-w-xl xl:max-w-2xl h-auto object-contain">
                         </div>
                     </div>
-                    
-                    <!-- Right Side - Feature Highlights -->
-                    <div class="lg:col-span-5 space-y-6">
-                        <!-- Feature Card 1 -->
-                        <div class="about-feature bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 sm:p-8 border border-blue-100 hover:border-blue-200 transition-all duration-300 hover:shadow-lg">
-                            <div class="flex items-start gap-4">
-                                <div class="flex-shrink-0 w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Streamlined Workflow</h4>
-                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
-                                        Simple request submission and approval process for efficient medicine distribution.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Feature Card 2 -->
-                        <div class="about-feature bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 sm:p-8 border border-indigo-100 hover:border-indigo-200 transition-all duration-300 hover:shadow-lg">
-                            <div class="flex items-start gap-4">
-                                <div class="flex-shrink-0 w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Real-Time Tracking</h4>
-                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
-                                        Monitor inventory levels and request status with live updates and notifications.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Feature Card 3 -->
-                        <div class="about-feature bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 sm:p-8 border border-purple-100 hover:border-purple-200 transition-all duration-300 hover:shadow-lg">
-                            <div class="flex items-start gap-4">
-                                <div class="flex-shrink-0 w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Secure & Reliable</h4>
-                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
-                                        Enterprise-grade security with role-based access control for data protection.
-                                    </p>
-                                </div>
-                            </div>
+                    <div class="sm:w-1/2 p-6 sm:p-8 lg:p-10">
+                        <div class="text">
+                            <span class="text-gray-500 border-b-2 border-indigo-600 uppercase text-sm sm:text-base font-semibold">About us</span>
+                            <h2 class="my-4 font-bold text-3xl sm:text-4xl lg:text-5xl">About <span class="text-indigo-600">MediTrack</span></h2>
+                            <p class="text-gray-700 text-base sm:text-lg leading-relaxed text-justify">
+                                MediTrack is a comprehensive web-based platform designed specifically for barangay health centers. Our system revolutionizes medicine management by connecting residents, health workers, and administrators in one seamless ecosystem. We streamline every aspect of the medicine request process—from initial submission to inventory tracking and distribution.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2201,17 +2359,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- Contact CTA -->
-        <section id="contact" class="py-12 sm:py-16 lg:py-20 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 lg:p-10 border border-gray-100">
-                    <div class="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
-                        <div class="flex-1">
-                            <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">Need help getting started?</h3>
-                            <p class="text-sm sm:text-base md:text-lg text-gray-600 max-w-2xl mx-auto md:mx-0 leading-relaxed mb-4 sm:mb-6">Visit your barangay health center or sign in below to access the platform.</p>
+        <section id="contact" class="py-10 sm:py-14 md:py-16 lg:py-20 xl:py-24 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden">
+            <!-- Decorative background elements -->
+            <div class="absolute inset-0 opacity-20 sm:opacity-30">
+                <div class="absolute top-0 right-0 w-48 h-48 sm:w-64 sm:h-64 md:w-80 md:h-80 lg:w-96 lg:h-96 bg-indigo-200 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                <div class="absolute bottom-0 left-0 w-48 h-48 sm:w-64 sm:h-64 md:w-80 md:h-80 lg:w-96 lg:h-96 bg-purple-200 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+            </div>
+            
+            <div class="max-w-7xl mx-auto px-4 sm:px-5 md:px-6 lg:px-8 relative z-10">
+                <div class="cta-modern-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 lg:p-10 xl:p-12">
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-5 md:gap-6 lg:gap-8 text-center md:text-left">
+                        <div class="flex-1 w-full md:w-auto">
+                            <h3 class="cta-title-modern text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold mb-2 sm:mb-3 md:mb-4 leading-tight">
+                                Need help getting started?
+                            </h3>
+                            <p class="text-xs sm:text-sm md:text-base lg:text-lg text-gray-600 max-w-2xl mx-auto md:mx-0 leading-relaxed mb-3 sm:mb-4 md:mb-5 lg:mb-6">
+                                Visit your barangay health center or sign in below to access the platform.
+                            </p>
                         </div>
-                        <button onclick="openLoginModal()" class="btn btn-primary btn-lg whitespace-nowrap px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
-                            Sign in
-                        </button>
+                        <div class="flex-shrink-0 w-full sm:w-auto flex justify-center items-center md:justify-end">
+                            <button onclick="openLoginModal()" class="cta-modern-button text-white font-semibold mx-auto sm:mx-0 w-auto max-w-[120px] sm:max-w-none sm:w-auto whitespace-nowrap px-5 py-1.5 sm:px-7 md:px-8 lg:px-10 xl:px-12 sm:py-3 md:py-3.5 lg:py-4 text-xs sm:text-sm md:text-base lg:text-lg rounded-md sm:rounded-xl shadow-lg">
+                                Sign in
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2219,150 +2389,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
         <!-- Testimonials -->
-        <section id="testimonials" class="py-12 sm:py-16 lg:py-24 bg-white/60 relative overflow-hidden">
-            <div class="absolute top-10 right-10 w-64 h-64 bg-blue-200 rounded-full blur-3xl opacity-20 animate-pulse-slow hidden sm:block"></div>
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <div class="text-center mb-10 sm:mb-12 lg:mb-16 animate-fade-in-up">
-                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">What users say</h2>
-                    <p class="text-sm sm:text-base md:text-lg text-gray-600 mb-8 sm:mb-12 leading-relaxed">Real feedback from real users</p>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-8">
-                    <div class="card testimonial-card animate-fade-in-up delay-100">
-                        <div class="card-body">
-                            <div class="flex mb-3">
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                            </div>
-                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"MediTrack made it easy for our seniors to get their monthly maintenance meds on time."</p>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg">JL</div>
-                                <div>
-                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Jose L.</div>
-                                    <div class="text-xs sm:text-sm font-medium text-gray-500">Barangay Captain</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card testimonial-card animate-fade-in-up delay-200">
-                        <div class="card-body">
-                            <div class="flex mb-3">
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                            </div>
-                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"Approving requests is straightforward, and stock deduction follows FEFO automatically."</p>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center font-bold text-white shadow-lg">MA</div>
-                                <div>
-                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Maria A.</div>
-                                    <div class="text-xs sm:text-sm font-medium text-gray-500">BHW</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card testimonial-card animate-fade-in-up delay-300">
-                        <div class="card-body">
-                            <div class="flex mb-3">
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                                </svg>
-                            </div>
-                            <p class="text-sm sm:text-base md:text-lg text-gray-700 italic mb-4 leading-relaxed">"Inventory, batches, and email notifications work seamlessly for our team."</p>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg">AN</div>
-                                <div>
-                                    <div class="text-sm sm:text-base font-semibold text-gray-900">Ana N.</div>
-                                    <div class="text-xs sm:text-sm font-medium text-gray-500">Super Admin</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+    
 
         <!-- FAQ -->
-        <section id="faq" class="py-12 sm:py-16 lg:py-24 bg-gray-50/50">
-            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="text-center mb-10 sm:mb-12 lg:mb-16">
-                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">Frequently Asked Questions</h2>
-                    <p class="text-sm sm:text-base md:text-lg text-gray-600 mb-8 sm:mb-12 leading-relaxed">Find answers to common questions about MediTrack</p>
+        <section id="faq" class="faq-modern py-16 sm:py-20 lg:py-24">
+            <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-12 sm:mb-16">
+                    <h2 class="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">
+                        Frequently Asked Questions
+                    </h2>
+                    <p class="text-base sm:text-lg text-gray-600 max-w-xl mx-auto">
+                        Find answers to common questions about MediTrack
+                    </p>
                 </div>
+                
                 <div class="space-y-4 sm:space-y-5">
-                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
-                            <span class="flex items-center justify-between">
-                                <span>How do residents request medicines?</span>
-                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <details class="faq-item">
+                        <summary class="faq-summary px-5 sm:px-6 py-4 sm:py-5">
+                            <div class="flex items-center justify-between gap-3 sm:gap-4 ">
+                                <span class="faq-question text-sm sm:text-base md:text-lg font-semibold text-left flex-1 truncate">
+                                    How do residents request medicines?
+                                </span>
+                                <svg class="faq-icon w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
-                            </span>
+                            </div>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
-                            Residents sign in, browse medicines, and submit a request with a proof image and patient details.
+                        <hr class="faq-divider">
+                        <div class="faq-answer px-5 sm:px-6 pb-5 sm:pb-6 text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed pt-4">
+                            Residents sign in, browse medicines, and submit a request with a proof image and patient details. The system ensures all required information is provided before submission.
                         </div>
                     </details>
-                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
-                            <span class="flex items-center justify-between">
-                                <span>How are approvals handled?</span>
-                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    
+                    <details class="faq-item">
+                        <summary class="faq-summary px-5 sm:px-6 py-4 sm:py-5">
+                            <div class="flex items-center justify-between gap-3 sm:gap-4">
+                                <span class="faq-question text-sm sm:text-base md:text-lg font-semibold text-left flex-1 truncate">
+                                    How are approvals handled?
+                                </span>
+                                <svg class="faq-icon w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
-                            </span>
+                            </div>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
-                            BHWs review requests and approve/reject. Approved requests automatically deduct stock FEFO from batches.
+                        <hr class="faq-divider">
+                        <div class="faq-answer px-5 sm:px-6 pb-5 sm:pb-6 text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed pt-4">
+                            BHWs review requests and approve or reject them based on availability and validity. Approved requests automatically deduct stock using FEFO (First Expired, First Out) methodology from batches to ensure medicine quality and safety.
                         </div>
                     </details>
-                    <details class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden animate-fade-in hover:shadow-lg transition-shadow duration-300">
-                        <summary class="px-5 sm:px-6 py-4 sm:py-5 cursor-pointer font-semibold text-base sm:text-lg md:text-xl text-gray-900 hover:text-blue-600 transition-colors duration-200 list-none">
-                            <span class="flex items-center justify-between">
-                                <span>Do emails send automatically?</span>
-                                <svg class="w-5 h-5 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    
+                    <details class="faq-item">
+                        <summary class="faq-summary px-5 sm:px-6 py-4 sm:py-5">
+                            <div class="flex items-center justify-between gap-3 sm:gap-4">
+                                <span class="faq-question text-sm sm:text-base md:text-lg font-semibold text-left flex-1 truncate">
+                                    Do emails send automatically?
+                                </span>
+                                <svg class="faq-icon w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
-                            </span>
+                            </div>
                         </summary>
-                        <div class="px-5 sm:px-6 pb-5 sm:pb-6 text-sm sm:text-base md:text-lg text-gray-700 leading-relaxed border-t border-gray-100 pt-4">
-                            Yes. The system emails request and user events via PHPMailer. Email attempts are logged for review.
+                        <hr class="faq-divider">
+                        <div class="faq-answer px-5 sm:px-6 pb-5 sm:pb-6 text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed pt-4">
+                            Yes, the system automatically sends emails for request notifications and user events via PHPMailer. All email attempts are logged in the system for review and tracking purposes, ensuring reliable communication.
                         </div>
                     </details>
                 </div>
@@ -2373,10 +2462,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <footer class="border-t border-gray-200 py-8 sm:py-10 bg-white/90 backdrop-blur-sm relative z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center">
-                <div class="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 mb-3 sm:mb-4">
-                    <?php echo htmlspecialchars($brand); ?>
-                </div>
-                <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.</p>
+            <div class="flex flex-row items-center justify-center gap-2 sm:gap-3 mb-5 w-full">
+                        <div class="h-px w-10 sm:w-16 bg-gradient-to-r from-transparent via-blue-400 to-blue-600 flex-shrink-0"></div>
+                        <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
+                        <div class="w-6 sm:w-8 h-px bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex-shrink-0"></div>
+                        <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-purple-600 rounded-full flex-shrink-0"></div>
+                        <div class="h-px w-10 sm:w-16 bg-gradient-to-l from-transparent via-purple-400 to-purple-600 flex-shrink-0"></div>
+                    </div>
+                <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 font-semibold"><?php echo htmlspecialchars($brand); ?></span>. All rights reserved.</p>
                 <p class="text-xs sm:text-sm text-gray-500">Making healthcare accessible for everyone.</p>
             </div>
         </div>

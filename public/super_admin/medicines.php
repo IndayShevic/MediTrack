@@ -4,11 +4,40 @@ require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
 require_once __DIR__ . '/../../config/mail.php';
 
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 // Ensure upload directory exists (under public/uploads/medicines)
 $uploadRoot = __DIR__ . '/../uploads';
 if (!is_dir($uploadRoot)) { @mkdir($uploadRoot, 0777, true); }
 $medicineDir = $uploadRoot . '/medicines';
 if (!is_dir($medicineDir)) { @mkdir($medicineDir, 0777, true); }
+
+$user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
 
 // Handle create / update / delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -340,13 +369,27 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                                <?php 
-                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                echo strtoupper($firstInitial . $lastInitial); 
-                                ?>
-                            </div>
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
@@ -769,71 +812,85 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
 
             <?php if ($editing): ?>
             <!-- Edit Medicine Modal -->
-            <div class="fixed inset-0 flex items-center justify-center z-50 p-4 animate-fade-in pointer-events-none">
-                <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200 pointer-events-auto">
-                    <div class="p-8">
-                        <div class="flex items-center justify-between mb-8">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="fixed inset-0 z-[99999] flex items-center justify-center p-4" style="background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto border border-gray-200" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
+                    <div class="p-10">
+                        <!-- Enhanced Header -->
+                        <div class="flex items-start justify-between mb-10 pb-6 border-b border-gray-100">
+                            <div class="flex items-center gap-4">
+                                <div class="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg" style="box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);">
+                                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 class="text-2xl font-bold text-gray-900">Edit Medicine</h3>
-                                    <p class="text-gray-600">Update medicine information</p>
+                                    <h3 class="text-3xl font-bold text-gray-900 mb-2" style="letter-spacing: -0.025em;">Edit Medicine</h3>
+                                    <p class="text-gray-600 text-base">Update medicine information</p>
                                 </div>
                             </div>
-                            <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onclick="closeEditModal()" class="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all duration-200">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
                             </button>
                         </div>
                         
-                        <form method="post" enctype="multipart/form-data" class="space-y-6">
+                        <form method="post" enctype="multipart/form-data" class="space-y-8">
                             <input type="hidden" name="action" value="update" />
                             <input type="hidden" name="id" value="<?php echo (int)$editing['id']; ?>" />
                             
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div class="space-y-2">
-                                    <label class="block text-sm font-semibold text-gray-700">Medicine Name</label>
+                            <!-- First Row - Medicine Name and Category -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="space-y-3">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Medicine Name <span class="text-red-500">*</span></label>
                                     <input name="name" value="<?php echo htmlspecialchars($editing['name']); ?>" required 
-                                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                           placeholder="Enter medicine name" />
+                                           class="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white text-gray-900 placeholder-gray-400" 
+                                           placeholder="Enter medicine name"
+                                           style="font-size: 16px;" />
                                 </div>
                                 
-                                <div class="space-y-2">
-                                    <label class="block text-sm font-semibold text-gray-700">Category</label>
-                                    <select name="category_id" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
+                                <div class="space-y-3">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                                    <select name="category_id" class="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white text-gray-900 cursor-pointer"
+                                            style="font-size: 16px;">
                                         <option value="">Select Category (Optional)</option>
                                         <?php foreach ($categories as $category): ?>
                                             <option value="<?php echo (int)$category['id']; ?>" <?php echo ($editing['category_id'] == $category['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($category['name']); ?></option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
-                                
-                                <div class="space-y-2">
-                                    <label class="block text-sm font-semibold text-gray-700">Replace Image</label>
-                                    <input type="file" name="image" accept="image/*" 
-                                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                            </div>
+                            
+                            <!-- Image Upload Field - Full Width for Better Spacing -->
+                            <div class="space-y-3">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Replace Image</label>
+                                <div class="relative">
+                                    <input type="file" name="image" accept="image/*" id="editImageInput"
+                                           class="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white text-gray-900 cursor-pointer file:mr-4 file:py-2.5 file:px-5 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:cursor-pointer"
+                                           style="font-size: 16px;" />
+                                    <p class="mt-2 text-xs text-gray-500">Recommended: JPG, PNG (Max 5MB)</p>
                                 </div>
                             </div>
                             
-                            <div class="space-y-2">
-                                <label class="block text-sm font-semibold text-gray-700">Description</label>
-                                <textarea name="description" rows="4"
-                                          class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm resize-none" 
-                                          placeholder="Enter medicine description"><?php echo htmlspecialchars($editing['description'] ?? ''); ?></textarea>
+                            <!-- Description Field -->
+                            <div class="space-y-3">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                                <textarea name="description" rows="5"
+                                          class="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white text-gray-900 placeholder-gray-400 resize-none" 
+                                          placeholder="Enter medicine description (optional)"
+                                          style="font-size: 16px; min-height: 140px;"><?php echo htmlspecialchars($editing['description'] ?? ''); ?></textarea>
                             </div>
                             
-                            <div class="flex justify-end space-x-3 pt-4">
+                            <!-- Action Buttons -->
+                            <div class="flex justify-end gap-4 pt-6 border-t border-gray-100">
                                 <button type="button" onclick="closeEditModal()" 
-                                        class="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all duration-200">
+                                        class="px-8 py-3.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                                        style="font-size: 16px;">
                                     Cancel
                                 </button>
                                 <button type="submit" 
-                                        class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl">
+                                        class="inline-flex items-center px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                                        style="font-size: 16px;">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                     </svg>

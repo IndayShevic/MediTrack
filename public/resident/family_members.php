@@ -3,7 +3,48 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['resident']);
 
+// Helper function to get upload URL (uploads are at project root, not in public/)
+function upload_url(string $path): string {
+    // Remove leading slash if present
+    $clean_path = ltrim($path, '/');
+    
+    // Get base path without /public/
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
+
+// Get updated user data with profile image (same approach as profile.php)
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    // Merge all user data including profile_image
+    $user = array_merge($user, $user_data);
+    // Also update session for consistency
+    if (isset($user_data['profile_image'])) {
+        $_SESSION['user']['profile_image'] = $user_data['profile_image'];
+    }
+} else {
+    // If fetch failed, initialize empty array to prevent errors
+    $user_data = [];
+}
+
+// Ensure user_data always has profile_image key for consistency
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
 
 // Get resident ID
 $stmt = db()->prepare('SELECT id, purok_id FROM residents WHERE user_id = ? LIMIT 1');
@@ -267,15 +308,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
+        // Handle profile image upload if provided
+        $profile_image_path = null;
+        if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['profile_image'];
+            $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $max_size = 5 * 1024 * 1024; // 5MB
+            
+            if (!in_array($file['type'], $allowed_types)) {
+                $errors[] = 'Please upload a valid image file (JPEG, PNG, GIF, or WebP).';
+            } elseif ($file['size'] > $max_size) {
+                $errors[] = 'Image file is too large. Maximum size is 5MB.';
+            } else {
+                try {
+                    // Create profiles directory if it doesn't exist
+                    $upload_dir = __DIR__ . '/../../uploads/profiles/';
+                    if (!is_dir($upload_dir)) {
+                        mkdir($upload_dir, 0755, true);
+                    }
+                    
+                    // Generate unique filename
+                    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+                    $filename = 'family_' . $resident_id . '_' . time() . '_' . uniqid() . '.' . $extension;
+                    $filepath = $upload_dir . $filename;
+                    
+                    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+                        $profile_image_path = 'uploads/profiles/' . $filename;
+                    } else {
+                        $errors[] = 'Failed to upload image. Please try again.';
+                    }
+                } catch (Throwable $e) {
+                    error_log('Family member profile image upload error: ' . $e->getMessage());
+                    $errors[] = 'Failed to upload image. Please try again.';
+                }
+            }
+        }
+        
         if (empty($errors)) {
             try {
                 // Insert as pending
                 $stmt = db()->prepare('
                     INSERT INTO resident_family_additions 
-                    (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, "pending")
+                    (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, "pending")
                 ');
-                $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob]);
+                $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob, $profile_image_path]);
                 
                 $_SESSION['flash'] = 'Family member added! Awaiting BHW verification.';
                 $_SESSION['flash_type'] = 'success';
@@ -293,12 +370,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete_pending') {
         $id = (int)($_POST['id'] ?? 0);
         try {
+            // Get profile image path before deleting
+            $getImage = db()->prepare('SELECT profile_image FROM resident_family_additions WHERE id = ? AND resident_id = ?');
+            $getImage->execute([$id, $resident_id]);
+            $member = $getImage->fetch();
+            
             // Can only delete own pending members
             $stmt = db()->prepare('
                 DELETE FROM resident_family_additions 
                 WHERE id = ? AND resident_id = ? AND status = "pending"
             ');
             $stmt->execute([$id, $resident_id]);
+            
+            // Delete profile image if exists
+            if ($member && $member['profile_image']) {
+                $image_path = __DIR__ . '/../../uploads/profiles/' . basename($member['profile_image']);
+                if (file_exists($image_path)) {
+                    unlink($image_path);
+                }
+            }
+            
             $_SESSION['flash'] = 'Pending family member removed.';
             $_SESSION['flash_type'] = 'success';
         } catch (Throwable $e) {
@@ -307,11 +398,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect_to('resident/family_members.php');
     }
+    
+    if ($action === 'upload_family_profile') {
+        $family_member_id = (int)($_POST['family_member_id'] ?? 0);
+        
+        if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['profile_image'];
+            $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $max_size = 5 * 1024 * 1024; // 5MB
+            
+            if (!in_array($file['type'], $allowed_types)) {
+                $_SESSION['flash'] = 'Please upload a valid image file (JPEG, PNG, GIF, or WebP).';
+                $_SESSION['flash_type'] = 'error';
+            } elseif ($file['size'] > $max_size) {
+                $_SESSION['flash'] = 'Image file is too large. Maximum size is 5MB.';
+                $_SESSION['flash_type'] = 'error';
+            } else {
+                try {
+                    // Verify family member belongs to this resident
+                    $check = db()->prepare('SELECT id, profile_image FROM family_members WHERE id = ? AND resident_id = ?');
+                    $check->execute([$family_member_id, $resident_id]);
+                    $member = $check->fetch();
+                    
+                    if (!$member) {
+                        $_SESSION['flash'] = 'Family member not found.';
+                        $_SESSION['flash_type'] = 'error';
+                    } else {
+                        // Create profiles directory if it doesn't exist
+                        $upload_dir = __DIR__ . '/../../uploads/profiles/';
+                        if (!is_dir($upload_dir)) {
+                            mkdir($upload_dir, 0755, true);
+                        }
+                        
+                        // Generate unique filename
+                        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+                        $filename = 'family_' . $resident_id . '_' . $family_member_id . '_' . time() . '.' . $extension;
+                        $filepath = $upload_dir . $filename;
+                        
+                        if (move_uploaded_file($file['tmp_name'], $filepath)) {
+                            // Delete old profile image if exists
+                            if ($member['profile_image']) {
+                                $old_file = __DIR__ . '/../../uploads/profiles/' . basename($member['profile_image']);
+                                if (file_exists($old_file)) {
+                                    unlink($old_file);
+                                }
+                            }
+                            
+                            // Update database
+                            $relative_path = 'uploads/profiles/' . $filename;
+                            $stmt = db()->prepare('UPDATE family_members SET profile_image = ? WHERE id = ? AND resident_id = ?');
+                            $stmt->execute([$relative_path, $family_member_id, $resident_id]);
+                            
+                            $_SESSION['flash'] = 'Profile image updated successfully!';
+                            $_SESSION['flash_type'] = 'success';
+                        } else {
+                            $_SESSION['flash'] = 'Failed to upload image. Please try again.';
+                            $_SESSION['flash_type'] = 'error';
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('Family member profile image upload error: ' . $e->getMessage());
+                    $_SESSION['flash'] = 'Failed to upload image. Please try again.';
+                    $_SESSION['flash_type'] = 'error';
+                }
+            }
+        } else {
+            $_SESSION['flash'] = 'Please select a valid image file.';
+            $_SESSION['flash_type'] = 'error';
+        }
+        
+        redirect_to('resident/family_members.php');
+    }
 }
 
 // Get approved family members
 $approved_family = db()->prepare('
-    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, created_at
+    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, created_at
     FROM family_members 
     WHERE resident_id = ?
     ORDER BY last_name, first_name
@@ -319,12 +481,12 @@ $approved_family = db()->prepare('
 $approved_family->execute([$resident_id]);
 $approved_members = $approved_family->fetchAll();
 
-// Get pending family additions
+// Get pending family additions (only truly pending ones, not approved or rejected)
 $pending_family = db()->prepare('
-    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, status, 
+    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status, 
            rejection_reason, created_at, updated_at
     FROM resident_family_additions 
-    WHERE resident_id = ?
+    WHERE resident_id = ? AND status = "pending"
     ORDER BY created_at DESC
 ');
 $pending_family->execute([$resident_id]);
@@ -590,13 +752,27 @@ function calculateAge($dob) {
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-green-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500" style="display:none;">
                                 <?php 
                                 $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
                                 $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
                                 echo strtoupper($firstInitial . $lastInitial); 
                                 ?>
                             </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Resident'); ?>
@@ -612,14 +788,43 @@ function calculateAge($dob) {
                         <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
                             <!-- User Info Section -->
                             <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="text-sm font-semibold text-gray-900">
+                                <div class="flex items-center space-x-3 mb-3">
+                                    <?php 
+                                    // Check if profile image exists (same logic as profile.php)
+                                    $profile_img = isset($user_data['profile_image']) && !empty(trim($user_data['profile_image'])) ? $user_data['profile_image'] : null;
+                                    if ($profile_img): 
+                                    ?>
+                                        <img src="<?php echo htmlspecialchars(upload_url($profile_img)); ?>" 
+                                             alt="Profile Picture" 
+                                             class="w-12 h-12 rounded-full object-cover border-2 border-green-500"
+                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-base border-2 border-green-500" style="display:none;">
+                                            <?php 
+                                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                            echo strtoupper($firstInitial . $lastInitial); 
+                                            ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-base border-2 border-green-500">
+                                            <?php 
+                                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                            echo strtoupper($firstInitial . $lastInitial); 
+                                            ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-semibold text-gray-900 truncate">
                                     <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
                                 </div>
-                                <div class="text-sm text-gray-500">
+                                        <div class="text-xs text-gray-500 truncate">
                                     <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
+                                        </div>
+                                    </div>
                                 </div>
                                 <?php if ($is_senior): ?>
-                                    <div class="mt-2">
+                                    <div>
                                         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
@@ -666,9 +871,12 @@ function calculateAge($dob) {
 
         <div class="content-body">
         <div class="flex items-center justify-between mb-6">
-            <div></div>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">My Family Members</h1>
+                <p class="text-gray-600 mt-1">Manage your family members for medicine requests</p>
+            </div>
             <button onclick="document.getElementById('addModal').classList.remove('hidden')" 
-                    class="btn btn-primary inline-flex items-center space-x-2">
+                    class="btn btn-primary inline-flex items-center space-x-2 shadow-lg hover:shadow-xl transition-shadow duration-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
@@ -687,56 +895,94 @@ function calculateAge($dob) {
 
         <!-- Pending Family Members -->
         <?php if (!empty($pending_members)): ?>
-        <div class="card animate-fade-in-up mb-6">
-            <div class="card-header">
-                <h2 class="text-xl font-semibold flex items-center space-x-2">
+        <div class="card animate-fade-in-up mb-6 border-l-4 border-l-yellow-500">
+            <div class="card-header bg-gradient-to-r from-yellow-50 to-orange-50">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold flex items-center space-x-2 text-gray-800">
                     <svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Pending Verification (<?php echo count($pending_members); ?>)</span>
+                            <span>Pending Verification</span>
+                            <span class="bg-yellow-500 text-white text-xs font-bold px-2 py-1 rounded-full"><?php echo count($pending_members); ?></span>
                 </h2>
-                <p class="text-sm text-gray-600">Awaiting BHW approval</p>
+                        <p class="text-sm text-gray-600 mt-1">These family members are awaiting approval from your assigned BHW</p>
+                    </div>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="overflow-x-auto">
                     <table class="table">
                         <thead>
                             <tr>
+                                <th>Profile</th>
                                 <th>Name</th>
                                 <th>Relationship</th>
                                 <th>Age</th>
                                 <th>Status</th>
-                                <th>Submitted</th>
+                                <th>Submitted On</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($pending_members as $member): ?>
                             <tr>
-                                <td class="font-medium"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></td>
-                                <td><?php echo htmlspecialchars($member['relationship']); ?></td>
-                                <td><?php echo calculateAge($member['date_of_birth']); ?> years</td>
                                 <td>
-                                    <?php if ($member['status'] === 'pending'): ?>
-                                        <span class="badge badge-warning">⏳ Pending</span>
-                                    <?php elseif ($member['status'] === 'approved'): ?>
-                                        <span class="badge badge-success">✓ Approved</span>
+                                    <div class="flex items-center">
+                                        <?php if (!empty($member['profile_image'])): ?>
+                                            <img src="<?php echo htmlspecialchars(upload_url($member['profile_image'])); ?>" 
+                                                 alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?>" 
+                                                 class="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200" style="display:none;">
+                                                <?php 
+                                                $firstInitial = !empty($member['first_name']) ? substr($member['first_name'], 0, 1) : '';
+                                                $lastInitial = !empty($member['last_name']) ? substr($member['last_name'], 0, 1) : '';
+                                                echo strtoupper($firstInitial . $lastInitial); 
+                                                ?>
+                                            </div>
                                     <?php else: ?>
-                                        <span class="badge badge-danger">✕ Rejected</span>
+                                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200">
+                                                <?php 
+                                                $firstInitial = !empty($member['first_name']) ? substr($member['first_name'], 0, 1) : '';
+                                                $lastInitial = !empty($member['last_name']) ? substr($member['last_name'], 0, 1) : '';
+                                                echo strtoupper($firstInitial . $lastInitial); 
+                                                ?>
+                                            </div>
                                     <?php endif; ?>
+                                    </div>
                                 </td>
-                                <td><?php echo date('M d, Y', strtotime($member['created_at'])); ?></td>
                                 <td>
-                                    <?php if ($member['status'] === 'pending'): ?>
-                                        <form method="POST" class="inline" onsubmit="return confirm('Remove this pending family member?')">
+                                    <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></div>
+                                </td>
+                                <td>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                        <?php echo htmlspecialchars($member['relationship']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-gray-700 font-medium"><?php echo calculateAge($member['date_of_birth']); ?> years</span>
+                                </td>
+                                <td>
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                                        <span class="text-sm text-gray-600">Awaiting approval</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-gray-600 text-sm"><?php echo date('M d, Y', strtotime($member['created_at'])); ?></span>
+                                </td>
+                                <td>
+                                    <form method="POST" class="inline" onsubmit="return confirm('Are you sure you want to remove this pending family member? This action cannot be undone.');">
                                             <input type="hidden" name="action" value="delete_pending">
                                             <input type="hidden" name="id" value="<?php echo $member['id']; ?>">
-                                            <button type="submit" class="text-red-600 hover:text-red-700 text-sm">Remove</button>
+                                        <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium transition-colors duration-150 flex items-center space-x-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                            <span>Remove</span>
+                                        </button>
                                         </form>
-                                    <?php elseif ($member['status'] === 'rejected' && $member['rejection_reason']): ?>
-                                        <button onclick="alert('Reason: <?php echo htmlspecialchars(addslashes($member['rejection_reason'])); ?>')" 
-                                                class="text-gray-600 hover:text-gray-700 text-sm">View Reason</button>
-                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -745,18 +991,34 @@ function calculateAge($dob) {
                 </div>
             </div>
         </div>
+        <?php else: ?>
+        <!-- Empty State for Pending -->
+        <div class="card animate-fade-in-up mb-6 border-2 border-dashed border-gray-300">
+            <div class="card-body text-center py-12">
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">No Pending Verifications</h3>
+                <p class="text-gray-500 text-sm">All your family member requests have been processed.</p>
+            </div>
+        </div>
         <?php endif; ?>
 
         <!-- Approved Family Members -->
-        <div class="card animate-fade-in-up delay-100">
-            <div class="card-header">
-                <h2 class="text-xl font-semibold flex items-center space-x-2">
+        <div class="card animate-fade-in-up border-l-4 border-l-green-500">
+            <div class="card-header bg-gradient-to-r from-green-50 to-emerald-50">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold flex items-center space-x-2 text-gray-800">
                     <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    <span>Approved Family Members (<?php echo count($approved_members); ?>)</span>
+                            <span>Approved Family Members</span>
+                            <span class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full"><?php echo count($approved_members); ?></span>
                 </h2>
-                <p class="text-sm text-gray-600">Can be used for medicine requests</p>
+                        <p class="text-sm text-gray-600 mt-1">These family members can be used when requesting medicines</p>
+                    </div>
+                </div>
             </div>
             <div class="card-body p-0">
                 <?php if (empty($approved_members)): ?>
@@ -772,19 +1034,65 @@ function calculateAge($dob) {
                         <table class="table">
                             <thead>
                                 <tr>
+                                    <th>Profile</th>
                                     <th>Name</th>
                                     <th>Relationship</th>
                                     <th>Age</th>
                                     <th>Added On</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($approved_members as $member): ?>
                                 <tr>
-                                    <td class="font-medium"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></td>
-                                    <td><?php echo htmlspecialchars($member['relationship']); ?></td>
-                                    <td><?php echo calculateAge($member['date_of_birth']); ?> years</td>
-                                    <td><?php echo date('M d, Y', strtotime($member['created_at'])); ?></td>
+                                    <td>
+                                        <div class="flex items-center">
+                                            <?php if (!empty($member['profile_image'])): ?>
+                                                <img src="<?php echo htmlspecialchars(upload_url($member['profile_image'])); ?>" 
+                                                     alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?>" 
+                                                     class="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200" style="display:none;">
+                                                    <?php 
+                                                    $firstInitial = !empty($member['first_name']) ? substr($member['first_name'], 0, 1) : '';
+                                                    $lastInitial = !empty($member['last_name']) ? substr($member['last_name'], 0, 1) : '';
+                                                    echo strtoupper($firstInitial . $lastInitial); 
+                                                    ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200">
+                                                    <?php 
+                                                    $firstInitial = !empty($member['first_name']) ? substr($member['first_name'], 0, 1) : '';
+                                                    $lastInitial = !empty($member['last_name']) ? substr($member['last_name'], 0, 1) : '';
+                                                    echo strtoupper($firstInitial . $lastInitial); 
+                                                    ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></div>
+                                    </td>
+                                    <td>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            <?php echo htmlspecialchars($member['relationship']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="text-gray-700 font-medium"><?php echo calculateAge($member['date_of_birth']); ?> years</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-gray-600 text-sm"><?php echo date('M d, Y', strtotime($member['created_at'])); ?></span>
+                                    </td>
+                                    <td>
+                                        <button onclick="openProfileUploadModal(<?php echo $member['id']; ?>)" 
+                                                class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors duration-150 flex items-center space-x-1 hover:underline">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span><?php echo !empty($member['profile_image']) ? 'Change Photo' : 'Add Photo'; ?></span>
+                                        </button>
+                                    </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -796,8 +1104,8 @@ function calculateAge($dob) {
     </main>
 
     <!-- Add Family Member Modal -->
-    <div id="addModal" class="fixed top-0 right-0 bottom-0 left-0 bg-transparent hidden items-center justify-center z-[99999] p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl transform transition-all relative z-[100000] border border-gray-200 ml-[570px]">
+    <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[99999] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl transform transition-all relative z-[100000] border border-gray-200">
             <div class="p-6 border-b">
                 <div class="flex justify-between items-center">
                     <h3 class="text-xl font-semibold">Add Family Member</h3>
@@ -809,8 +1117,29 @@ function calculateAge($dob) {
                 </div>
                 <p class="text-sm text-gray-600 mt-1">BHW will verify before approval</p>
             </div>
-            <form method="POST" class="p-6 space-y-4">
+            <form method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
                 <input type="hidden" name="action" value="add_family_member">
+                
+                <!-- Profile Image Upload -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Profile Picture (Optional)</label>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-shrink-0">
+                            <img id="profile-preview" src="" alt="Preview" class="w-20 h-20 rounded-full object-cover border-2 border-gray-300 hidden">
+                            <div id="profile-placeholder" class="w-20 h-20 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-300">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <input type="file" name="profile_image" id="profile_image" accept="image/jpeg,image/png,image/gif,image/webp" 
+                                   class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                   onchange="previewProfileImage(this)">
+                            <p class="text-xs text-gray-500 mt-1">JPEG, PNG, GIF, or WebP (max 5MB)</p>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="grid grid-cols-3 gap-3">
                     <div>
@@ -1282,6 +1611,147 @@ function calculateAge($dob) {
                 }
             }
         }
+        
+        // Preview profile image before upload
+        function previewProfileImage(input) {
+            const preview = document.getElementById('profile-preview');
+            const placeholder = document.getElementById('profile-placeholder');
+            
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else {
+                preview.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+            }
+        }
+        
+        // Open profile upload modal for existing family member
+        function openProfileUploadModal(familyMemberId) {
+            document.getElementById('uploadFamilyMemberId').value = familyMemberId;
+            document.getElementById('uploadProfileModal').classList.remove('hidden');
+        }
+        
+        // Preview image in upload modal
+        function previewUploadImage(input) {
+            const preview = document.getElementById('upload-preview');
+            const placeholder = document.getElementById('upload-placeholder');
+            
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else {
+                preview.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+            }
+        }
+    </script>
+    
+    <!-- Upload Profile Picture Modal -->
+    <div id="uploadProfileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[99999] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl transform transition-all relative z-[100000] border border-gray-200">
+            <div class="p-6 border-b">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xl font-semibold">Upload Profile Picture</h3>
+                    <button onclick="document.getElementById('uploadProfileModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <form method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
+                <input type="hidden" name="action" value="upload_family_profile">
+                <input type="hidden" name="family_member_id" id="uploadFamilyMemberId" value="">
+                
+                <div class="flex items-center justify-center">
+                    <div class="relative">
+                        <img id="upload-preview" src="" alt="Preview" class="w-32 h-32 rounded-full object-cover border-4 border-gray-300 hidden">
+                        <div id="upload-placeholder" class="w-32 h-32 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-white font-semibold text-sm border-4 border-gray-300">
+                            <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <input type="file" name="profile_image" id="upload_profile_image" accept="image/jpeg,image/png,image/gif,image/webp" 
+                           class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                           onchange="previewUploadImage(this)" required>
+                    <p class="text-xs text-gray-500 mt-1">JPEG, PNG, GIF, or WebP (max 5MB)</p>
+                </div>
+                
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" onclick="document.getElementById('uploadProfileModal').classList.add('hidden')" 
+                            class="flex-1 btn btn-secondary">Cancel</button>
+                    <button type="submit" class="flex-1 btn btn-primary">Upload Photo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Profile dropdown functionality
+        function initProfileDropdown() {
+            const toggle = document.getElementById('profile-toggle');
+            const menu = document.getElementById('profile-menu');
+            const arrow = document.getElementById('profile-arrow');
+            
+            if (!toggle || !menu || !arrow) return;
+            
+            toggle.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (menu.classList.contains('hidden')) {
+                    menu.classList.remove('hidden');
+                    arrow.classList.add('rotate-180');
+                } else {
+                    menu.classList.add('hidden');
+                    arrow.classList.remove('rotate-180');
+                }
+            };
+            
+            // Close dropdown when clicking outside
+            if (!window.residentProfileDropdownClickHandler) {
+                window.residentProfileDropdownClickHandler = function(e) {
+                    const toggle = document.getElementById('profile-toggle');
+                    const menu = document.getElementById('profile-menu');
+                    if (menu && !toggle.contains(e.target) && !menu.contains(e.target)) {
+                        menu.classList.add('hidden');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('click', window.residentProfileDropdownClickHandler);
+            }
+            
+            // Close dropdown when pressing Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const menu = document.getElementById('profile-menu');
+                    const arrow = document.getElementById('profile-arrow');
+                    if (menu) menu.classList.add('hidden');
+                    if (arrow) arrow.classList.remove('rotate-180');
+                }
+            });
+        }
+
+        // Initialize profile dropdown when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initProfileDropdown();
+        });
     </script>
 </body>
 </html>

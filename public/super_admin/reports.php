@@ -2,7 +2,35 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
+
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
 
 // Get all medicines for dropdown
 $medicines = [];
@@ -1359,6 +1387,108 @@ $total_pages = ceil($total_records / $per_page);
                     <h1 class="text-3xl font-bold text-gray-900">Reports</h1>
                     <p class="text-gray-600 mt-1">Generate and export detailed reports for your medicine inventory</p>
                 </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Current Time Display -->
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">Current Time</div>
+                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
+                    </div>
+                    
+                    <!-- Night Mode Toggle -->
+                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Notifications -->
+                    <div class="relative">
+                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
+                            </svg>
+                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Profile Section -->
+                    <div class="relative" id="profile-dropdown">
+                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                            <div class="text-left">
+                                <div class="text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
+                                </div>
+                                <div class="text-xs text-gray-500">Super Admin</div>
+                            </div>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
+                            <!-- User Info Section -->
+                            <div class="px-4 py-3 border-b border-gray-100">
+                                <div class="text-sm font-semibold text-gray-900">
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
+                                </div>
+                            </div>
+                            
+                            <!-- Menu Items -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('super_admin/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Edit Profile
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Support
+                                </a>
+                            </div>
+                            
+                            <!-- Separator -->
+                            <div class="border-t border-gray-100 my-1"></div>
+                            
+                            <!-- Sign Out -->
+                            <div class="py-1">
+                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
+                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Sign Out
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2289,9 +2419,70 @@ $total_pages = ceil($total_records / $per_page);
             }, 100);
         }
         
+        // Profile dropdown functionality
+        function initProfileDropdown() {
+            const toggle = document.getElementById('profile-toggle');
+            const menu = document.getElementById('profile-menu');
+            const arrow = document.getElementById('profile-arrow');
+            
+            if (!toggle || !menu || !arrow) return;
+            
+            toggle.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (menu.classList.contains('hidden')) {
+                    menu.classList.remove('hidden');
+                    arrow.classList.add('rotate-180');
+                } else {
+                    menu.classList.add('hidden');
+                    arrow.classList.remove('rotate-180');
+                }
+            };
+            
+            // Close dropdown when clicking outside
+            if (!window.superAdminProfileDropdownClickHandler) {
+                window.superAdminProfileDropdownClickHandler = function(e) {
+                    const toggle = document.getElementById('profile-toggle');
+                    const menu = document.getElementById('profile-menu');
+                    if (menu && toggle && !toggle.contains(e.target) && !menu.contains(e.target)) {
+                        menu.classList.add('hidden');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('click', window.superAdminProfileDropdownClickHandler);
+            }
+            
+            // Close dropdown when pressing Escape
+            if (!window.superAdminProfileDropdownKeyHandler) {
+                window.superAdminProfileDropdownKeyHandler = function(e) {
+                    if (e.key === 'Escape') {
+                        const menu = document.getElementById('profile-menu');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (menu) menu.classList.add('hidden');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('keydown', window.superAdminProfileDropdownKeyHandler);
+            }
+        }
+        
         // Initialize functions when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize profile dropdown
+            initProfileDropdown();
             // Logout confirmation is now handled by logout-confirmation.js
+            
+            // Update current time every second
+            setInterval(function() {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+                const timeElement = document.getElementById('current-time');
+                if (timeElement) {
+                    timeElement.textContent = timeStr;
+                }
+            }, 1000);
         });
     </script>
 </body>

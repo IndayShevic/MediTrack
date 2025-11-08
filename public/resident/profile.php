@@ -26,6 +26,12 @@ function upload_url(string $path): string {
 
 $user = current_user();
 
+// Get user profile image for header (fetch early so it's available in header)
+$userStmt = db()->prepare('SELECT profile_image FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_header_img = $userStmt->fetch();
+$header_profile_img = $user_header_img['profile_image'] ?? null;
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -1185,13 +1191,31 @@ try {
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                                <?php 
-                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                                echo strtoupper($firstInitial . $lastInitial); 
-                                ?>
-                            </div>
+                            <?php 
+                            // Use user_data from query below if available (for after page load), otherwise use header_profile_img
+                            $display_profile_img = !empty($user_data['profile_image']) ? $user_data['profile_image'] : $header_profile_img;
+                            if (!empty($display_profile_img)): 
+                            ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($display_profile_img)); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-green-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500" style="display:none;">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Resident'); ?>

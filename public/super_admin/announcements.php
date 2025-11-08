@@ -3,7 +3,35 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/email_notifications.php';
 require_auth(['super_admin']);
+
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -123,17 +151,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             } else {
                                 // Get old announcement data for comparison
                                 $oldAnnouncement = db()->prepare('SELECT title, description, start_date, end_date, start_time, end_time, is_active, target_audience, target_barangay_id, target_purok_id FROM announcements WHERE id = ?');
-                                $oldAnnouncement->execute([$id]);
-                                $old = $oldAnnouncement->fetch();
-                                
+                        $oldAnnouncement->execute([$id]);
+                        $old = $oldAnnouncement->fetch();
+                        
                                 // Update the announcement
                                 $stmt = db()->prepare('UPDATE announcements SET title = ?, description = ?, start_date = ?, end_date = ?, start_time = ?, end_time = ?, target_audience = ?, target_barangay_id = ?, target_purok_id = ? WHERE id = ?');
                                 $stmt->execute([$title, $description, $start_date, $end_date, $start_time, $end_time, $target_audience, $target_barangay_id, $target_purok_id, $id]);
-                                
+                        
                                 // Always send email notifications when an announcement is updated (any change)
                                 // Prepare old data for change notification
                                 $oldData = null;
-                                if ($old) {
+                        if ($old) {
                                     $oldData = [
                                         'title' => $old['title'],
                                         'description' => $old['description'],
@@ -145,27 +173,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         'target_barangay_id' => $old['target_barangay_id'] ?? null,
                                         'target_purok_id' => $old['target_purok_id'] ?? null
                                     ];
-                                }
-                                
+                        }
+                        
                                 // Send email notifications for the update
                                 $emailResults = send_announcement_notification_to_all_users($title, $description, $start_date, $end_date, $id, true, $oldData, $start_time, $end_time);
-                                
-                                if ($emailResults['sent'] > 0) {
+                            
+                            if ($emailResults['sent'] > 0) {
                                     $message = "Announcement updated successfully. Email notifications sent to {$emailResults['sent']} users about the changes.";
-                                    if ($emailResults['failed'] > 0) {
-                                        $message .= " ({$emailResults['failed']} emails failed to send)";
-                                    }
+                                if ($emailResults['failed'] > 0) {
+                                    $message .= " ({$emailResults['failed']} emails failed to send)";
+                                }
                                     if (!empty($emailResults['errors'])) {
                                         error_log("Announcement email errors: " . implode(", ", $emailResults['errors']));
                                     }
-                                    set_flash($message, 'success');
-                                } else {
+                                set_flash($message, 'success');
+                            } else {
                                     $errorMsg = 'Announcement updated successfully, but no email notifications were sent.';
                                     if (!empty($emailResults['errors'])) {
                                         $errorMsg .= ' ' . implode(" ", array_slice($emailResults['errors'], 0, 2));
-                                    }
+                            }
                                     set_flash($errorMsg, 'warning');
-                                }
+                        }
                             }
                         }
                     } catch (Exception $e) {
@@ -1022,13 +1050,27 @@ try {
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
                                 <?php 
                                 $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
                                 $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
                                 echo strtoupper($firstInitial . $lastInitial); 
                                 ?>
                             </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
@@ -1144,10 +1186,10 @@ try {
                             <button onclick="openAnnouncementsModal()" class="btn-primary" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-                                </svg>
+                                        </svg>
                                 View All Announcements
-                            </button>
-                        </div>
+                                    </button>
+                                </div>
                                                 </div>
                     <div id="calendar" class="rounded-lg overflow-hidden"></div>
                 </div>
@@ -1818,13 +1860,13 @@ try {
                     }
                     
                     if (startDate && endDateInput) {
-                        endDateInput.min = startDate;
-                        if (endDateInput.value && endDateInput.value < startDate) {
-                            endDateInput.value = startDate;
-                        }
-                    }
-                    validateDates();
-                });
+                endDateInput.min = startDate;
+                if (endDateInput.value && endDateInput.value < startDate) {
+                    endDateInput.value = startDate;
+                }
+            }
+            validateDates();
+        });
             }
             
             if (endDateInput) {
@@ -1865,7 +1907,7 @@ try {
             const form = document.getElementById('announcementForm');
             if (form) {
                 form.addEventListener('submit', function(e) {
-                    // Validate dates before submitting
+            // Validate dates before submitting
                     const startDate = document.getElementById('start_date').value;
                     const endDate = document.getElementById('end_date').value;
                     const today = new Date().toISOString().split('T')[0];
@@ -1880,23 +1922,23 @@ try {
                         return false;
                     }
                     
-                    if (!validateDates()) {
-                        e.preventDefault();
-                        return false;
-                    }
-                    
-                    const submitBtn = this.querySelector('button[type="submit"]');
-                    const originalText = submitBtn.innerHTML;
-                    
-                    submitBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Processing...';
-                    submitBtn.disabled = true;
-                    
-                    // Re-enable after 3 seconds (fallback)
-                    setTimeout(() => {
-                        submitBtn.innerHTML = originalText;
-                        submitBtn.disabled = false;
-                    }, 3000);
-                });
+            if (!validateDates()) {
+                e.preventDefault();
+                return false;
+            }
+            
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Processing...';
+            submitBtn.disabled = true;
+            
+            // Re-enable after 3 seconds (fallback)
+            setTimeout(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }, 3000);
+        });
             }
         }, 100);
 
@@ -2208,8 +2250,59 @@ try {
     </div>
     
     <script>
+        // Profile dropdown functionality
+        function initProfileDropdown() {
+            const toggle = document.getElementById('profile-toggle');
+            const menu = document.getElementById('profile-menu');
+            const arrow = document.getElementById('profile-arrow');
+            
+            if (!toggle || !menu || !arrow) return;
+            
+            toggle.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (menu.classList.contains('hidden')) {
+                    menu.classList.remove('hidden');
+                    arrow.classList.add('rotate-180');
+                } else {
+                    menu.classList.add('hidden');
+                    arrow.classList.remove('rotate-180');
+                }
+            };
+            
+            // Close dropdown when clicking outside
+            if (!window.superAdminProfileDropdownClickHandler) {
+                window.superAdminProfileDropdownClickHandler = function(e) {
+                    const toggle = document.getElementById('profile-toggle');
+                    const menu = document.getElementById('profile-menu');
+                    if (menu && toggle && !toggle.contains(e.target) && !menu.contains(e.target)) {
+                        menu.classList.add('hidden');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('click', window.superAdminProfileDropdownClickHandler);
+            }
+            
+            // Close dropdown when pressing Escape
+            if (!window.superAdminProfileDropdownKeyHandler) {
+                window.superAdminProfileDropdownKeyHandler = function(e) {
+                    if (e.key === 'Escape') {
+                        const menu = document.getElementById('profile-menu');
+                        const arrow = document.getElementById('profile-arrow');
+                        if (menu) menu.classList.add('hidden');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    }
+                };
+                document.addEventListener('keydown', window.superAdminProfileDropdownKeyHandler);
+            }
+        }
+        
         // Initialize functions when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize profile dropdown
+            initProfileDropdown();
             // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>

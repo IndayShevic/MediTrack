@@ -2,7 +2,35 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['resident']);
+
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 $user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
 
 // Get resident info for senior citizen check
 $residentRow = db()->prepare('SELECT id, date_of_birth FROM residents WHERE user_id = ? LIMIT 1');
@@ -29,6 +57,15 @@ try {
     $pending_requests = 0;
 }
 
+// Get all active categories
+$categories = [];
+try {
+    $categories = db()->query('SELECT id, name FROM categories WHERE id IN (SELECT DISTINCT category_id FROM medicines WHERE category_id IS NOT NULL AND is_active = 1) ORDER BY name')->fetchAll() ?: [];
+} catch (Throwable $e) {
+    error_log("Error fetching categories: " . $e->getMessage());
+    $categories = [];
+}
+
 // Get medicines with their stock and expiry information
 // Only show medicines that have at least one batch (even if expired or out of stock)
 // Calculate available stock (excluding expired/out of stock batches)
@@ -38,6 +75,8 @@ $meds = db()->query('
         m.name, 
         m.description, 
         m.image_path,
+        m.category_id,
+        c.name as category_name,
         COALESCE(SUM(CASE 
             WHEN mb.quantity_available > 0 AND mb.expiry_date > CURDATE() 
             THEN mb.quantity_available 
@@ -51,8 +90,9 @@ $meds = db()->query('
         COUNT(mb.id) as total_batches
     FROM medicines m 
     INNER JOIN medicine_batches mb ON m.id = mb.medicine_id
+    LEFT JOIN categories c ON m.category_id = c.id
     WHERE m.is_active = 1 
-    GROUP BY m.id, m.name, m.description, m.image_path
+    GROUP BY m.id, m.name, m.description, m.image_path, m.category_id, c.name
     ORDER BY m.name
 ')->fetchAll();
 ?>
@@ -521,13 +561,27 @@ $meds = db()->query('
                     <!-- Profile Section -->
                     <div class="relative" id="profile-dropdown">
                         <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                     alt="Profile Picture" 
+                                     class="w-8 h-8 rounded-full object-cover border-2 border-green-500"
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500" style="display:none;">
                                 <?php 
                                 $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
                                 $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
                                 echo strtoupper($firstInitial . $lastInitial); 
                                 ?>
                             </div>
+                            <?php else: ?>
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Resident'); ?>
@@ -629,6 +683,28 @@ $meds = db()->query('
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- Category Filters -->
+                    <?php if (!empty($categories)): ?>
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <div class="flex items-center mb-3">
+                            <svg class="w-5 h-5 text-gray-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                            </svg>
+                            <h3 class="text-sm font-semibold text-gray-700">Filter by Category</h3>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="category-filter active px-4 py-2 bg-blue-50 border-2 border-blue-500 rounded-full text-sm font-medium text-blue-700 hover:bg-blue-100 transition-all duration-200 shadow-sm" data-category="all">
+                                All Categories
+                            </button>
+                            <?php foreach ($categories as $category): ?>
+                                <button class="category-filter px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-blue-400 hover:shadow-sm transition-all duration-200" data-category="<?php echo (int)$category['id']; ?>">
+                                    <?php echo htmlspecialchars($category['name']); ?>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -644,6 +720,7 @@ $meds = db()->query('
                          data-name="<?php echo strtolower(htmlspecialchars($m['name'])); ?>"
                          data-description="<?php echo strtolower(htmlspecialchars($m['description'] ?? '')); ?>"
                          data-stock="<?php echo $stockStatus; ?>"
+                         data-category="<?php echo (int)($m['category_id'] ?? 0); ?>"
                          style="animation-delay: <?php echo $index * 0.1; ?>s">
                         
                         <!-- Medicine Image -->
@@ -824,6 +901,7 @@ $meds = db()->query('
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const filterChips = document.querySelectorAll('.filter-chip');
+            const categoryFilters = document.querySelectorAll('.category-filter');
             const medicineCards = document.querySelectorAll('.medicine-card');
             const medicinesGrid = document.getElementById('medicinesGrid');
             const noResults = document.getElementById('noResults');
@@ -831,6 +909,7 @@ $meds = db()->query('
 
             let currentFilter = 'all';
             let currentSearch = '';
+            let currentCategory = 'all';
 
             // Search functionality
             searchInput.addEventListener('input', function() {
@@ -850,6 +929,22 @@ $meds = db()->query('
                 });
             });
 
+            // Category filter functionality
+            categoryFilters.forEach(categoryBtn => {
+                categoryBtn.addEventListener('click', function() {
+                    // Update active state
+                    categoryFilters.forEach(c => {
+                        c.classList.remove('active', 'bg-blue-50', 'border-blue-500', 'text-blue-700');
+                        c.classList.add('bg-white', 'border-gray-300', 'text-gray-700');
+                    });
+                    this.classList.add('active', 'bg-blue-50', 'border-2', 'border-blue-500', 'text-blue-700');
+                    this.classList.remove('bg-white', 'border-gray-300', 'text-gray-700');
+                    
+                    currentCategory = this.dataset.category;
+                    filterMedicines();
+                });
+            });
+
             function filterMedicines() {
                 let visibleCount = 0;
                 
@@ -857,9 +952,11 @@ $meds = db()->query('
                     const name = card.dataset.name;
                     const description = card.dataset.description;
                     const stock = card.dataset.stock;
+                    const category = card.dataset.category || '0';
                     
                     let matchesSearch = true;
                     let matchesFilter = true;
+                    let matchesCategory = true;
                     
                     // Check search match
                     if (currentSearch) {
@@ -871,7 +968,12 @@ $meds = db()->query('
                         matchesFilter = stock === currentFilter;
                     }
                     
-                    if (matchesSearch && matchesFilter) {
+                    // Check category match
+                    if (currentCategory !== 'all') {
+                        matchesCategory = category === currentCategory;
+                    }
+                    
+                    if (matchesSearch && matchesFilter && matchesCategory) {
                         card.style.display = 'block';
                         card.classList.add('animate-fade-in');
                         visibleCount++;
@@ -881,16 +983,18 @@ $meds = db()->query('
                     }
                 });
                 
-                // Update count
+                // Update count (if element exists)
+                if (medicineCount) {
                 medicineCount.textContent = `${visibleCount} medicines`;
+                }
                 
                 // Show/hide no results message
                 if (visibleCount === 0) {
-                    noResults.classList.remove('hidden');
-                    medicinesGrid.classList.add('hidden');
+                    if (noResults) noResults.classList.remove('hidden');
+                    if (medicinesGrid) medicinesGrid.classList.add('hidden');
                 } else {
-                    noResults.classList.add('hidden');
-                    medicinesGrid.classList.remove('hidden');
+                    if (noResults) noResults.classList.add('hidden');
+                    if (medicinesGrid) medicinesGrid.classList.remove('hidden');
                 }
             }
 
@@ -899,9 +1003,19 @@ $meds = db()->query('
                 searchInput.value = '';
                 currentSearch = '';
                 currentFilter = 'all';
+                currentCategory = 'all';
                 
                 filterChips.forEach(c => c.classList.remove('active'));
                 filterChips[0].classList.add('active');
+                
+                categoryFilters.forEach(c => {
+                    c.classList.remove('active', 'bg-blue-50', 'border-blue-500', 'text-blue-700');
+                    c.classList.add('bg-white', 'border-gray-300', 'text-gray-700');
+                });
+                if (categoryFilters.length > 0) {
+                    categoryFilters[0].classList.add('active', 'bg-blue-50', 'border-2', 'border-blue-500', 'text-blue-700');
+                    categoryFilters[0].classList.remove('bg-white', 'border-gray-300', 'text-gray-700');
+                }
                 
                 filterMedicines();
             };
@@ -940,8 +1054,8 @@ $meds = db()->query('
                 });
             });
 
-        // Add ripple effect to buttons (excluding sidebar links)
-        document.querySelectorAll('a:not(.sidebar-nav a), button').forEach(element => {
+        // Add ripple effect to buttons (excluding sidebar links, filter chips, and category filters)
+        document.querySelectorAll('a:not(.sidebar-nav a), button:not(.filter-chip):not(.category-filter)').forEach(element => {
             element.addEventListener('click', function(e) {
                 const ripple = document.createElement('span');
                 const rect = this.getBoundingClientRect();

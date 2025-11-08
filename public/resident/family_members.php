@@ -50,7 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $middle_initial = trim($_POST['middle_initial'] ?? '');
         $last_name = trim($_POST['last_name'] ?? '');
         $relationship = trim($_POST['relationship'] ?? '');
+        $relationship_other = trim($_POST['relationship_other'] ?? '');
         $dob = $_POST['date_of_birth'] ?? '';
+        
+        // If "Other" is selected, use the custom relationship text
+        if ($relationship === 'Other' && !empty($relationship_other)) {
+            $relationship = preg_replace('/[^A-Za-zÀ-ÿ\' -]/', '', $relationship_other);
+        }
         
         $errors = [];
         
@@ -68,6 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($relationship)) {
             $errors[] = 'Please select a relationship.';
+        } elseif ($relationship === 'Other' && empty($relationship_other)) {
+            $errors[] = 'Please specify the relationship when "Other" is selected.';
         }
         
         if (empty($dob)) {
@@ -827,8 +835,9 @@ function calculateAge($dob) {
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
-                    <select name="relationship" required 
-                            class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select name="relationship" id="relationship_select" required 
+                            class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onchange="handleRelationshipChangeResident(this)">
                         <option value="">Select Relationship</option>
                         <option value="Father">Father</option>
                         <option value="Mother">Mother</option>
@@ -836,11 +845,24 @@ function calculateAge($dob) {
                         <option value="Daughter">Daughter</option>
                         <option value="Brother">Brother</option>
                         <option value="Sister">Sister</option>
+                        <option value="Husband">Husband</option>
+                        <option value="Wife">Wife</option>
+                        <option value="Spouse">Spouse</option>
                         <option value="Grandfather">Grandfather</option>
                         <option value="Grandmother">Grandmother</option>
-                        <option value="Spouse">Spouse</option>
+                        <option value="Uncle">Uncle</option>
+                        <option value="Aunt">Aunt</option>
+                        <option value="Nephew">Nephew</option>
+                        <option value="Niece">Niece</option>
+                        <option value="Cousin">Cousin</option>
                         <option value="Other">Other</option>
                     </select>
+                    <input type="text" 
+                           name="relationship_other" 
+                           id="relationship_other_resident"
+                           class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2 hidden" 
+                           placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
+                           maxlength="50" />
                 </div>
                 
                 <div>
@@ -1262,6 +1284,21 @@ function calculateAge($dob) {
                 return false;
             }
         }, false);
+        
+        // Handle relationship change to show/hide custom relationship input
+        function handleRelationshipChangeResident(selectElement) {
+            const otherInput = document.getElementById('relationship_other_resident');
+            if (otherInput) {
+                if (selectElement.value === 'Other') {
+                    otherInput.classList.remove('hidden');
+                    otherInput.required = true;
+                } else {
+                    otherInput.classList.add('hidden');
+                    otherInput.value = '';
+                    otherInput.required = false;
+                }
+            }
+        }
     </script>
 </body>
 </html>

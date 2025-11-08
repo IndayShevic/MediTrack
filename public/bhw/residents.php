@@ -12,7 +12,7 @@ $notification_counts = get_bhw_notification_counts($bhw_purok_id);
 // Fetch residents with their family members (including walk-in residents)
 $rows = db()->prepare('
     SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address,
-           r.purok_id, r.barangay_id,
+           r.purok_id, r.barangay_id, r.date_of_birth,
            p.name as purok_name,
            b.name as barangay_name,
            COUNT(fm.id) as family_count,
@@ -31,9 +31,23 @@ $rows = db()->prepare('
 $rows->execute([$user['id']]);
 $residents = $rows->fetchAll();
 
+// Calculate age for each resident
+foreach ($residents as &$resident) {
+    if (!empty($resident['date_of_birth'])) {
+        $birth_date = new DateTime($resident['date_of_birth']);
+        $today = new DateTime();
+        $resident['age'] = $today->diff($birth_date)->y;
+        $resident['is_senior'] = $resident['age'] >= 60;
+    } else {
+        $resident['age'] = null;
+        $resident['is_senior'] = false;
+    }
+}
+unset($resident); // Break reference
+
 // Fetch family members for each resident
 $family_rows = db()->prepare('
-    SELECT fm.resident_id, fm.full_name, fm.relationship
+    SELECT fm.resident_id, fm.full_name, fm.relationship, fm.date_of_birth
     FROM family_members fm 
     JOIN residents r ON r.id = fm.resident_id 
     WHERE r.purok_id = (SELECT purok_id FROM users WHERE id=?) 
@@ -41,6 +55,20 @@ $family_rows = db()->prepare('
 ');
 $family_rows->execute([$user['id']]);
 $family_members = $family_rows->fetchAll();
+
+// Calculate age for each family member
+foreach ($family_members as &$family) {
+    if (!empty($family['date_of_birth'])) {
+        $birth_date = new DateTime($family['date_of_birth']);
+        $today = new DateTime();
+        $family['age'] = $today->diff($birth_date)->y;
+        $family['is_senior'] = $family['age'] >= 60;
+    } else {
+        $family['age'] = null;
+        $family['is_senior'] = false;
+    }
+}
+unset($family); // Break reference
 
 // Group family members by resident_id
 $families_by_resident = [];
@@ -774,6 +802,14 @@ foreach ($family_members as $family) {
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ID</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                         <div class="flex items-center space-x-2">
+                                            <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span>Age</span>
+                                        </div>
+                                    </th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        <div class="flex items-center space-x-2">
                                             <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
                                             </svg>
@@ -821,6 +857,20 @@ foreach ($family_members as $family) {
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <span class="text-sm font-medium text-gray-900"><?php echo (int)$r['id']; ?></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if (isset($r['age']) && $r['age'] !== null): ?>
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="text-sm font-medium text-gray-900"><?php echo (int)$r['age']; ?> years</span>
+                                                    <?php if ($r['is_senior']): ?>
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                                            Senior
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-xs text-gray-400 italic">Not available</span>
+                                            <?php endif; ?>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <?php if ($r['phone']): ?>
@@ -912,25 +962,47 @@ foreach ($family_members as $family) {
                                             </div>
                                                                         <div class="flex-1 min-w-0">
                                                                             <div class="text-base font-bold text-gray-900 mb-2 truncate"><?php echo htmlspecialchars($family['full_name']); ?></div>
-                                                                            <?php 
-                                                                            $relationship = strtolower($family['relationship']);
-                                                                            $badgeClass = 'bg-gray-100 text-gray-800';
-                                                                            if (strpos($relationship, 'spouse') !== false || strpos($relationship, 'wife') !== false || strpos($relationship, 'husband') !== false) {
-                                                                                $badgeClass = 'bg-pink-100 text-pink-800 border-pink-200';
-                                                                            } elseif (strpos($relationship, 'child') !== false || strpos($relationship, 'son') !== false || strpos($relationship, 'daughter') !== false) {
-                                                                                $badgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
-                                                                            } elseif (strpos($relationship, 'parent') !== false || strpos($relationship, 'mother') !== false || strpos($relationship, 'father') !== false) {
-                                                                                $badgeClass = 'bg-green-100 text-green-800 border-green-200';
-                                                                            } elseif (strpos($relationship, 'sibling') !== false || strpos($relationship, 'brother') !== false || strpos($relationship, 'sister') !== false) {
-                                                                                $badgeClass = 'bg-purple-100 text-purple-800 border-purple-200';
-                                                                            }
-                                                                            ?>
-                                                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold <?php echo $badgeClass; ?> border">
-                                                                                <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                                                </svg>
-                                                        <?php echo htmlspecialchars($family['relationship']); ?>
-                                                    </span>
+                                                                            <div class="flex flex-wrap items-center gap-2 mb-2">
+                                                                                <?php 
+                                                                                $relationship = strtolower($family['relationship']);
+                                                                                $badgeClass = 'bg-gray-100 text-gray-800';
+                                                                                // Spouse relationships (pink)
+                                                                                if (strpos($relationship, 'spouse') !== false || strpos($relationship, 'wife') !== false || strpos($relationship, 'husband') !== false) {
+                                                                                    $badgeClass = 'bg-pink-100 text-pink-800 border-pink-200';
+                                                                                } 
+                                                                                // Child relationships (blue)
+                                                                                elseif (strpos($relationship, 'child') !== false || strpos($relationship, 'son') !== false || strpos($relationship, 'daughter') !== false || strpos($relationship, 'nephew') !== false || strpos($relationship, 'niece') !== false) {
+                                                                                    $badgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                                                                                } 
+                                                                                // Parent relationships (green)
+                                                                                elseif (strpos($relationship, 'parent') !== false || strpos($relationship, 'mother') !== false || strpos($relationship, 'father') !== false || strpos($relationship, 'grandfather') !== false || strpos($relationship, 'grandmother') !== false) {
+                                                                                    $badgeClass = 'bg-green-100 text-green-800 border-green-200';
+                                                                                } 
+                                                                                // Sibling relationships (purple)
+                                                                                elseif (strpos($relationship, 'sibling') !== false || strpos($relationship, 'brother') !== false || strpos($relationship, 'sister') !== false || strpos($relationship, 'uncle') !== false || strpos($relationship, 'aunt') !== false || strpos($relationship, 'cousin') !== false) {
+                                                                                    $badgeClass = 'bg-purple-100 text-purple-800 border-purple-200';
+                                                                                }
+                                                                                ?>
+                                                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold <?php echo $badgeClass; ?> border">
+                                                                                    <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                                                    </svg>
+                                                                                    <?php echo htmlspecialchars($family['relationship']); ?>
+                                                                                </span>
+                                                                                <?php if (isset($family['age']) && $family['age'] !== null): ?>
+                                                                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                                                                        <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                                                        </svg>
+                                                                                        <?php echo (int)$family['age']; ?> years
+                                                                                        <?php if ($family['is_senior']): ?>
+                                                                                            <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                                                                                Senior
+                                                                                            </span>
+                                                                                        <?php endif; ?>
+                                                                                    </span>
+                                                                                <?php endif; ?>
+                                                                            </div>
                                             </div>
                                         </div>
                                     </div>

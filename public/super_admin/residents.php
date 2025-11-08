@@ -5,7 +5,7 @@ require_auth(['super_admin']);
 
 // Fetch all residents with their family members and location info
 $residents = db()->query('
-    SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address, r.created_at,
+    SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address, r.created_at, r.date_of_birth,
            COUNT(fm.id) as family_count,
            p.name as purok_name,
            b.name as barangay_name,
@@ -20,6 +20,20 @@ $residents = db()->query('
     GROUP BY r.id 
     ORDER BY r.last_name = "Walk-in", b.name, p.name, r.last_name, r.first_name
 ')->fetchAll();
+
+// Calculate age for each resident
+foreach ($residents as &$resident) {
+    if (!empty($resident['date_of_birth'])) {
+        $birth_date = new DateTime($resident['date_of_birth']);
+        $today = new DateTime();
+        $resident['age'] = $today->diff($birth_date)->y;
+        $resident['is_senior'] = $resident['age'] >= 60;
+    } else {
+        $resident['age'] = null;
+        $resident['is_senior'] = false;
+    }
+}
+unset($resident); // Break reference
 
 // Calculate statistics
 $total_residents = count($residents);
@@ -226,12 +240,6 @@ foreach ($residents as $resident) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
                 </svg>
                 Announcements
-            </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('super_admin/residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                All Residents
             </a>
         </nav>
         
@@ -488,6 +496,21 @@ foreach ($residents as $resident) {
                                                 </svg>
                                                 <span class="text-sm text-gray-500 font-medium">ID: <?php echo (int)$r['id']; ?></span>
                                             </div>
+                                            <?php if (isset($r['age']) && $r['age'] !== null): ?>
+                                                <div class="flex items-center space-x-2">
+                                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                    </svg>
+                                                    <span class="text-sm text-gray-500 font-medium">
+                                                        Age: <?php echo (int)$r['age']; ?>
+                                                        <?php if ($r['is_senior']): ?>
+                                                            <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                                                Senior
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
                                             <?php if ($r['phone']): ?>
                                                 <div class="flex items-center space-x-2">
                                                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

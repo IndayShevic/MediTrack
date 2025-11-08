@@ -51,12 +51,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $users = db()->query("
     SELECT u.id, u.email, u.role, u.purok_id, 
            CONCAT(IFNULL(u.first_name,''),' ',IFNULL(u.last_name,'')) AS name, 
-           u.created_at, p.name AS purok_name, b.name AS barangay_name
+           u.created_at, p.name AS purok_name, b.name AS barangay_name,
+           r.date_of_birth
     FROM users u 
     LEFT JOIN puroks p ON u.purok_id = p.id 
     LEFT JOIN barangays b ON p.barangay_id = b.id 
+    LEFT JOIN residents r ON r.user_id = u.id
     ORDER BY u.created_at DESC
 ")->fetchAll();
+
+// Calculate age for resident users
+foreach ($users as &$user) {
+    if ($user['role'] === 'resident' && !empty($user['date_of_birth'])) {
+        $birth_date = new DateTime($user['date_of_birth']);
+        $today = new DateTime();
+        $user['age'] = $today->diff($birth_date)->y;
+        $user['is_senior'] = $user['age'] >= 60;
+    } else {
+        $user['age'] = null;
+        $user['is_senior'] = false;
+    }
+}
+unset($user); // Break reference
 
 $puroks = db()->query("
     SELECT p.id, p.name, b.name AS barangay_name 
@@ -594,6 +610,7 @@ foreach ($users as $user) {
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
@@ -645,6 +662,22 @@ foreach ($users as $user) {
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                                 <?php echo htmlspecialchars(ucfirst($u['role'])); ?>
                                             </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Age (only for residents) -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <?php if ($u['role'] === 'resident' && isset($u['age']) && $u['age'] !== null): ?>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-sm text-gray-900"><?php echo (int)$u['age']; ?> years</span>
+                                                <?php if ($u['is_senior']): ?>
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                                        Senior
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="text-sm text-gray-400">—</span>
                                         <?php endif; ?>
                                     </td>
                                     

@@ -198,7 +198,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $middle_initial = trim($member['middle_initial'] ?? '');
             $last_name = trim($member['last_name'] ?? '');
             $relationship = trim($member['relationship'] ?? '');
+            $relationship_other = trim($member['relationship_other'] ?? '');
             $date_of_birth = $member['date_of_birth'] ?? '';
+            
+            // If "Other" is selected, use the custom relationship text
+            if ($relationship === 'Other' && !empty($relationship_other)) {
+                $relationship = preg_replace('/[^A-Za-zÀ-ÿ\' -]/', '', $relationship_other);
+            }
             
             // Only validate if at least one field is filled
             if (!empty($first_name) || !empty($last_name) || !empty($relationship) || !empty($date_of_birth)) {
@@ -224,6 +230,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (empty($relationship)) {
                     $errors[] = "Family member " . ($index + 1) . ": Relationship is required.";
+                } elseif ($relationship === 'Other' && empty($relationship_other)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Please specify the relationship when 'Other' is selected.";
                 }
                 
                 if (empty($date_of_birth)) {
@@ -616,7 +624,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                                 <div>
                                     <label class="form-label">Relationship</label>
-                                    <select name="family_members[0][relationship]" class="form-input">
+                                    <select name="family_members[0][relationship]" class="form-input" onchange="handleRelationshipChangeRegister(this, 0)">
                                         <option value="">Select Relationship</option>
                                         <option value="Father">Father</option>
                                         <option value="Mother">Mother</option>
@@ -624,10 +632,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <option value="Daughter">Daughter</option>
                                         <option value="Brother">Brother</option>
                                         <option value="Sister">Sister</option>
+                                        <option value="Husband">Husband</option>
+                                        <option value="Wife">Wife</option>
+                                        <option value="Spouse">Spouse</option>
                                         <option value="Grandfather">Grandfather</option>
                                         <option value="Grandmother">Grandmother</option>
+                                        <option value="Uncle">Uncle</option>
+                                        <option value="Aunt">Aunt</option>
+                                        <option value="Nephew">Nephew</option>
+                                        <option value="Niece">Niece</option>
+                                        <option value="Cousin">Cousin</option>
                                         <option value="Other">Other</option>
                                     </select>
+                                    <input type="text" 
+                                           name="family_members[0][relationship_other]" 
+                                           id="relationship_other_register_0"
+                                           class="form-input mt-2 hidden" 
+                                           placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
+                                           maxlength="50" />
                                     <div class="error-message" id="family_member_0_relationship_error"></div>
                                 </div>
                                 <div>
@@ -1432,7 +1454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div>
                         <label class="form-label">Relationship</label>
-                        <select name="family_members[${familyMemberCount}][relationship]" class="form-input">
+                        <select name="family_members[${familyMemberCount}][relationship]" class="form-input" onchange="handleRelationshipChangeRegister(this, ${familyMemberCount})">
                             <option value="">Select Relationship</option>
                             <option value="Father">Father</option>
                             <option value="Mother">Mother</option>
@@ -1440,10 +1462,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="Daughter">Daughter</option>
                             <option value="Brother">Brother</option>
                             <option value="Sister">Sister</option>
+                            <option value="Husband">Husband</option>
+                            <option value="Wife">Wife</option>
+                            <option value="Spouse">Spouse</option>
                             <option value="Grandfather">Grandfather</option>
                             <option value="Grandmother">Grandmother</option>
+                            <option value="Uncle">Uncle</option>
+                            <option value="Aunt">Aunt</option>
+                            <option value="Nephew">Nephew</option>
+                            <option value="Niece">Niece</option>
+                            <option value="Cousin">Cousin</option>
                             <option value="Other">Other</option>
                         </select>
+                        <input type="text" 
+                               name="family_members[${familyMemberCount}][relationship_other]" 
+                               id="relationship_other_register_${familyMemberCount}"
+                               class="form-input mt-2 hidden" 
+                               placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
+                               maxlength="50" />
                         <div class="error-message" id="family_member_${familyMemberCount}_relationship_error"></div>
                     </div>
                     <div>
@@ -1525,6 +1561,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Initialize remove buttons
         updateRemoveButtons();
+    </script>
+    
+    <script>
+        // Handle relationship change to show/hide custom relationship input
+        function handleRelationshipChangeRegister(selectElement, memberIndex) {
+            const otherInput = document.getElementById('relationship_other_register_' + memberIndex);
+            if (otherInput) {
+                if (selectElement.value === 'Other') {
+                    otherInput.classList.remove('hidden');
+                    otherInput.required = true;
+                } else {
+                    otherInput.classList.add('hidden');
+                    otherInput.value = '';
+                    otherInput.required = false;
+                }
+            }
+        }
     </script>
 </body>
 </html>

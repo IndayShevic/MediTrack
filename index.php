@@ -124,43 +124,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Debug: Log processed data
     error_log('Processed data - Email: ' . $email . ', First: ' . $first . ', Last: ' . $last . ', Purok: ' . $purok_id);
     
-    // Validation rules
+    // Sanitize input data - remove banned characters and prevent HTML/script injection
+    function sanitizeInputBackend($value, $pattern = null) {
+        if (empty($value)) return '';
+        
+        // Remove script tags and HTML tags (prevent XSS)
+        $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi', '', $value);
+        $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+        
+        // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+        $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+        $sanitized = preg_replace($banned, '', $sanitized);
+        
+        // Remove control characters and emojis
+        $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+        $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+        
+        // Trim leading/trailing spaces
+        $sanitized = trim($sanitized);
+        
+        // Apply pattern if provided
+        if ($pattern && $sanitized) {
+            $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+        }
+        
+        // HTML entity encoding for security (but decode for storage if needed)
+        // Note: We'll use htmlspecialchars when displaying, not when storing
+        return $sanitized;
+    }
+    
+    // Validation rules with comprehensive sanitization
+    // First name validation (letters only)
     if (empty($first) || strlen($first) < 2) {
         $errors[] = 'First name must be at least 2 characters long.';
+    } elseif (preg_match('/\d/', $first)) {
+        $errors[] = 'Only letters, spaces, hyphens, and apostrophes are allowed.';
+    } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first)) {
+        $errors[] = 'Only letters, spaces, hyphens, and apostrophes are allowed.';
+    } else {
+        $first = sanitizeInputBackend($first, 'A-Za-zÀ-ÿ\' -');
     }
     
+    // Last name validation (letters only)
     if (empty($last) || strlen($last) < 2) {
         $errors[] = 'Last name must be at least 2 characters long.';
-    }
-    
-    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Please enter a valid email address.';
-    }
-    
-    if (empty($password) || strlen($password) < 8) {
-        $errors[] = 'Password must be at least 8 characters long.';
-    }
-    
-    if (empty($dob)) {
-        $errors[] = 'Please select your date of birth.';
+    } elseif (preg_match('/\d/', $last)) {
+        $errors[] = 'Only letters, spaces, hyphens, and apostrophes are allowed.';
+    } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last)) {
+        $errors[] = 'Only letters, spaces, hyphens, and apostrophes are allowed.';
     } else {
-        // Age validation - must be 18+
-        $birthDate = new DateTime($dob);
-        $today = new DateTime();
-        $age = $today->diff($birthDate)->y;
-        
-        if ($age < 18) {
-            $errors[] = 'You must be at least 18 years old to register.';
+        $last = sanitizeInputBackend($last, 'A-Za-zÀ-ÿ\' -');
+    }
+    
+    // Middle initial validation
+    if (!empty($middle)) {
+        $middle = sanitizeInputBackend($middle, 'A-Za-zÀ-ÿ');
+        if (strlen($middle) > 1) {
+            $errors[] = 'Middle initial can only be 1 character.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ]+$/', $middle)) {
+            $errors[] = 'Middle initial can only contain letters.';
         }
     }
     
-    // Middle initial validation - if provided, must be exactly 1 character
-    if (!empty($middle) && strlen(trim($middle)) > 1) {
-        $errors[] = 'Middle initial can only be 1 character.';
+    // Email validation
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Please enter a valid email address.';
+    } elseif (!preg_match('/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}$/', $email)) {
+        $errors[] = 'Email format is invalid.';
     }
     
-    if (empty($phone)) {
-        $errors[] = 'Please enter your phone number.';
+    // Password validation (comprehensive check)
+    if (empty($password) || strlen($password) < 8) {
+        $errors[] = 'Password must be at least 8 characters long.';
+    } else {
+        $hasLetter = preg_match('/[A-Za-z]/', $password);
+        $hasNumber = preg_match('/\d/', $password);
+        $hasSpecial = preg_match('/[@$!%*?&]/', $password);
+        $hasBanned = preg_match('/[#^&*()={}\[\]:;"<>?\/\\\|~`_]/', $password);
+        
+        if (!$hasLetter) {
+            $errors[] = 'Password must contain at least 1 letter.';
+        }
+        if (!$hasNumber) {
+            $errors[] = 'Password must contain at least 1 number.';
+        }
+        if (!$hasSpecial) {
+            $errors[] = 'Password must contain at least 1 special character (@$!%*?&).';
+        }
+        if ($hasBanned) {
+            $errors[] = 'Password contains invalid characters. Only @$!%*?& are allowed as special characters.';
+        }
+    }
+    
+    // Date of birth validation with age verification (exact formula: isAdult)
+    if (empty($dob)) {
+        $errors[] = 'Please select your date of birth.';
+    } else {
+        $birthDate = new DateTime($dob);
+        $today = new DateTime();
+        
+        if ($birthDate > $today) {
+            $errors[] = 'Date of birth cannot be in the future.';
+        } else {
+            // Calculate age using exact formula: isAdult function
+            $age = (int)$today->format('Y') - (int)$birthDate->format('Y');
+            $m = (int)$today->format('m') - (int)$birthDate->format('m');
+            $d = (int)$today->format('d') - (int)$birthDate->format('d');
+            
+            if ($m < 0 || ($m === 0 && $d < 0)) {
+                $age--;
+            }
+        
+        if ($age < 18) {
+                $errors[] = 'You must be 18 years or older to create a MediTrack account.';
+            } elseif ($age > 120) {
+                $errors[] = 'Please enter a valid date of birth.';
+            }
+        }
+    }
+    
+    // Phone number validation (optional but if provided, must be valid)
+    if (!empty($phone)) {
+        $phone = sanitizeInputBackend($phone, '0-9+ ');
+        if (!preg_match('/^[0-9+ ]{7,15}$/', $phone)) {
+            $errors[] = 'Phone number can only contain digits, spaces, and + sign (7-15 characters).';
+        }
+        $phoneCleaned = preg_replace('/\s/', '', $phone);
+        if (strlen($phoneCleaned) < 7 || strlen($phoneCleaned) > 15) {
+            $errors[] = 'Phone number must be between 7 and 15 digits.';
+        }
     }
     
     if (empty($barangay_id)) {
@@ -179,25 +271,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $middle_initial = trim($member['middle_initial'] ?? '');
             $last_name = trim($member['last_name'] ?? '');
             $relationship = trim($member['relationship'] ?? '');
+            $relationship_other = trim($member['relationship_other'] ?? '');
             $date_of_birth = $member['date_of_birth'] ?? '';
+            
+            // If "Other" is selected, use the custom relationship text
+            if ($relationship === 'Other' && !empty($relationship_other)) {
+                $relationship = sanitizeInputBackend($relationship_other, 'A-Za-zÀ-ÿ\' -');
+            }
             
             // Only validate if at least one field is filled
             if (!empty($first_name) || !empty($last_name) || !empty($relationship) || !empty($date_of_birth)) {
+                // Sanitize and validate first name (letters only)
                 if (empty($first_name) || strlen($first_name) < 2) {
                     $errors[] = "Family member " . ($index + 1) . ": First name must be at least 2 characters long.";
+                } elseif (preg_match('/\d/', $first_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Only letters, spaces, hyphens, and apostrophes are allowed.";
+                } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Only letters, spaces, hyphens, and apostrophes are allowed.";
+                } else {
+                    $first_name = sanitizeInputBackend($first_name, 'A-Za-zÀ-ÿ\' -');
                 }
                 
+                // Sanitize and validate last name (letters only)
                 if (empty($last_name) || strlen($last_name) < 2) {
                     $errors[] = "Family member " . ($index + 1) . ": Last name must be at least 2 characters long.";
+                } elseif (preg_match('/\d/', $last_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Only letters, spaces, hyphens, and apostrophes are allowed.";
+                } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last_name)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Only letters, spaces, hyphens, and apostrophes are allowed.";
+                } else {
+                    $last_name = sanitizeInputBackend($last_name, 'A-Za-zÀ-ÿ\' -');
                 }
                 
                 // Middle initial validation for family members
-                if (!empty($middle_initial) && strlen(trim($middle_initial)) > 1) {
+                if (!empty($middle_initial)) {
+                    $middle_initial = sanitizeInputBackend($middle_initial, 'A-Za-zÀ-ÿ');
+                    if (strlen($middle_initial) > 1) {
                     $errors[] = "Family member " . ($index + 1) . ": Middle initial can only be 1 character.";
+                    } elseif (!preg_match('/^[A-Za-zÀ-ÿ]+$/', $middle_initial)) {
+                        $errors[] = "Family member " . ($index + 1) . ": Middle initial can only contain letters.";
+                    }
+                }
+                
+                // Date of birth validation
+                if (!empty($date_of_birth)) {
+                    $birthDate = new DateTime($date_of_birth);
+                    $today = new DateTime();
+                    if ($birthDate > $today) {
+                        $errors[] = "Family member " . ($index + 1) . ": Date of birth cannot be in the future.";
+                    }
                 }
                 
                 if (empty($relationship)) {
                     $errors[] = "Family member " . ($index + 1) . ": Relationship is required.";
+                } elseif ($relationship === 'Other' && empty($relationship_other)) {
+                    $errors[] = "Family member " . ($index + 1) . ": Please specify the relationship when 'Other' is selected.";
                 }
                 
                 if (empty($date_of_birth)) {
@@ -1461,229 +1589,1408 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             opacity: 1;
         }
         
-        /* Login Modal Enhancements */
-        .login-modal-header {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #7c3aed 100%);
-            overflow: hidden;
+        /* Modern Minimal Login Modal Styles */
+        #loginModal {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        .login-modal-container {
+            width: 100%;
+            max-width: 400px;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.12),
+                0 0 0 1px rgba(59, 130, 246, 0.08),
+                0 0 0 2px transparent;
             position: relative;
+            overflow: hidden;
+            animation: modalFadeInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: box-shadow 0.3s ease;
         }
         
-        .login-modal-header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -20%;
-            width: 200px;
-            height: 200px;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: pulse 4s ease-in-out infinite;
+        /* Gradient border effect on hover */
+        .login-modal-container:hover {
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(59, 130, 246, 0.2),
+                0 0 0 2px rgba(139, 92, 246, 0.15);
         }
         
-        .login-modal-header::after {
-            content: '';
-            position: absolute;
-            bottom: -30%;
-            left: -10%;
-            width: 150px;
-            height: 150px;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: pulse 5s ease-in-out infinite;
+        @keyframes modalFadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
         }
         
-        /* Mini Logo for Login Modal */
-        .login-logo-container {
+        /* Logo container */
+        .login-logo-wrapper {
+            position: relative;
             display: flex;
             justify-content: center;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-top: 2rem;
+            background: transparent;
+            width: 100%;
+        }
+        
+        .login-logo-wrapper img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+            background: transparent !important;
+            border: none !important;
+            outline: none !important;
+            border-radius: 0;
+            padding: 0;
+            margin: 0;
+            display: block;
+            box-shadow: none !important;
+            -webkit-box-shadow: none !important;
+        }
+        
+        /* Canvas for processed logo (hidden, used for processing) */
+        .login-logo-canvas {
+            display: none;
+        }
+        
+        /* Remove any potential background box from logo wrapper */
+        .login-logo-wrapper::before,
+        .login-logo-wrapper::after {
+            display: none !important;
+            content: none !important;
+        }
+        
+        /* Modal header text */
+        .login-modal-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            letter-spacing: -0.02em;
+        }
+        
+        .login-modal-subtitle {
+            font-size: 0.875rem;
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        /* Input fields */
+        .login-input-wrapper {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+        
+        .login-input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1.25rem;
+            height: 1.25rem;
+            color: #9ca3af;
+            pointer-events: none;
+            transition: color 0.2s ease;
+        }
+        
+        .login-input-field {
+            width: 100%;
+            padding: 0.875rem 1rem 0.875rem 3rem;
+            background: #ffffff;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            color: #111827;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+        
+        .login-input-field::placeholder {
+            color: #9ca3af;
+        }
+        
+        .login-input-field:focus {
+            background: #ffffff;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+        
+        .login-input-wrapper:focus-within .login-input-icon {
+            color: #3b82f6;
+        }
+        
+        /* Password toggle button */
+        .login-password-toggle {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease;
+        }
+        
+        .login-password-toggle:hover {
+            color: #6b7280;
+        }
+        
+        .login-password-toggle svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+        
+        /* Forgot password link */
+        .login-forgot-link {
+            display: block;
+            text-align: right;
+            font-size: 0.8125rem;
+            color: #6b7280;
+            text-decoration: none;
+            margin-top: -0.75rem;
+            margin-bottom: 1.5rem;
+            transition: color 0.2s ease;
+        }
+        
+        .login-forgot-link:hover {
+            color: #3b82f6;
+        }
+        
+        /* Error message */
+        .login-error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .login-error-message svg {
+            width: 1.125rem;
+            height: 1.125rem;
+            flex-shrink: 0;
+        }
+        
+        /* Sign in button */
+        .login-submit-button {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
             margin-bottom: 1.5rem;
         }
         
-        .login-logo-mini {
-            position: relative;
-            width: 80px;
-            height: 80px;
-            transform-style: preserve-3d;
-            animation: logoFloat 4s ease-in-out infinite;
-        }
-        
-        .login-logo-cross-mini {
+        .login-submit-button::before {
+            content: '';
             position: absolute;
+            top: 0;
+            left: -100%;
             width: 100%;
             height: 100%;
-            transform: translateZ(15px);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
         }
         
-        .login-logo-cross-mini::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            width: 100%;
-            height: 25%;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-            border-radius: 8px;
-            transform: translateY(-50%);
-            box-shadow: 
-                0 6px 15px rgba(0, 0, 0, 0.2),
-                inset 0 2px 4px rgba(255, 255, 255, 0.5),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .login-logo-cross-mini::after {
-            content: '';
-            position: absolute;
-            left: 50%;
-            top: 0;
-            width: 25%;
-            height: 100%;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-            border-radius: 8px;
-            transform: translateX(-50%);
-            box-shadow: 
-                0 6px 15px rgba(0, 0, 0, 0.2),
-                inset 0 2px 4px rgba(255, 255, 255, 0.5),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .login-logo-pill-mini {
-            position: absolute;
-            width: 24px;
-            height: 55px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.9) 100%);
-            border-radius: 12px;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) translateZ(20px);
-            box-shadow: 
-                0 6px 15px rgba(0, 0, 0, 0.25),
-                inset 0 2px 4px rgba(255, 255, 255, 0.9),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .login-logo-pill-cap-mini {
-            position: absolute;
-            width: 24px;
-            height: 18px;
-            background: linear-gradient(180deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.9) 100%);
-            border-radius: 12px 12px 0 0;
-            top: 0;
-            left: 0;
-            box-shadow: 
-                0 3px 8px rgba(34, 197, 94, 0.3),
-                inset 0 1px 3px rgba(255, 255, 255, 0.5);
-        }
-        
-        .login-logo-checkmark-mini {
-            position: absolute;
-            width: 35px;
-            height: 35px;
-            bottom: 10px;
-            right: 8px;
-            transform: translateZ(25px) rotate(-10deg);
-        }
-        
-        .login-logo-checkmark-mini::before {
-            content: '';
-            position: absolute;
-            width: 6px;
-            height: 18px;
-            background: linear-gradient(135deg, rgba(249, 115, 22, 0.95) 0%, rgba(234, 88, 12, 0.95) 100%);
-            border-radius: 3px;
-            bottom: 0;
-            left: 8px;
-            transform: rotate(45deg);
-            box-shadow: 
-                0 3px 10px rgba(249, 115, 22, 0.4),
-                inset 0 1px 2px rgba(255, 255, 255, 0.5);
-        }
-        
-        .login-logo-checkmark-mini::after {
-            content: '';
-            position: absolute;
-            width: 6px;
-            height: 12px;
-            background: linear-gradient(135deg, rgba(249, 115, 22, 0.95) 0%, rgba(234, 88, 12, 0.95) 100%);
-            border-radius: 3px;
-            bottom: 5px;
-            right: 0;
-            transform: rotate(-45deg);
-            box-shadow: 
-                0 3px 10px rgba(249, 115, 22, 0.4),
-                inset 0 1px 2px rgba(255, 255, 255, 0.5);
-        }
-        
-        /* Login Input Groups */
-        .login-input-group {
-            animation: fadeInUp 0.5s ease forwards;
-        }
-        
-        .login-input-group:nth-child(1) {
-            animation-delay: 0.1s;
-        }
-        
-        .login-input-group:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-        
-        .login-input-group input:focus {
+        .login-submit-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
         }
         
-        /* Login Submit Button */
-        .login-submit-btn {
-            position: relative;
-            overflow: hidden;
+        .login-submit-button:hover::before {
+            left: 100%;
         }
         
-        .login-submit-btn::before {
+        .login-submit-button:active {
+            transform: translateY(0);
+        }
+        
+        .login-submit-button.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        
+        .login-submit-button.loading::after {
             content: '';
             position: absolute;
+            width: 1rem;
+            height: 1rem;
             top: 50%;
             left: 50%;
-            width: 0;
-            height: 0;
+            margin-left: -0.5rem;
+            margin-top: -0.5rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.3);
-            transform: translate(-50%, -50%);
-            transition: width 0.6s, height 0.6s;
+            animation: spin 0.6s linear infinite;
         }
         
-        .login-submit-btn:hover::before {
-            width: 400px;
-            height: 400px;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
         
-        /* Register Modal Header Enhancements */
-        .register-modal-header {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #7c3aed 100%);
-            overflow: hidden;
+        /* Register link section */
+        .login-register-section {
+            text-align: center;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .login-register-text {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 0.75rem;
+        }
+        
+        .login-register-link {
+            color: #3b82f6;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .login-register-link:hover {
+            color: #8b5cf6;
+        }
+        
+        /* Close button */
+        .login-close-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #e5e7eb;
+            border-radius: 50%;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+        
+        .login-close-button:hover {
+            background: #f3f4f6;
+            color: #111827;
+            transform: rotate(90deg);
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .login-modal-container {
+                background: #ffffff;
+            box-shadow: 
+                    0 20px 60px rgba(0, 0, 0, 0.4),
+                    0 0 0 1px rgba(59, 130, 246, 0.2);
+            }
+            
+            .login-modal-title {
+                color: #111827;
+            }
+            
+            .login-modal-subtitle {
+                color: #6b7280;
+            }
+            
+            .login-input-field {
+                background: #ffffff;
+                border-color: #e5e7eb;
+                color: #111827;
+            }
+            
+            .login-input-field:focus {
+                background: #ffffff;
+                border-color: #3b82f6;
+            }
+            
+            .login-register-section {
+                border-top-color: #e5e7eb;
+            }
+            
+            .login-close-button {
+                background: rgba(255, 255, 255, 0.9);
+                border-color: #e5e7eb;
+                color: #6b7280;
+            }
+            
+            .login-close-button:hover {
+                background: #f3f4f6;
+                color: #111827;
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .login-modal-container {
+                max-width: calc(100% - 2rem);
+                border-radius: 20px;
+            }
+            
+            .login-modal-title {
+                font-size: 1.5rem;
+            }
+        }
+        
+        /* Modern Registration Modal Styles */
+        #registerModal {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        .register-modal-container {
+            width: 100%;
+            max-width: 900px;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 
+                0 25px 70px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(59, 130, 246, 0.08);
             position: relative;
+            overflow: hidden;
+            animation: modalFadeInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Enhanced Gradient Header */
+        .register-modal-header {
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+            padding: 2.5rem 2.5rem 2rem 2.5rem;
+            position: relative;
+            overflow: hidden;
+            border-radius: 1.5rem 1.5rem 0 0;
         }
         
         .register-modal-header::before {
             content: '';
             position: absolute;
             top: -50%;
-            right: -20%;
-            width: 200px;
-            height: 200px;
+            right: -10%;
+            width: 400px;
+            height: 400px;
             background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
             border-radius: 50%;
-            animation: pulse 4s ease-in-out infinite;
+            animation: float 6s ease-in-out infinite;
         }
         
         .register-modal-header::after {
             content: '';
             position: absolute;
             bottom: -30%;
-            left: -10%;
-            width: 150px;
-            height: 150px;
+            left: -5%;
+            width: 250px;
+            height: 250px;
             background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
             border-radius: 50%;
-            animation: pulse 5s ease-in-out infinite;
+            animation: float 8s ease-in-out infinite reverse;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) translateX(0px); }
+            50% { transform: translateY(-20px) translateX(10px); }
+        }
+        
+        .register-header-content {
+            position: relative;
+            z-index: 10;
+        }
+        
+        .register-modal-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #ffffff;
+            margin: 0;
+            letter-spacing: -0.03em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .register-modal-subtitle {
+            font-size: 0.9375rem;
+            color: rgba(255, 255, 255, 0.95);
+            margin-top: 0.5rem;
+            line-height: 1.5;
+        }
+        
+        .register-close-button {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            width: 2.75rem;
+            height: 2.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            color: #ffffff;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 20;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .register-close-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg) scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .register-close-button:active {
+            transform: rotate(90deg) scale(0.95);
+        }
+        
+        /* Step Indicator */
+        .register-step-indicator {
+            background: #ffffff;
+            padding: 1.5rem 2.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .step-indicator-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+        
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .step-number {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .step-number.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        .step-number.inactive {
+            background: #f3f4f6;
+            color: #9ca3af;
+        }
+        
+        .step-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6b7280;
+            transition: color 0.3s ease;
+        }
+        
+        .step-item.active .step-label {
+            color: #111827;
+            font-weight: 600;
+        }
+        
+        .step-divider {
+            width: 3rem;
+            height: 2px;
+            background: #e5e7eb;
+            transition: background 0.3s ease;
+        }
+        
+        .step-divider.completed {
+            background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+        }
+        
+        /* Form Section */
+        .register-form-body {
+            padding: 2rem 2.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .form-section {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-section-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            background: #ffffff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .form-section-icon svg {
+            display: block;
+        }
+        
+        /* Modern Input Fields */
+        .register-input-field {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: #ffffff;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            color: #111827;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+            box-sizing: border-box;
+            height: 3rem; /* Fixed height to prevent layout shift */
+            line-height: 1.5;
+        }
+        
+        /* Select fields - CRITICAL: Need sufficient padding to prevent text cutoff */
+        select.register-input-field {
+            padding-right: 3.5rem !important; /* Space for dropdown arrow */
+            padding-top: 0.75rem !important;
+            padding-bottom: 0.75rem !important;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+            line-height: 1.5;
+            height: 3rem;
+            display: block;
+            vertical-align: middle;
+        }
+        
+        /* Select fields with icon need extra right padding for dropdown arrow */
+        select.register-input-field.has-icon {
+            padding-left: 3rem !important; /* Space for icon on left */
+            padding-right: 3.5rem !important; /* Space for dropdown arrow on right */
+            padding-top: 0.75rem !important;
+            padding-bottom: 0.75rem !important;
+        }
+        
+        /* Ensure selected text in select is fully visible on all states */
+        select.register-input-field:focus,
+        select.register-input-field:active,
+        select.register-input-field:hover {
+            padding-right: 3.5rem !important;
+        }
+        
+        /* Select option text should not be cut in dropdown */
+        select.register-input-field option {
+            white-space: normal;
+            padding: 0.5rem;
+            word-wrap: break-word;
+        }
+        
+        .register-input-field::placeholder {
+            color: #9ca3af;
+        }
+        
+        .register-input-field:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+        
+        .register-input-wrapper {
+            position: relative;
+            min-height: 3.5rem; /* Reserve minimum height to prevent layout shift */
+        }
+        
+        .register-input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 1.5rem; /* Center of 3rem input field */
+            transform: translateY(-50%);
+            width: 1.25rem;
+            height: 1.25rem;
+            color: #9ca3af;
+            pointer-events: none;
+            transition: color 0.2s ease;
+            display: block;
+            z-index: 10;
+            margin: 0;
+            padding: 0;
+            will-change: auto;
+            line-height: 1;
+        }
+        
+        .register-input-icon svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            vertical-align: middle;
+        }
+        
+        .register-input-wrapper:focus-within .register-input-icon {
+            color: #3b82f6;
+        }
+        
+        .register-input-field.has-icon {
+            padding-left: 3rem;
+            padding-right: 1rem;
+        }
+        
+        /* Override for select fields with icon - need more right padding for dropdown arrow */
+        select.register-input-field.has-icon {
+            padding-left: 3rem !important;
+            padding-right: 3.5rem !important; /* Space for icon on left + dropdown arrow on right */
+        }
+        
+        .register-input-field {
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Right side icons (password toggle, calendar, dropdown arrow, etc.) */
+        .register-input-wrapper .absolute.right-0 {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            top: 50%;
+            transform: translateY(-50%);
+            right: 0.75rem !important;
+            width: auto;
+            min-width: 2rem;
+            height: auto;
+            pointer-events: none;
+            z-index: 5;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .register-input-wrapper .absolute.right-0 svg {
+            display: block;
+            flex-shrink: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+        
+        /* Dropdown arrow specific styling */
+        .register-dropdown-arrow {
+            position: absolute;
+            right: 0.75rem;
+            top: 1.5rem; /* Center of 3rem input field */
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 5;
+            display: block;
+            width: 1.25rem;
+            height: 1.25rem;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .register-dropdown-arrow svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            vertical-align: middle;
+        }
+        
+        /* Ensure select text area doesn't overlap with arrow */
+        .register-input-wrapper select.register-input-field {
+            text-indent: 0;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        
+        /* Password toggle button */
+        .password-toggle-btn {
+            position: absolute;
+            right: 0.75rem;
+            top: 1.5rem; /* Center of 3rem input field */
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            transition: color 0.2s ease;
+            z-index: 10;
+            margin: 0;
+            width: 1.5rem;
+            height: 1.5rem;
+            will-change: auto;
+        }
+        
+        .password-toggle-btn svg {
+            display: block;
+            width: 1.25rem;
+            height: 1.25rem;
+            vertical-align: middle;
+        }
+        
+        .password-toggle-btn:hover {
+            color: #374151;
+        }
+        
+        .password-toggle-btn svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            display: block;
+            flex-shrink: 0;
+        }
+        
+        /* Date input calendar icon */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            position: absolute;
+            right: 0.75rem;
+            top: 1.5rem; /* Center of 3rem input field */
+            transform: translateY(-50%);
+            cursor: pointer;
+            opacity: 0.6;
+            z-index: 1;
+            width: 1.25rem;
+            height: 1.25rem;
+            margin: 0;
+            padding: 0;
+        }
+        
+        input[type="date"].has-icon {
+            padding-right: 3rem;
+        }
+        
+        /* Fix date input calendar icon positioning */
+        .register-input-wrapper input[type="date"] {
+            position: relative;
+        }
+        
+        .register-input-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+            position: absolute;
+            right: 0.75rem;
+            top: 1.5rem; /* Fixed position: half of input height (3rem / 2) */
+            transform: translateY(-50%);
+            cursor: pointer;
+            opacity: 0.6;
+            z-index: 1;
+        }
+        
+        .form-section-title svg {
+            flex-shrink: 0;
+        }
+        
+        /* Validation Messages */
+        .register-validation-message {
+            font-size: 0.8125rem;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        
+        .register-validation-message svg {
+            flex-shrink: 0;
+            margin-top: 0.125rem;
+        }
+        
+        /* Validation message container - reserves space to prevent layout shift */
+        .validation-message-container {
+            min-height: 1.5rem;
+            margin-top: 0.5rem;
+            position: relative;
+            width: 100%;
+        }
+        
+        .field-validation-message {
+            font-size: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            line-height: 1.4;
+            position: relative;
+            width: 100%;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .field-validation-message svg {
+            flex-shrink: 0;
+            margin-top: 0.125rem;
+            width: 1rem;
+            height: 1rem;
+        }
+        
+        .field-validation-message span {
+            line-height: 1.4;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .register-validation-message.error {
+            color: #dc2626;
+        }
+        
+        .register-validation-message.success {
+            color: #16a34a;
+        }
+        
+        .register-validation-message.info {
+            color: #6b7280;
+        }
+        
+        /* Email Validation Status */
+        .email-validation-status {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .email-validation-status.success {
+            background-color: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #16a34a;
+        }
+        
+        .email-validation-status.error {
+            background-color: #fef2f2;
+            border: 1px solid #fca5a5;
+            color: #dc2626;
+        }
+        
+        .email-validation-status.warning {
+            background-color: #fffbeb;
+            border: 1px solid #fcd34d;
+            color: #d97706;
+        }
+        
+        .email-validation-status.loading {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            color: #6b7280;
+        }
+        
+        /* MailboxLayer Badge */
+        .mailboxlayer-badge {
+            padding: 0.5rem 0.75rem;
+            background-color: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        
+        .tooltip-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip-content {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background-color: #1f2937;
+            color: #ffffff;
+            font-size: 0.75rem;
+            border-radius: 6px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 1000;
+            max-width: 250px;
+            white-space: normal;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tooltip-content::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #1f2937;
+        }
+        
+        .tooltip-wrapper:hover .tooltip-content {
+            opacity: 1;
+        }
+        
+        /* Disabled Button */
+        .register-primary-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .register-primary-button:disabled:hover {
+            box-shadow: none !important;
+            transform: none !important;
+        }
+        
+        /* Buttons */
+        .register-primary-button {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .register-primary-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .register-primary-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .register-primary-button:hover::before {
+            left: 100%;
+        }
+        
+        .register-secondary-link {
+            display: block;
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.875rem;
+            text-decoration: none;
+            margin-top: 1rem;
+            transition: color 0.2s ease;
+        }
+        
+        .register-secondary-link:hover {
+            color: #111827;
+        }
+        
+        /* Back Button */
+        .register-back-button {
+            padding: 0.875rem 1.5rem;
+            background: #ffffff;
+            color: #6b7280;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .register-back-button:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+            color: #111827;
+        }
+        
+        /* Step Content Animation */
+        .step-content {
+            animation: fadeInSlide 0.4s ease-out;
+        }
+        
+        @keyframes fadeInSlide {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Family Members Section */
+        .family-members-section {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .family-member-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        
+        .family-member-card:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .family-member-card.expanded {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.12);
+        }
+        
+        .family-member-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+        
+        .family-member-header:hover {
+            background-color: #f9fafb;
+        }
+        
+        .family-member-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .family-member-title {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .family-member-chevron {
+            width: 1.25rem;
+            height: 1.25rem;
+            color: #6b7280;
+            transition: transform 0.3s ease;
+        }
+        
+        .family-member-card.expanded .family-member-chevron {
+            transform: rotate(180deg);
+        }
+        
+        .family-member-header-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .remove-family-member-btn {
+            background: transparent;
+            border: none;
+            color: #dc2626;
+            padding: 0.375rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .remove-family-member-btn:hover {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+        
+        .family-member-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0 1.25rem;
+        }
+        
+        .family-member-card.expanded .family-member-content {
+            max-height: 500px;
+            padding: 0 1.25rem 1.25rem 1.25rem;
+        }
+        
+        .family-member-fields {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .family-member-fields-row2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .family-member-fields {
+                grid-template-columns: 1fr;
+            }
+            
+            .family-member-fields-row2 {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .add-member-button {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .add-member-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Review Section */
+        .review-section {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .review-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .review-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .review-card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .edit-link {
+            color: #3b82f6;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        
+        .edit-link:hover {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+        
+        .review-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .review-info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .review-info-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        
+        .review-info-value {
+            font-size: 0.875rem;
+            color: #111827;
+            font-weight: 400;
+        }
+        
+        /* Submit Button */
+        .register-submit-button {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .register-submit-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(22, 163, 74, 0.4);
+        }
+        
+        /* Email Verification Modal */
+        .verification-modal-container {
+            width: 100%;
+            max-width: 450px;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 
+                0 25px 70px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(59, 130, 246, 0.08);
+            position: relative;
+            overflow: hidden;
+            animation: modalFadeInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        .verification-code-input {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.5rem;
+            letter-spacing: 0.5rem;
+            text-align: center;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .verification-code-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            outline: none;
+        }
+        
+        .resend-timer {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 1rem;
+        }
+        
+        .resend-timer.active {
+            color: #3b82f6;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .register-modal-container {
+                max-width: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+            
+            .register-modal-header {
+                padding: 1.5rem 1.25rem;
+            }
+            
+            .register-form-body {
+                padding: 1.5rem 1.25rem;
+            }
+            
+            .register-step-indicator {
+                padding: 1rem 1.25rem;
+            }
+            
+            .step-label {
+                display: none;
+            }
+            
+            .step-divider {
+                width: 1.5rem;
+            }
         }
         
         /* Smooth fade in for sections */
@@ -2269,7 +3576,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php echo htmlspecialchars($brand); ?>
                 </div>
                 <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.</p>
-                <p class="text-xs sm:text-sm text-gray-500">Making healthcare accessible for everyone.</p>
+                <p class="text-xs sm:text-sm text-gray-500 mb-4">Making healthcare accessible for everyone.</p>
+                
+               
+                    <p class="text-xs sm:text-sm text-gray-600 font-medium mb-2">Developed by:</p>
+                    <div class="flex flex-row items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500 flex-wrap">
+                        <a href="mailto:lucianocanamocanjr@gmail.com" class="hover:text-blue-600 transition-colors duration-200 whitespace-nowrap">
+                            Luciano C. Canamocan Jr.
+                        </a>
+                        <span class="text-gray-300">•</span>
+                        <a href="mailto:vicvictacatane@gmail.com" class="hover:text-blue-600 transition-colors duration-200 whitespace-nowrap">
+                            Shevic Tacatane
+                        </a>
+                    </div>
+                
             </div>
         </div>
     </footer>
@@ -2294,62 +3614,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Enhanced Registration Modal -->
-    <div id="registerModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all duration-300">
-            <!-- Enhanced Header with Logo -->
-            <div class="register-modal-header relative bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 border-b border-gray-100 p-8">
-                <button onclick="closeRegisterModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors z-20 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+    <!-- Modern Registration Modal -->
+    <div id="registerModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="register-modal-container">
+            <!-- Enhanced Gradient Header -->
+            <div class="register-modal-header">
+                <button onclick="closeRegisterModal()" class="register-close-button" aria-label="Close modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                 </button>
                 
-                <div class="relative text-center z-10">
-                    <!-- 4D Logo -->
-                    <div class="login-logo-container">
-                        <div class="login-logo-mini">
-                            <div class="login-logo-cross-mini"></div>
-                            <div class="login-logo-pill-mini">
-                                <div class="login-logo-pill-cap-mini"></div>
-                    </div>
-                            <div class="login-logo-checkmark-mini"></div>
+                <div class="register-header-content">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="register-modal-title">Create Your Account</h2>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="text-xs font-medium text-white/80 bg-white/10 px-2 py-0.5 rounded-full">Step 1 of 3</span>
+                                <span class="text-xs text-white/70">Personal Information</span>
+                            </div>
                         </div>
                     </div>
-                    
-                    <h2 class="text-3xl font-bold text-white mb-2 drop-shadow-lg">Create Your Account</h2>
-                    <p class="text-blue-100 text-sm">Join MediTrack and start managing your medicine requests</p>
+                    <p class="register-modal-subtitle" id="register-modal-subtitle">Join MediTrack and start managing your medicine requests.</p>
                 </div>
             </div>
-                
-            <!-- Clean Progress Steps -->
-            <div class="px-8 py-6 bg-white border-b border-gray-100">
-                <div class="flex items-center justify-center">
-                    <div class="flex items-center space-x-4">
-                        <div class="flex items-center">
-                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white" id="modal-step-1">1</div>
-                            <span class="ml-3 text-sm font-medium text-gray-900">Personal Info</span>
+                    
+            <!-- Step Indicator -->
+            <div class="register-step-indicator">
+                <div class="step-indicator-wrapper">
+                    <div class="step-item active" data-step="1">
+                        <div class="step-number active" id="modal-step-1">1</div>
+                        <span class="step-label">Personal Info</span>
+                </div>
+                    <div class="step-divider" id="divider-1-2"></div>
+                    <div class="step-item" data-step="2">
+                        <div class="step-number inactive" id="modal-step-2">2</div>
+                        <span class="step-label">Family Members</span>
+            </div>
+                    <div class="step-divider" id="divider-2-3"></div>
+                    <div class="step-item" data-step="3">
+                        <div class="step-number inactive" id="modal-step-3">3</div>
+                        <span class="step-label">Review</span>
                         </div>
-                        <div class="w-8 h-0.5 bg-gray-200 rounded-full"></div>
-                        <div class="flex items-center">
-                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500" id="modal-step-2">2</div>
-                            <span class="ml-3 text-sm font-medium text-gray-500">Family Members</span>
-                        </div>
-                        <div class="w-8 h-0.5 bg-gray-200 rounded-full"></div>
-                        <div class="flex items-center">
-                            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500" id="modal-step-3">3</div>
-                            <span class="ml-3 text-sm font-medium text-gray-500">Review</span>
-                        </div>
-                    </div>
                 </div>
             </div>
                 
             <!-- Form Body -->
-            <div class="p-8">
-                <form id="registerForm" action="" method="post" class="space-y-6">
+            <div class="register-form-body">
+                <form id="registerForm" action="" method="post">
                     <?php if (!empty($_SESSION['flash'])): ?>
-                        <div class="flex items-start space-x-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-shake">
-                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="register-validation-message error mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                             <span><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
@@ -2358,97 +3678,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     <!-- Step 1: Personal Information -->
                     <div id="step-1" class="step-content">
-                    
-                    <!-- Clean Personal Information Section -->
-                    <div class="bg-white rounded-xl border border-gray-200 p-8 space-y-6">
-                        <h3 class="text-xl font-semibold text-gray-900 flex items-center space-x-3">
-                            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                                <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <!-- Personal Details Section -->
+                        <div class="form-section">
+                            <div class="form-section-title">
+                                <div class="form-section-icon">
+                                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                 </svg>
                             </div>
                             <span>Personal Details</span>
-                        </h3>
+                            </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <!-- First Name -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">First Name</label>
+                                <div>
                                 <input name="first_name" required 
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                       placeholder="Juan" />
+                                           class="register-input-field" 
+                                           placeholder="First Name" />
                             </div>
                             
                             <!-- Middle Initial -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
+                                <div>
                                 <input name="middle_initial" 
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                       placeholder="D." 
+                                           class="register-input-field" 
+                                           placeholder="Middle Initial (optional)" 
                                        maxlength="1" 
                                        id="middle_initial_input" />
                             </div>
                             
                             <!-- Last Name -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Last Name</label>
+                                <div>
                                 <input name="last_name" required 
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                       placeholder="Cruz" />
+                                           class="register-input-field" 
+                                           placeholder="Last Name" />
                             </div>
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <!-- Email -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Email Address</label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
                                         </svg>
-                                    </div>
                                     <input type="email" name="email" id="email-input" required 
-                                           class="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                           placeholder="you@example.com" />
-                                    <!-- Email validation status icon -->
+                                               class="register-input-field has-icon" 
+                                               placeholder="Email Address" />
                                     <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                         <div id="email-status-icon" class="hidden">
-                                            <!-- Success icon -->
                                             <svg id="email-success-icon" class="w-5 h-5 text-green-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
-                                            <!-- Error icon -->
                                             <svg id="email-error-icon" class="w-5 h-5 text-red-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                             </svg>
-                                            <!-- Loading spinner -->
                                             <svg id="email-loading-icon" class="w-5 h-5 text-gray-400 animate-spin hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                             </svg>
                                         </div>
                                     </div>
                                 </div>
-                                <!-- Email validation message -->
-                                <div id="email-validation-message" class="hidden text-sm">
-                                    <p id="email-message-text"></p>
+                                    <!-- Email Validation Status -->
+                                    <div id="email-validation-message" class="email-validation-status hidden mt-2">
+                                        <div class="flex items-center gap-2">
+                                            <span id="email-status-icon-display"></span>
+                                            <span id="email-message-text" class="text-sm font-medium"></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- MailboxLayer API Badge -->
+                                    <div class="mailboxlayer-badge mt-2">
+                                        <div class="flex items-center gap-2 text-xs text-gray-600">
+                                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            <span>Real-time email verification via MailboxLayer API</span>
+                                            <div class="tooltip-wrapper">
+                                                <svg class="w-3 h-3 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24" onmouseover="showMailboxLayerTooltip()" onmouseout="hideMailboxLayerTooltip()">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                <div id="mailboxlayer-tooltip" class="tooltip-content">
+                                                    MediTrack uses MailboxLayer API to verify if your email is real before proceeding.
+                                                </div>
+                                            </div>
+                                        </div>
                                 </div>
                             </div>
                             
                             <!-- Password -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Password</label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
                                         </svg>
-                                    </div>
                                     <input type="password" name="password" id="register-password" required 
-                                           class="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                           placeholder="••••••••" />
+                                               class="register-input-field has-icon" 
+                                               placeholder="Password" />
                                     <button type="button" onclick="togglePasswordVisibility('register-password', 'register-eye-icon')" 
-                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
+                                                class="password-toggle-btn">
                                         <svg id="register-eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
@@ -2458,57 +3785,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Confirm Password -->
+                            <div class="mb-4">
+                                <div class="register-input-wrapper">
+                                    <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                    </svg>
+                                    <input type="password" name="confirm_password" id="register-confirm-password" required 
+                                           class="register-input-field has-icon" 
+                                           placeholder="Confirm Password" />
+                                    <button type="button" onclick="togglePasswordVisibility('register-confirm-password', 'register-confirm-eye-icon')" 
+                                            class="password-toggle-btn">
+                                        <svg id="register-confirm-eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <!-- Date of Birth -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                         </svg>
-                                    </div>
                                     <input type="date" name="date_of_birth" required 
                                            id="date_of_birth_input"
                                            max="<?php echo date('Y-m-d', strtotime('-18 years')); ?>"
-                                           class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" />
+                                               class="register-input-field has-icon" />
                                 </div>
                             </div>
                             
                             <!-- Phone -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Phone Number <span class="text-gray-400">(optional)</span></label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
                                         </svg>
-                                    </div>
                                     <input type="tel" 
                                            name="phone" 
                                            id="phone-input"
                                            pattern="09[0-9]{9}"
                                            maxlength="14"
-                                           class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none" 
-                                           placeholder="0912 345 6789 (optional)"
-                                           title="Phone number must start with 09 and be exactly 11 digits" />
+                                               class="register-input-field has-icon" 
+                                               placeholder="09XX XXX XXXX (optional)" />
                                 </div>
-                                <p class="text-xs text-gray-500 ml-1">Format: 09XX XXX XXXX (11 digits) - Optional</p>
+                                    <p class="register-validation-message info mt-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        Format: 09XX XXX XXXX (11 digits) - Optional
+                                    </p>
                             </div>
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- Barangay -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Barangay</label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                                         </svg>
-                                    </div>
                                     <select name="barangay_id" id="barangay-select" required 
-                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none appearance-none bg-white">
+                                                class="register-input-field has-icon appearance-none"
+                                                style="padding-right: 3.5rem !important;">
                                         <option value="">Select your Barangay</option>
                                     <?php
                                     $barangays = db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll();
@@ -2516,7 +3858,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                        <div class="register-dropdown-arrow">
                                         <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                         </svg>
@@ -2525,20 +3867,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                             
                             <!-- Purok -->
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-700">Purok (Area)</label>
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div>
+                                    <div class="register-input-wrapper">
+                                        <svg class="register-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                         </svg>
-                                    </div>
                                     <select name="purok_id" id="purok-select" required 
-                                            class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200 outline-none appearance-none bg-white">
+                                                class="register-input-field has-icon appearance-none"
+                                                style="padding-right: 3.5rem !important;">
                                         <option value="">Select your Purok</option>
                                     </select>
-                                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                        <div class="register-dropdown-arrow">
                                         <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                         </svg>
@@ -2549,132 +3889,172 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     
                     <!-- Step 1 Navigation -->
-                    <div class="flex justify-end pt-6">
-                        <button type="button" onclick="validateAndProceed()" class="px-6 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-all duration-200 flex items-center space-x-2">
+                        <div class="mt-6">
+                            <button type="button" id="proceed-to-step2-btn" onclick="validateAndProceed()" class="register-primary-button" disabled>
                             <span>Proceed to Family Members</span>
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                             </svg>
                         </button>
+                            <a href="#" onclick="event.preventDefault(); closeRegisterModal(); openLoginModal();" class="register-secondary-link">
+                                Back to Login
+                            </a>
                     </div>
                     </div>
                     
                     <!-- Step 2: Family Members -->
                     <div id="step-2" class="step-content hidden">
                     <!-- Family Members Section -->
-                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-100 p-6 space-y-4">
-                        <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="family-members-section">
+                            <div class="form-section-title">
+                                <div class="form-section-icon">
+                                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
                             </svg>
-                            <span>Family Members</span>
-                            <span class="text-sm font-normal text-gray-500">(Optional)</span>
-                        </h3>
+                                </div>
+                                <span>Family Members <span class="text-gray-500 font-normal text-sm">(Optional)</span></span>
+                            </div>
                         
                         <div id="family-members-container">
-                            <div class="family-member bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:border-blue-300">
-                                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                    <!-- First Name -->
-                                    <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">First Name</label>
-                                        <input type="text" name="family_members[0][first_name]" 
-                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                               placeholder="Juan" />
+                                <div class="family-member-card expanded">
+                                    <div class="family-member-header" onclick="toggleFamilyMemberCard(this)">
+                                        <div class="family-member-header-left">
+                                            <svg class="family-member-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                            </svg>
+                                            <span class="family-member-title">Family Member 1</span>
+                                        </div>
+                                        <div class="family-member-header-right">
+                                            <button type="button" class="remove-family-member-btn" onclick="event.stopPropagation(); removeFamilyMember(this)" aria-label="Remove family member">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
-                                    
-                                    <!-- Middle Initial -->
-                                    <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
+                                    <div class="family-member-content">
+                                        <!-- Row 1: First Name, Middle Initial, Last Name -->
+                                        <div class="family-member-fields">
+                                            <div>
+                                        <input type="text" name="family_members[0][first_name]" 
+                                                       class="register-input-field" 
+                                                       placeholder="First Name" />
+                                    </div>
+                                            <div>
                                         <input type="text" name="family_members[0][middle_initial]" 
-                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                               placeholder="D." 
+                                                       class="register-input-field" 
+                                                       placeholder="M.I." 
                                                maxlength="1" />
                                     </div>
-                                    
-                                    <!-- Last Name -->
-                                    <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Last Name</label>
+                                            <div>
                                         <input type="text" name="family_members[0][last_name]" 
-                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" 
-                                               placeholder="Dela Cruz" />
+                                                       class="register-input-field" 
+                                                       placeholder="Last Name" />
+                                            </div>
                                     </div>
                                     
-                                    <!-- Relationship -->
-                                    <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Relationship</label>
-                                        <select name="family_members[0][relationship]" 
-                                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white">
-                                            <option value="">Select Relationship</option>
-                                            <option value="Father">Father</option>
-                                            <option value="Mother">Mother</option>
-                                            <option value="Son">Son</option>
-                                            <option value="Daughter">Daughter</option>
-                                            <option value="Brother">Brother</option>
-                                            <option value="Sister">Sister</option>
-                                            <option value="Grandfather">Grandfather</option>
-                                            <option value="Grandmother">Grandmother</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <!-- Date of Birth -->
-                                    <div class="space-y-2">
-                                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
-                                        <input type="date" name="family_members[0][date_of_birth]" 
-                                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" />
-                                    </div>
+                                        <!-- Row 2: Relationship, Date of Birth -->
+                                        <div class="family-member-fields-row2">
+                                            <div class="w-full">
+                                                <select name="family_members[0][relationship]" 
+                                                        class="register-input-field appearance-none pr-10 w-full"
+                                                        onchange="handleRelationshipChange(this, 0)">
+                                                    <option value="">Relationship</option>
+                                                    <option value="Father">Father</option>
+                                                    <option value="Mother">Mother</option>
+                                                    <option value="Son">Son</option>
+                                                    <option value="Daughter">Daughter</option>
+                                                    <option value="Brother">Brother</option>
+                                                    <option value="Sister">Sister</option>
+                                                    <option value="Husband">Husband</option>
+                                                    <option value="Wife">Wife</option>
+                                                    <option value="Spouse">Spouse</option>
+                                                    <option value="Grandfather">Grandfather</option>
+                                                    <option value="Grandmother">Grandmother</option>
+                                                    <option value="Uncle">Uncle</option>
+                                                    <option value="Aunt">Aunt</option>
+                                                    <option value="Nephew">Nephew</option>
+                                                    <option value="Niece">Niece</option>
+                                                    <option value="Cousin">Cousin</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                                <input type="text" 
+                                                       name="family_members[0][relationship_other]" 
+                                                       id="relationship_other_0"
+                                                       class="register-input-field mt-2 w-full transition-all duration-300 ease-in-out opacity-0 max-h-0 overflow-hidden" 
+                                                       placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
+                                                       maxlength="50"
+                                                       style="display: none;" />
+                                            </div>
+                                            <div>
+                                                <input type="date" name="family_members[0][date_of_birth]" 
+                                                       class="register-input-field" 
+                                                       placeholder="Date of Birth" />
+                                            </div>
+                                        </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <button type="button" id="add-family-member" 
-                                class="inline-flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-blue-700 hover:to-indigo-700">
+                            <button type="button" id="add-family-member" class="add-member-button">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                             </svg>
-                            <span>Add Family Member</span>
+                                <span>+ Add Family Member</span>
                         </button>
                     </div>
                     
                     <!-- Step 2 Navigation -->
-                    <div class="flex justify-between pt-6">
-                        <button type="button" onclick="goToStep(1)" class="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
-                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="mt-6">
+                            <div class="flex justify-between gap-4">
+                                <button type="button" onclick="goToStep(1)" class="register-back-button">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
                             </svg>
-                            Back to Personal Info
+                                    <span>Back</span>
                         </button>
-                        <button type="button" onclick="goToStep(3)" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
-                            Proceed to Review
-                            <svg class="w-5 h-5 inline ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <button type="button" onclick="goToStep(3)" class="register-primary-button" style="flex: 1; max-width: 300px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                    <span>Proceed to Review</span>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                             </svg>
                         </button>
+                            </div>
                     </div>
                     </div>
                     
                     <!-- Step 3: Review -->
                     <div id="step-3" class="step-content hidden">
                     <!-- Review Section -->
-                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-100 p-6 space-y-4">
-                        <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="review-section">
+                            <div class="form-section-title">
+                                <div class="form-section-icon">
+                                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
+                                </div>
                             <span>Review Your Information</span>
-                        </h3>
+                            </div>
                         
                         <div class="space-y-4">
-                            <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                <h4 class="font-semibold text-gray-900 mb-2">Personal Information</h4>
-                                <div id="review-personal-info" class="text-sm text-gray-600">
+                                <!-- Personal Information Card -->
+                                <div class="review-card">
+                                    <div class="review-card-header">
+                                        <h4 class="review-card-title">Personal Information</h4>
+                                        <a href="#" onclick="event.preventDefault(); goToStep(1);" class="edit-link">Edit</a>
+                                    </div>
+                                    <div id="review-personal-info" class="space-y-2">
                                     <!-- Personal info will be populated here -->
                                 </div>
                             </div>
                             
-                            <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                <h4 class="font-semibold text-gray-900 mb-2">Family Members</h4>
-                                <div id="review-family-members" class="text-sm text-gray-600">
+                                <!-- Family Members Card -->
+                                <div class="review-card">
+                                    <div class="review-card-header">
+                                        <h4 class="review-card-title">Family Members</h4>
+                                        <a href="#" onclick="event.preventDefault(); goToStep(2);" class="edit-link">Edit</a>
+                                    </div>
+                                    <div id="review-family-members" class="space-y-2">
                                     <!-- Family members will be populated here -->
                                 </div>
                             </div>
@@ -2682,19 +4062,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     
                     <!-- Step 3 Navigation -->
-                    <div class="flex justify-between pt-6">
-                        <button type="button" onclick="goToStep(2)" class="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
-                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="mt-6">
+                            <div class="flex justify-between gap-4">
+                                <button type="button" onclick="goToStep(2)" class="register-back-button">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
                             </svg>
-                            Back to Family Members
+                                    <span>Back</span>
                         </button>
-                        <button type="button" id="submitRegistrationBtn" onclick="handleFormSubmission()" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300 hover:from-green-700 hover:to-emerald-700">
-                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <button type="button" id="submitRegistrationBtn" onclick="handleFormSubmission()" class="register-submit-button" style="flex: 1; max-width: 300px;">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
                             <span id="submitText">Submit Registration</span>
                         </button>
+                            </div>
                     </div>
                     </div>
                     
@@ -2718,35 +4100,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <!-- Email Verification Modal -->
-    <div id="verificationModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300">
+    <div id="verificationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[60] p-4">
+        <div class="verification-modal-container">
+            <button onclick="closeVerificationModal()" class="register-close-button" style="position: absolute; top: 1.5rem; right: 1.5rem; background: rgba(255, 255, 255, 0.9); border: 1px solid #e5e7eb; color: #6b7280;" aria-label="Close modal">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+            
             <div class="p-8">
                 <div class="text-center mb-6">
-                    <div class="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                    <div class="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full mx-auto mb-4 flex items-center justify-center">
                         <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
                         </svg>
                     </div>
                     <h3 class="text-2xl font-bold text-gray-900 mb-2">Verify Your Email</h3>
-                    <p class="text-gray-600">We sent a 6-digit code to your email</p>
+                    <p class="text-gray-600 text-sm">We sent a 6-digit code to <span id="verification-email-display" class="font-semibold text-gray-900"></span></p>
                 </div>
 
-                <div id="verificationError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+                <div id="verificationError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span id="verificationErrorText"></span>
+                </div>
+
+                <div id="verificationSuccess" class="hidden mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span>Email verified successfully!</span>
+                </div>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Verification Code</label>
-                        <input type="text" id="verificationCode" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all duration-200 text-center text-2xl tracking-widest" placeholder="000000" />
+                        <input type="text" id="verificationCode" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" 
+                               class="verification-code-input" 
+                               placeholder="000000" 
+                               autocomplete="one-time-code" />
                     </div>
 
-                    <div class="flex space-x-3">
-                        <button type="button" onclick="closeVerificationModal()" class="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200">
+                    <div id="resend-timer" class="resend-timer">
+                        <span id="timer-text">Resend code in <span id="timer-count">60</span>s</span>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button type="button" onclick="closeVerificationModal()" 
+                                class="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200">
                             Cancel
                         </button>
-                        <button type="button" onclick="requestVerificationCode()" id="resendBtn" class="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200">
+                        <button type="button" onclick="requestVerificationCode()" id="resendBtn" 
+                                class="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                disabled>
                             Resend Code
                         </button>
-                        <button type="button" onclick="verifyCode()" class="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200">
+                        <button type="button" onclick="verifyCode()" 
+                                class="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200">
                             Verify
                         </button>
                     </div>
@@ -2755,107 +4165,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Enhanced Login Modal -->
-    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl transform transition-all duration-300 overflow-hidden">
-            <!-- Header with Gradient and Logo -->
-            <div class="login-modal-header rounded-t-3xl p-8 relative">
-                <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors z-20 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+    <!-- Modern Minimal Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="login-modal-container relative">
+            <!-- Close Button -->
+            <button onclick="closeLoginModal()" class="login-close-button" aria-label="Close modal">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 
-                <div class="relative text-center z-10">
-                    <!-- 4D Logo -->
-                    <div class="login-logo-container">
-                        <div class="login-logo-mini">
-                            <div class="login-logo-cross-mini"></div>
-                            <div class="login-logo-pill-mini">
-                                <div class="login-logo-pill-cap-mini"></div>
-                    </div>
-                            <div class="login-logo-checkmark-mini"></div>
-                        </div>
+            <!-- Modal Content -->
+            <div class="p-8">
+                <!-- Logo -->
+                <div class="login-logo-wrapper">
+                    <img id="login-logo-img" src="public/assets/brand/logo.png" alt="MediTrack Logo" onerror="this.style.display='none'">
+                    <canvas id="login-logo-canvas" class="login-logo-canvas"></canvas>
                     </div>
                     
-                    <h2 class="text-3xl font-bold text-white mb-2 drop-shadow-lg">Welcome Back</h2>
-                    <p class="text-blue-100 text-sm">Sign in to access your account</p>
-                </div>
-                </div>
+                <!-- Title and Subtitle -->
+                <h2 class="login-modal-title">Welcome Back</h2>
+                <p class="login-modal-subtitle">Sign in to access your account</p>
                 
-            <!-- Form Body -->
-            <div class="p-8 bg-gradient-to-b from-white to-gray-50">
-                <form id="loginForm" action="public/login.php" method="post" class="space-y-6">
+                <!-- Login Form -->
+                <form id="loginForm" action="public/login.php" method="post">
+                    <!-- Error Message -->
                     <?php if (!empty($_SESSION['flash'])): ?>
-                        <div class="flex items-start space-x-3 text-sm text-red-700 bg-red-50 border-2 border-red-200 rounded-xl px-4 py-3 animate-shake shadow-sm">
-                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="login-error-message">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            <span class="font-medium"><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
+                            <span><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
                         </div>
                     <?php endif; ?>
                     
-                    <div class="space-y-2 login-input-group">
-                        <label class="block text-sm font-semibold text-gray-700">Email Address</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Email Input -->
+                    <div class="login-input-wrapper">
+                        <input 
+                            type="email" 
+                            name="email" 
+                            id="login-email"
+                            required 
+                            class="login-input-field" 
+                            placeholder="Email Address"
+                            autocomplete="email"
+                        />
+                        <svg class="login-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
                                 </svg>
                     </div>
-                            <input type="email" name="email" required 
-                                   class="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none bg-white font-medium" 
-                                   placeholder="you@example.com" />
-                    </div>
-                    </div>
                     
-                    <div class="space-y-2 login-input-group">
-                        <label class="block text-sm font-semibold text-gray-700">Password</label>
-                           <div class="relative">
-                               <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                   <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Password Input -->
+                    <div class="login-input-wrapper">
+                        <input 
+                            type="password" 
+                            name="password" 
+                            id="login-password" 
+                            required 
+                            class="login-input-field" 
+                            placeholder="Password"
+                            autocomplete="current-password"
+                        />
+                        <svg class="login-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
                                    </svg>
-                               </div>
-                               <input type="password" name="password" id="login-password" required 
-                                   class="w-full pl-12 pr-12 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 outline-none bg-white font-medium" 
-                                      placeholder="••••••••" />
-                               <button type="button" onclick="togglePasswordVisibility('login-password', 'login-eye-icon')" 
-                                       class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
-                                   <svg id="login-eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button 
+                            type="button" 
+                            onclick="togglePasswordVisibility('login-password', 'login-eye-icon')" 
+                            class="login-password-toggle"
+                            aria-label="Toggle password visibility"
+                        >
+                            <svg id="login-eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                    </svg>
                                </button>
-                           </div>
                        </div>
                     
-                    <button type="submit" 
-                            class="login-submit-btn w-full bg-gradient-to-r from-blue-600 via-blue-700 to-purple-600 text-white py-3.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center space-x-2">
+                    <!-- Forgot Password Link -->
+                    <a href="#" class="login-forgot-link" onclick="event.preventDefault(); alert('Forgot password feature coming soon!'); return false;">Forgot password?</a>
+                    
+                    <!-- Sign In Button -->
+                    <button type="submit" class="login-submit-button" id="login-submit-btn">
                         <span>Sign in</span>
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                        </svg>
                     </button>
                 </form>
                 
-                <!-- Divider -->
-                <div class="relative my-6">
-                    <div class="absolute inset-0 flex items-center">
-                        <div class="w-full border-t-2 border-gray-200"></div>
-                    </div>
-                    <div class="relative flex justify-center text-sm">
-                        <span class="px-4 bg-gradient-to-b from-white to-gray-50 text-gray-500 font-medium">New to MediTrack?</span>
-                    </div>
-                </div>
-                
-                <!-- Register Link -->
-                <div class="text-center">
-                    <button onclick="closeLoginModal(); openRegisterModal();" 
-                            class="text-blue-600 hover:text-blue-700 font-semibold transition-all duration-200 inline-flex items-center space-x-2 hover:scale-105">
-                        <span>Register as Resident</span>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                <!-- Register Link Section -->
+                <div class="login-register-section">
+                    <p class="login-register-text">New to MediTrack?</p>
+                    <button onclick="closeLoginModal(); openRegisterModal();" class="login-register-link">
+                        Register as Resident
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width: 1rem; height: 1rem;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                         </svg>
                     </button>
                 </div>
@@ -2866,7 +4268,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         let familyMemberCount = 1;
         let emailValidationTimeout = null;
-        let isEmailValid = false;
+        // Initialize email validation state on window object
+        window.isEmailValid = false;
         
         // Barangay-Purok relationship data
         let puroksData = <?php echo json_encode(db()->query('SELECT id, name, barangay_id FROM puroks ORDER BY barangay_id, name')->fetchAll()); ?>;
@@ -2927,6 +4330,550 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             return '';
+        }
+        
+        // ============================================
+        // COMPREHENSIVE INPUT VALIDATION SYSTEM
+        // ============================================
+        
+        // Global banned characters (excluding @ which is needed for emails)
+        const BANNED_CHARS = /[!$%^&*()={}\[\]:;"<>?\/\\|~`]/g;
+        const BANNED_CHARS_STR = '!$%^&*()={}[]:;"<>?/\\|~`';
+        
+        // Banned characters for names (includes _)
+        const BANNED_CHARS_NAMES = /[!@#$%^&*()={}\[\]:;"<>?\/\\|~`_]/g;
+        
+        // Validation patterns
+        const VALIDATION_PATTERNS = {
+            name: /^[A-Za-zÀ-ÿ' -]+$/,
+            address: /^[A-Za-z0-9\s.,'-]+$/,
+            email: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}$/,
+            password: /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
+            phone: /^[0-9+ ]{7,15}$/
+        };
+        
+        // Validation state tracking
+        const validationStates = {};
+        
+        // Sanitize input by removing banned characters
+        function sanitizeInput(value, allowedPattern, isEmail = false) {
+            if (!value) return '';
+            
+            // For emails, use different banned chars (allow @, ., _, %, +, -)
+            const bannedChars = isEmail ? /[!$%^&*()={}\[\]:;"<>?\/\\|~`]/g : BANNED_CHARS_NAMES;
+            
+            // Remove banned characters
+            let sanitized = value.replace(bannedChars, '');
+            
+            // Remove control characters and emojis
+            sanitized = sanitized.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+            sanitized = sanitized.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+            
+            // Trim leading/trailing spaces
+            sanitized = sanitized.trim();
+            
+            // Apply pattern if provided
+            if (allowedPattern) {
+                sanitized = sanitized.split('').filter(char => allowedPattern.test(char)).join('');
+            }
+            
+            return sanitized;
+        }
+        
+        // Validate letters only field (First Name, Last Name, etc.)
+        function validateLettersOnly(value, fieldName) {
+            const trimmed = value ? value.trim() : '';
+            
+            // Only show "required" message if field is actually empty
+            if (!trimmed) {
+                return { valid: false, message: `${fieldName} is required.` };
+            }
+            
+            const sanitized = sanitizeInput(trimmed, VALIDATION_PATTERNS.name);
+            
+            if (sanitized !== trimmed) {
+                return { 
+                    valid: false, 
+                    message: '❌ Invalid input — special characters not allowed.',
+                    sanitized: sanitized
+                };
+            }
+            
+            // Check for numbers
+            if (/\d/.test(trimmed)) {
+                return { 
+                    valid: false, 
+                    message: 'Only letters, spaces, hyphens, and apostrophes are allowed.' 
+                };
+            }
+            
+            if (!VALIDATION_PATTERNS.name.test(trimmed)) {
+                return { 
+                    valid: false, 
+                    message: 'Only letters, spaces, hyphens, and apostrophes are allowed.' 
+                };
+            }
+            
+            if (trimmed.length < 2) {
+                return { valid: false, message: `${fieldName} must be at least 2 characters.` };
+            }
+            
+            // Field is valid - return success
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Validate numbers only field
+        function validateNumbersOnly(value, fieldName, required = true) {
+            if (!value || value.trim() === '') {
+                if (required) {
+                    return { valid: false, message: `${fieldName} is required.` };
+                }
+                return { valid: true, message: '' }; // Optional
+            }
+            
+            // Remove spaces for validation
+            const cleaned = value.replace(/\s/g, '');
+            
+            if (!/^\d+$/.test(cleaned)) {
+                return { 
+                    valid: false, 
+                    message: '⚠️ This field accepts numbers only.' 
+                };
+            }
+            
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Validate letters and numbers field (Address, Street, etc.)
+        function validateLettersAndNumbers(value, fieldName) {
+            if (!value || value.trim() === '') {
+                return { valid: false, message: `${fieldName} is required.` };
+            }
+            
+            const sanitized = sanitizeInput(value, VALIDATION_PATTERNS.address);
+            
+            if (sanitized !== value) {
+                return { 
+                    valid: false, 
+                    message: '❌ Invalid input — special characters not allowed.',
+                    sanitized: sanitized
+                };
+            }
+            
+            if (!VALIDATION_PATTERNS.address.test(value)) {
+                return { 
+                    valid: false, 
+                    message: 'Only letters, numbers, commas, and periods are allowed.' 
+                };
+            }
+            
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Validate name field (alias for letters only)
+        function validateName(value, fieldName) {
+            return validateLettersOnly(value, fieldName);
+        }
+        
+        // Validate address field
+        function validateAddress(value, fieldName) {
+            if (!value || value.trim() === '') {
+                return { valid: false, message: `${fieldName} is required.` };
+            }
+            
+            const sanitized = sanitizeInput(value, VALIDATION_PATTERNS.address);
+            
+            if (sanitized !== value) {
+                return { 
+                    valid: false, 
+                    message: '⚠️ Special characters are not allowed in this field.',
+                    sanitized: sanitized
+                };
+            }
+            
+            if (!VALIDATION_PATTERNS.address.test(value)) {
+                return { 
+                    valid: false, 
+                    message: `${fieldName} can only contain letters, numbers, spaces, commas, periods, and hyphens.` 
+                };
+            }
+            
+            return { valid: true, message: '' };
+        }
+        
+        // Validate password
+        function validatePassword(value) {
+            if (!value || value.trim() === '') {
+                return { valid: false, message: 'Password is required.' };
+            }
+            
+            if (value.length < 8) {
+                return { valid: false, message: 'Password must be at least 8 characters.' };
+            }
+            
+            // Check for required components
+            const hasLetter = /[A-Za-z]/.test(value);
+            const hasNumber = /\d/.test(value);
+            const hasSpecial = /[@$!%*?&]/.test(value);
+            
+            if (!hasLetter) {
+                return { valid: false, message: 'Password must contain at least 1 letter.' };
+            }
+            
+            if (!hasNumber) {
+                return { valid: false, message: 'Password must contain at least 1 number.' };
+            }
+            
+            if (!hasSpecial) {
+                return { valid: false, message: 'Password must contain at least 1 special character (@$!%*?&).' };
+            }
+            
+            // Check for banned characters (excluding allowed special chars)
+            const bannedInPassword = /[#^&*()={}\[\]:;"<>?\/\\|~`_]/;
+            if (bannedInPassword.test(value)) {
+                return { valid: false, message: 'Password contains invalid characters. Only @$!%*?& are allowed as special characters.' };
+            }
+            
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Validate phone number
+        function validatePhone(value, required = false) {
+            if (!value || value.trim() === '') {
+                if (required) {
+                    return { valid: false, message: 'Phone number is required.' };
+                }
+                return { valid: true, message: '' }; // Optional field
+            }
+            
+            // Auto-remove extra spaces
+            let cleaned = value.replace(/\s+/g, ' ').trim();
+            
+            if (!VALIDATION_PATTERNS.phone.test(cleaned)) {
+                return { 
+                    valid: false, 
+                    message: '⚠️ Phone number can only contain digits, spaces, and + sign.' 
+                };
+            }
+            
+            // Remove spaces for length check
+            const digitsOnly = cleaned.replace(/\s/g, '');
+            
+            if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+                return { valid: false, message: 'Phone number must be between 7 and 15 digits.' };
+            }
+            
+            // Update field value with cleaned version
+            if (cleaned !== value) {
+                return { 
+                    valid: true, 
+                    message: '✅ Looks good!',
+                    sanitized: cleaned
+                };
+            }
+            
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Age verification function (exact formula as specified)
+        function isAdult(dob) {
+            if (!dob) return false;
+            
+            const today = new Date();
+            // HTML5 date inputs always return YYYY-MM-DD format
+            // Create date object directly - this handles YYYY-MM-DD correctly
+            const birthDate = new Date(dob + 'T00:00:00'); // Add time to avoid timezone issues
+            
+            if (isNaN(birthDate.getTime())) return false;
+            
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            
+            return age >= 18;
+        }
+        
+        // Validate date of birth with age verification
+        function validateDateOfBirth(value, requireAdult = true) {
+            if (!value || value.trim() === '') {
+                return { valid: false, message: 'Date of birth is required.' };
+            }
+            
+            // HTML5 date inputs return YYYY-MM-DD format
+            // Create date object with time to avoid timezone issues
+            const date = new Date(value + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate comparison
+            
+            if (isNaN(date.getTime())) {
+                return { valid: false, message: 'Please enter a valid date.' };
+            }
+            
+            if (date > today) {
+                return { valid: false, message: 'Date of birth cannot be in the future.' };
+            }
+            
+            // Age verification for main account holder - MUST check this first
+            if (requireAdult) {
+                const isUserAdult = isAdult(value);
+                if (!isUserAdult) {
+                    return { 
+                        valid: false, 
+                        message: 'You must be 18 years or older to create a MediTrack account.' 
+                    };
+                }
+            }
+            
+            // Check for unreasonable age (over 120)
+            const age = today.getFullYear() - date.getFullYear();
+            const monthDiff = today.getMonth() - date.getMonth();
+            const dayDiff = today.getDate() - date.getDate();
+            const actualAge = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? age - 1 : age;
+            
+            if (actualAge > 120) {
+                return { valid: false, message: 'Please enter a valid date of birth.' };
+            }
+            
+            return { valid: true, message: '✅ Looks good!' };
+        }
+        
+        // Show field validation feedback with enhanced UX
+        function showFieldValidation(field, isValid, message) {
+            if (!field) return;
+            
+            const wrapper = field.closest('.register-input-wrapper') || field.parentElement;
+            if (!wrapper) return;
+            
+            // Get current field value FIRST - use the actual current value from the DOM
+            const fieldValue = field.value ? field.value.trim() : '';
+            const isEmpty = fieldValue === '';
+            
+            // AGGRESSIVELY clear ALL validation messages from this field's wrapper
+            // Remove ALL validation message containers
+            const allContainers = wrapper.querySelectorAll('.validation-message-container');
+            allContainers.forEach(container => container.remove());
+            
+            // Remove any standalone validation messages
+            const allMessages = wrapper.querySelectorAll('.field-validation-message');
+            allMessages.forEach(msg => msg.remove());
+            
+            // Create a SINGLE new validation message container
+            const messageContainer = document.createElement('div');
+            messageContainer.className = 'validation-message-container';
+            wrapper.appendChild(messageContainer);
+            
+            // Update field border with smooth transition
+            field.classList.remove('border-red-300', 'border-green-300', 'border-yellow-300', 'border-gray-300');
+            
+            if (isValid === true) {
+                field.classList.add('border-green-300');
+            } else if (isValid === false) {
+                field.classList.add('border-red-300');
+            } else {
+                field.classList.add('border-gray-300');
+            }
+            
+            // Only show message if provided
+            if (message) {
+                // CRITICAL: Don't show "is required" message if field has a value
+                // This prevents the duplicate "required" message when field is filled
+                if (!isEmpty && message.includes('is required')) {
+                    // Field has value, don't show "required" message at all
+                    // Instead, if field has value, validate it properly
+                    return;
+                }
+                
+                // Don't show empty messages
+                if (!message.trim()) {
+                    return;
+                }
+                
+                const messageDiv = document.createElement('div');
+                const isSuccess = isValid === true;
+                const isWarning = message.includes('⚠️');
+                const isError = isValid === false;
+                
+                let messageClass = 'text-gray-600';
+                let icon = '';
+                
+                if (isSuccess) {
+                    messageClass = 'text-green-600';
+                    icon = `
+                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    `;
+                } else if (isWarning) {
+                    messageClass = 'text-yellow-600';
+                    icon = `
+                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                        </svg>
+                    `;
+                } else if (isError) {
+                    messageClass = 'text-red-600';
+                    icon = `
+                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    `;
+                }
+                
+                messageDiv.className = `field-validation-message ${messageClass} text-xs flex items-start gap-1.5`;
+                messageDiv.innerHTML = `${icon}<span class="flex-1 leading-tight">${message}</span>`;
+                messageContainer.appendChild(messageDiv);
+            }
+        }
+        
+        // Setup real-time validation for a field with enhanced sanitization
+        function setupFieldValidation(field, validator, fieldName, options = {}) {
+            const { 
+                autoSanitize = true, 
+                fieldType = 'text', // 'letters', 'numbers', 'alphanumeric', 'email', 'phone'
+                requireAdult = false 
+            } = options;
+            
+            // Initial validation - only if field has a value
+            let initialValue = field.value ? field.value.trim() : '';
+            if (fieldType === 'phone' && initialValue) {
+                initialValue = initialValue.replace(/\s+/g, ' ').trim();
+                field.value = initialValue;
+            }
+            
+            // Only validate on initial load if field has value (don't show "required" on empty fields initially)
+            if (initialValue) {
+                const result = validator(initialValue, fieldName, requireAdult);
+                // Don't show "required" message if field has value
+                if (!(result.message && result.message.includes('is required'))) {
+                    validationStates[field.name] = result.valid;
+                    showFieldValidation(field, result.valid, result.message);
+                    
+                    // Apply sanitized value if provided
+                    if (result.sanitized && result.sanitized !== initialValue) {
+                        field.value = result.sanitized;
+                    }
+                } else {
+                    // Field has value but validator says required - validate properly
+                    validationStates[field.name] = true;
+                    showFieldValidation(field, true, '✅ Looks good!');
+                }
+            } else {
+                // Field is empty, set as invalid but don't show message yet (wait for user interaction)
+                validationStates[field.name] = false;
+            }
+            
+            // Real-time validation on input
+            field.addEventListener('input', function(e) {
+                let value = this.value;
+                
+                // Auto-sanitize based on field type
+                if (autoSanitize) {
+                    let sanitized = value;
+                    
+                    if (fieldType === 'letters') {
+                        sanitized = sanitizeInput(value, VALIDATION_PATTERNS.name);
+                        // Special handling for middle initial - limit to 1 character
+                        if (field.name && field.name.includes('middle_initial')) {
+                            sanitized = sanitized.slice(0, 1).toUpperCase();
+                        }
+                    } else if (fieldType === 'numbers') {
+                        sanitized = value.replace(/[^\d]/g, '');
+                    } else if (fieldType === 'alphanumeric') {
+                        sanitized = sanitizeInput(value, VALIDATION_PATTERNS.address);
+                    } else if (fieldType === 'phone') {
+                        // Allow digits, spaces, and +
+                        sanitized = value.replace(/[^0-9+ ]/g, '');
+                        // Remove extra spaces
+                        sanitized = sanitized.replace(/\s+/g, ' ');
+                    }
+                    
+                    if (sanitized !== value) {
+                        const cursorPos = this.selectionStart;
+                        this.value = sanitized;
+                        // Try to maintain cursor position
+                        const newPos = Math.max(0, Math.min(cursorPos - (value.length - sanitized.length), sanitized.length));
+                        this.setSelectionRange(newPos, newPos);
+                        value = sanitized;
+                    }
+                }
+                
+                // Get the ACTUAL current value from the field (critical for preventing stale validation)
+                const actualValue = this.value.trim();
+                const valueToValidate = actualValue || value;
+                
+                // Validate with current actual value
+                const result = validator(valueToValidate, fieldName, requireAdult);
+                
+                // CRITICAL FIX: If field has value but validator incorrectly says "required", treat as valid
+                if (actualValue && result.message && result.message.includes('is required')) {
+                    // Field clearly has value, so it's valid - show success
+                    validationStates[field.name] = true;
+                    showFieldValidation(field, true, '✅ Looks good!');
+                } else {
+                    validationStates[field.name] = result.valid;
+                    
+                    // Apply sanitized value if provided
+                    if (result.sanitized && result.sanitized !== actualValue) {
+                        this.value = result.sanitized;
+                        // Re-validate with sanitized value
+                        const sanitizedResult = validator(result.sanitized, fieldName, requireAdult);
+                        validationStates[field.name] = sanitizedResult.valid;
+                        showFieldValidation(field, sanitizedResult.valid, sanitizedResult.message);
+                    } else {
+                        showFieldValidation(field, result.valid, result.message);
+                    }
+                }
+                
+                checkFormValidation();
+            });
+            
+            // Validate on blur with auto-trim
+            field.addEventListener('blur', function() {
+                let value = this.value.trim();
+                this.value = value; // Auto-trim
+                
+                // Apply additional sanitization for phone
+                if (fieldType === 'phone' && value) {
+                    value = value.replace(/\s+/g, ' ').trim();
+                    this.value = value;
+                }
+                
+                // Apply additional sanitization for middle initial - limit to 1 character
+                if (field.name && field.name.includes('middle_initial') && value.length > 1) {
+                    value = value.slice(0, 1).toUpperCase();
+                    this.value = value;
+                }
+                
+                // Get the ACTUAL current value from the field (critical for preventing stale validation)
+                const actualValue = this.value.trim();
+                
+                // Validate with current actual value
+                const result = validator(actualValue, fieldName, requireAdult);
+                
+                // CRITICAL FIX: If field has value but validator incorrectly says "required", treat as valid
+                if (actualValue && result.message && result.message.includes('is required')) {
+                    // Field clearly has value, so it's valid - show success instead of "required"
+                    validationStates[field.name] = true;
+                    showFieldValidation(field, true, '✅ Looks good!');
+                } else {
+                    validationStates[field.name] = result.valid;
+                    
+                    if (result.sanitized && result.sanitized !== actualValue) {
+                        this.value = result.sanitized;
+                        // Re-validate with sanitized value
+                        const sanitizedResult = validator(result.sanitized, fieldName, requireAdult);
+                        validationStates[field.name] = sanitizedResult.valid;
+                        showFieldValidation(field, sanitizedResult.valid, sanitizedResult.message);
+                    } else {
+                        showFieldValidation(field, result.valid, result.message);
+                    }
+                }
+                
+                checkFormValidation();
+            });
         }
         
         // Enhanced email validation functions
@@ -3010,46 +4957,193 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return true;
         }
         
-        function showEmailStatus(icon, message, isSuccess) {
-            const statusIcon = document.getElementById('email-status-icon');
-            const successIcon = document.getElementById('email-success-icon');
-            const errorIcon = document.getElementById('email-error-icon');
-            const loadingIcon = document.getElementById('email-loading-icon');
+        function showEmailStatus(status, message) {
             const validationMessage = document.getElementById('email-validation-message');
             const messageText = document.getElementById('email-message-text');
+            const statusIconDisplay = document.getElementById('email-status-icon-display');
             const emailInput = document.getElementById('email-input');
             
-            // Hide all icons first
-            successIcon.classList.add('hidden');
-            errorIcon.classList.add('hidden');
-            loadingIcon.classList.add('hidden');
+            if (!validationMessage || !messageText || !statusIconDisplay) return;
             
-            // Show the appropriate icon
-            if (icon === 'loading') {
-                loadingIcon.classList.remove('hidden');
-                statusIcon.classList.remove('hidden');
-            } else if (icon === 'success') {
-                successIcon.classList.remove('hidden');
-                statusIcon.classList.remove('hidden');
-                emailInput.classList.remove('border-red-300');
+            // Remove all status classes
+            validationMessage.classList.remove('success', 'error', 'warning', 'loading', 'hidden');
+            
+            // Set status icon and message
+            if (status === 'loading') {
+                validationMessage.classList.add('loading');
+                statusIconDisplay.innerHTML = `
+                    <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                `;
+                messageText.textContent = message || 'Verifying email...';
+            } else if (status === 'success') {
+                validationMessage.classList.add('success');
+                statusIconDisplay.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                messageText.textContent = message || 'Email looks good and is deliverable.';
+                if (emailInput) {
+                    emailInput.classList.remove('border-red-300', 'border-yellow-300');
                 emailInput.classList.add('border-green-300');
-            } else if (icon === 'error') {
-                errorIcon.classList.remove('hidden');
-                statusIcon.classList.remove('hidden');
-                emailInput.classList.remove('border-green-300');
+                }
+            } else if (status === 'error') {
+                validationMessage.classList.add('error');
+                statusIconDisplay.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+                messageText.textContent = message || 'Invalid or unreachable email.';
+                if (emailInput) {
+                    emailInput.classList.remove('border-green-300', 'border-yellow-300');
                 emailInput.classList.add('border-red-300');
-            } else {
-                statusIcon.classList.add('hidden');
-                emailInput.classList.remove('border-red-300', 'border-green-300');
-            }
-            
-            // Show/hide message
-            if (message) {
-                messageText.textContent = message;
-                messageText.className = isSuccess ? 'text-green-600' : 'text-red-600';
-                validationMessage.classList.remove('hidden');
+                }
+            } else if (status === 'warning') {
+                validationMessage.classList.add('warning');
+                statusIconDisplay.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                `;
+                messageText.textContent = message || 'Email already registered.';
+                if (emailInput) {
+                    emailInput.classList.remove('border-green-300', 'border-red-300');
+                    emailInput.classList.add('border-yellow-300');
+                }
             } else {
                 validationMessage.classList.add('hidden');
+                if (emailInput) {
+                    emailInput.classList.remove('border-green-300', 'border-red-300', 'border-yellow-300');
+                }
+                checkFormValidation();
+                return;
+            }
+            
+                validationMessage.classList.remove('hidden');
+            checkFormValidation();
+        }
+        
+        // Tooltip functions
+        function showMailboxLayerTooltip() {
+            const tooltip = document.getElementById('mailboxlayer-tooltip');
+            if (tooltip) {
+                tooltip.style.opacity = '1';
+            }
+        }
+        
+        function hideMailboxLayerTooltip() {
+            const tooltip = document.getElementById('mailboxlayer-tooltip');
+            if (tooltip) {
+                tooltip.style.opacity = '0';
+            }
+        }
+        
+        // Check form validation and enable/disable proceed button
+        function checkFormValidation() {
+            const proceedBtn = document.getElementById('proceed-to-step2-btn');
+            if (!proceedBtn) return;
+            
+            // Get field values - try both name and id selectors for email
+            const firstName = document.querySelector('input[name="first_name"]')?.value.trim();
+            const lastName = document.querySelector('input[name="last_name"]')?.value.trim();
+            const email = document.querySelector('input[name="email"]')?.value.trim() || 
+                         document.querySelector('#email-input')?.value.trim();
+            const password = document.querySelector('input[name="password"]')?.value;
+            const confirmPassword = document.querySelector('input[name="confirm_password"]')?.value;
+            const dateOfBirth = document.querySelector('input[name="date_of_birth"]')?.value;
+            const barangayId = document.querySelector('select[name="barangay_id"]')?.value;
+            const purokId = document.querySelector('select[name="purok_id"]')?.value;
+            
+            // Check all validation states
+            const firstNameValid = validationStates['first_name'] === true;
+            const lastNameValid = validationStates['last_name'] === true;
+            // Email validation: check if it's explicitly true (not just undefined/null)
+            const emailValid = window.isEmailValid === true;
+            const passwordValid = validationStates['password'] === true;
+            const confirmPasswordValid = validationStates['confirm_password'] === true;
+            const dateOfBirthValid = validationStates['date_of_birth'] === true;
+            
+            // Check if all required fields are filled
+            const allFieldsFilled = firstName && lastName && email && password && confirmPassword && 
+                                    dateOfBirth && barangayId && purokId;
+            
+            // Check if passwords match
+            const passwordsMatch = password && confirmPassword && password === confirmPassword;
+            
+            // Enable button only if all conditions are met
+            const canProceed = allFieldsFilled && firstNameValid && lastNameValid && emailValid && 
+                passwordValid && confirmPasswordValid && dateOfBirthValid && passwordsMatch;
+            
+            if (canProceed) {
+                proceedBtn.disabled = false;
+                // Clear any previous validation logs when form is valid
+                if (window.lastValidationLog) {
+                    window.lastValidationLog = null;
+                }
+            } else {
+                proceedBtn.disabled = true;
+                // Only log once per state change to reduce console spam
+                // Skip logging if user is still typing (fields are empty)
+                const currentState = {
+                    allFieldsFilled, firstNameValid, lastNameValid, emailValid,
+                    passwordValid, confirmPasswordValid, dateOfBirthValid, passwordsMatch
+                };
+                
+                if (!window.lastValidationLog || 
+                    JSON.stringify(window.lastValidationLog) !== JSON.stringify(currentState)) {
+                    
+                    window.lastValidationLog = currentState;
+                    
+                    // Only log if at least some fields are filled (user is actively filling form)
+                    if (firstName || lastName || email || password) {
+                        // Detailed logging - but only when user has started filling the form
+                        if (!allFieldsFilled && (firstName || lastName || email)) {
+                            // Only log missing fields if user has started filling form
+                            const missingFields = [];
+                            if (!firstName) missingFields.push('firstName');
+                            if (!lastName) missingFields.push('lastName');
+                            if (!email) missingFields.push('email');
+                            if (!password) missingFields.push('password');
+                            if (!confirmPassword) missingFields.push('confirmPassword');
+                            if (!dateOfBirth) missingFields.push('dateOfBirth');
+                            if (!barangayId) missingFields.push('barangayId');
+                            if (!purokId) missingFields.push('purokId');
+                            
+                            if (missingFields.length > 0) {
+                                console.log('⚠️ Still missing:', missingFields.join(', '));
+                            }
+                        }
+                        
+                        // Only log validation failures if fields are filled but invalid
+                        if (allFieldsFilled && (!firstNameValid || !lastNameValid || !passwordValid || 
+                            !confirmPasswordValid || !dateOfBirthValid)) {
+                            const failedValidations = [];
+                            if (!firstNameValid) failedValidations.push('firstName');
+                            if (!lastNameValid) failedValidations.push('lastName');
+                            if (!passwordValid) failedValidations.push('password');
+                            if (!confirmPasswordValid) failedValidations.push('confirmPassword');
+                            if (!dateOfBirthValid) failedValidations.push('dateOfBirth');
+                            
+                            console.log('❌ Validation failed for:', failedValidations.join(', '));
+                        }
+                        
+                        // Only log email validation failure if email is filled
+                        if (email && !emailValid) {
+                            console.log('⏳ Email validation in progress or failed. Status:', {
+                                isEmailValid: window.isEmailValid,
+                                hasEmail: !!email,
+                                emailStatus: document.querySelector('#email-validation-message')?.classList.toString()
+                            });
+                        }
+                        
+                        if (!passwordsMatch && password && confirmPassword) {
+                            console.log('❌ Passwords do not match');
+                        }
+                    }
+                }
             }
         }
         
@@ -3058,27 +5152,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!validateEmail(email)) {
                 // Provide more specific error messages
                 if (!email || email.trim() === '') {
-                    showEmailStatus('error', 'Please enter an email address', false);
-                } else if (email.startsWith('@')) {
-                    showEmailStatus('error', 'Email cannot start with @ symbol. Please enter a valid email like user@domain.com', false);
-                } else if (email.endsWith('@')) {
-                    showEmailStatus('error', 'Email cannot end with @ symbol. Please enter a valid email like user@domain.com', false);
-                } else if (!email.includes('@')) {
-                    showEmailStatus('error', 'Email must contain an @ symbol (e.g., user@domain.com)', false);
-                } else if ((email.match(/@/g) || []).length > 1) {
-                    showEmailStatus('error', 'Email can only contain one @ symbol', false);
-                } else if (email.includes('(') || email.includes(')')) {
-                    showEmailStatus('error', 'Email cannot contain parentheses. Please use a valid format like user@domain.com', false);
-                } else if (!email.includes('.')) {
-                    showEmailStatus('error', 'Email must include a domain with extension (e.g., user@domain.com)', false);
+                    showEmailStatus(null);
+                    window.isEmailValid = false;
+                    return false;
                 } else {
-                    showEmailStatus('error', 'Please enter a valid email address format (e.g., user@domain.com)', false);
+                    showEmailStatus('error', 'Invalid or unreachable email.');
                 }
-                isEmailValid = false;
+                window.isEmailValid = false;
+                checkFormValidation(); // Update button state
                 return false;
             }
             
-            showEmailStatus('loading', 'Verifying email address exists and can receive emails...', false);
+            showEmailStatus('loading', 'Verifying email address exists and can receive emails...');
             
             try {
                 // Try the main validation first
@@ -3107,28 +5192,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 if (result.success && result.valid) {
-                    showEmailStatus('success', 'Email is valid and can receive verification codes', true);
-                    isEmailValid = true;
+                    // Check if email is already registered
+                    const checkRegisteredResponse = await fetch('', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=check_duplicate&type=personal_info&email=${encodeURIComponent(email)}`
+                    });
+                    const checkRegisteredData = await checkRegisteredResponse.json();
+                    
+                    if (checkRegisteredData.duplicate) {
+                        showEmailStatus('warning', 'Email already registered.');
+                        window.isEmailValid = false;
+                        checkFormValidation(); // Update button state
+                        return false;
+                    }
+                    
+                    showEmailStatus('success', 'Email looks good and is deliverable.');
+                    window.isEmailValid = true;
+                    checkFormValidation(); // Update button state
                     return true;
                 } else {
-                    showEmailStatus('error', result.message, false);
-                    isEmailValid = false;
+                    showEmailStatus('error', result.message || 'Invalid or unreachable email.');
+                    window.isEmailValid = false;
+                    checkFormValidation(); // Update button state
                     return false;
                 }
             } catch (error) {
                 console.error('Email validation error:', error);
-                showEmailStatus('error', 'Unable to validate email. Please check your connection and try again.', false);
-                isEmailValid = false;
+                showEmailStatus('error', 'Unable to validate email. Please check your connection and try again.');
+                window.isEmailValid = false;
+                checkFormValidation(); // Update button state
                 return false;
             }
         }
         
         function openRegisterModal() {
-            document.getElementById('registerModal').classList.remove('hidden');
-            document.getElementById('registerModal').classList.add('flex');
+            const modal = document.getElementById('registerModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
+            
+            // Reset email verification flag
+            window.emailVerified = false;
+            // Reset email validation state
+            window.isEmailValid = false;
+            
             // Reset to step 1
-            goToStep(1);
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById('step-1').classList.remove('hidden');
+            updateProgressIndicator(1);
             
             // Initialize barangay-purok relationship
             initializeBarangayPurok();
@@ -3146,8 +5262,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     // Clear status if email is empty
                     if (!email) {
-                        showEmailStatus(null, null, false);
-                        isEmailValid = false;
+                        showEmailStatus(null);
+                        window.isEmailValid = false;
+                        checkFormValidation();
                         return;
                     }
                     
@@ -3157,9 +5274,186 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }, 500);
                 });
             }
+            
+            // Initialize validation message containers for all input fields to prevent layout shift
+            setTimeout(() => {
+                document.querySelectorAll('.register-input-wrapper').forEach(wrapper => {
+                    if (!wrapper.querySelector('.validation-message-container')) {
+                        const container = document.createElement('div');
+                        container.className = 'validation-message-container';
+                        wrapper.appendChild(container);
+                    }
+                });
+                // Also add containers for fields without wrappers
+                document.querySelectorAll('input.register-input-field, select.register-input-field').forEach(field => {
+                    if (!field.closest('.register-input-wrapper')) {
+                        let wrapper = field.parentElement;
+                        // Create wrapper if it doesn't exist
+                        if (!wrapper || !wrapper.classList.contains('register-input-wrapper')) {
+                            wrapper = document.createElement('div');
+                            wrapper.className = 'register-input-wrapper';
+                            field.parentNode.insertBefore(wrapper, field);
+                            wrapper.appendChild(field);
+                        }
+                        if (!wrapper.querySelector('.validation-message-container')) {
+                            const container = document.createElement('div');
+                            container.className = 'validation-message-container';
+                            wrapper.appendChild(container);
+                        }
+                    }
+                });
+            }, 50);
+            
+            // Setup validation for all form fields
+            const firstNameField = document.querySelector('input[name="first_name"]');
+            const lastNameField = document.querySelector('input[name="last_name"]');
+            const middleInitialField = document.querySelector('input[name="middle_initial"]');
+            const passwordField = document.querySelector('input[name="password"]');
+            const confirmPasswordField = document.querySelector('input[name="confirm_password"]');
+            const dateOfBirthField = document.querySelector('input[name="date_of_birth"]');
+            const phoneField = document.querySelector('input[name="phone"]');
+            
+            if (firstNameField) {
+                setupFieldValidation(firstNameField, validateLettersOnly, 'First name', { 
+                    fieldType: 'letters' 
+                });
+            }
+            
+            if (lastNameField) {
+                setupFieldValidation(lastNameField, validateLettersOnly, 'Last name', { 
+                    fieldType: 'letters' 
+                });
+            }
+            
+            if (middleInitialField) {
+                setupFieldValidation(middleInitialField, (value) => {
+                    if (!value || value.trim() === '') {
+                        return { valid: true, message: '' }; // Optional
+                    }
+                    
+                    // Check length first
+                    const trimmed = value.trim();
+                    if (trimmed.length > 1) {
+                        return { valid: false, message: 'Middle initial must be exactly 1 character.' };
+                    }
+                    
+                    // Validate it's a letter only (no numbers, no special chars except apostrophe)
+                    if (!/^[A-Za-zÀ-ÿ]$/.test(trimmed)) {
+                        return { 
+                            valid: false, 
+                            message: 'Middle initial must be a single letter.' 
+                        };
+                    }
+                    
+                    return { valid: true, message: '✅ Looks good!' };
+                }, 'Middle initial', { 
+                    fieldType: 'letters' 
+                });
+            }
+            
+            if (passwordField) {
+                setupFieldValidation(passwordField, validatePassword, 'Password', { 
+                    autoSanitize: false // Don't auto-sanitize passwords
+                });
+                
+                // Also check password match
+                passwordField.addEventListener('input', function() {
+                    const confirmField = document.querySelector('input[name="confirm_password"]');
+                    if (confirmField && confirmField.value) {
+                        validatePasswordMatch();
+                    }
+                });
+            }
+            
+            if (confirmPasswordField) {
+                confirmPasswordField.addEventListener('input', validatePasswordMatch);
+                confirmPasswordField.addEventListener('blur', validatePasswordMatch);
+            }
+            
+            if (dateOfBirthField) {
+                // Add change event listener for date input (fires when date is selected via date picker)
+                dateOfBirthField.addEventListener('change', function() {
+                    const result = validateDateOfBirth(this.value, true);
+                    validationStates['date_of_birth'] = result.valid;
+                    showFieldValidation(this, result.valid, result.message);
+                    checkFormValidation();
+                });
+                
+                // Also validate on input (for manual typing)
+                dateOfBirthField.addEventListener('input', function() {
+                    if (this.value) {
+                        const result = validateDateOfBirth(this.value, true);
+                        validationStates['date_of_birth'] = result.valid;
+                        showFieldValidation(this, result.valid, result.message);
+                        checkFormValidation();
+                    }
+                });
+                
+                setupFieldValidation(dateOfBirthField, (value) => validateDateOfBirth(value, true), 'Date of birth', {
+                    requireAdult: true
+                });
+            }
+            
+            if (phoneField) {
+                setupFieldValidation(phoneField, (value) => validatePhone(value, false), 'Phone number', {
+                    fieldType: 'phone'
+                });
+            }
+            
+            // Validate dropdowns
+            const barangaySelect = document.querySelector('select[name="barangay_id"]');
+            const purokSelect = document.querySelector('select[name="purok_id"]');
+            
+            if (barangaySelect) {
+                barangaySelect.addEventListener('change', checkFormValidation);
+            }
+            
+            if (purokSelect) {
+                purokSelect.addEventListener('change', checkFormValidation);
+            }
+            
+            // Password match validation
+            function validatePasswordMatch() {
+                const password = passwordField?.value;
+                const confirmPassword = confirmPasswordField?.value;
+                
+                if (!confirmPassword) {
+                    validationStates['confirm_password'] = undefined;
+                    showFieldValidation(confirmPasswordField, undefined, '');
+                    return;
+                }
+                
+                if (password !== confirmPassword) {
+                    validationStates['confirm_password'] = false;
+                    showFieldValidation(confirmPasswordField, false, 'Passwords do not match.');
+                } else if (password && password.length >= 8) {
+                    validationStates['confirm_password'] = true;
+                    showFieldValidation(confirmPasswordField, true, '✅ Looks good!');
+                } else {
+                    validationStates['confirm_password'] = undefined;
+                    showFieldValidation(confirmPasswordField, undefined, '');
+                }
+                
+                checkFormValidation();
+            }
+            
+            // Initial validation check
+            checkFormValidation();
         }
         
         async function goToStep(step) {
+            // If trying to go to step 2, show verification modal instead (unless coming from verification)
+            if (step === 2 && !window.emailVerified) {
+                // Check if email is verified in session or allow if coming from verification
+                const isValid = await validateStep1();
+                if (!isValid) {
+                    return;
+                }
+                // Show verification modal instead of going directly to step 2
+                showVerificationModal();
+                return;
+            }
+            
             // Validate current step before proceeding
             if (step === 2) {
                 const isValid = await validateStep1();
@@ -3220,7 +5514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Check if email is valid and available
-            if (!isEmailValid) {
+            if (!window.isEmailValid) {
                 showToast('Please ensure your email is valid and available before proceeding!', 'error');
                 // Trigger email validation if not already done
                 await checkEmailAvailability(email);
@@ -3283,9 +5577,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const lastName = document.querySelector('input[name="last_name"]').value.trim();
             const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
             const email = document.querySelector('input[name="email"]').value.trim();
+            const password = document.querySelector('input[name="password"]').value;
+            const confirmPassword = document.querySelector('input[name="confirm_password"]').value;
+            const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
+            const barangayId = document.querySelector('select[name="barangay_id"]')?.value;
+            const purokId = document.querySelector('select[name="purok_id"]')?.value;
             
-            if (!firstName || !lastName || !email) {
-                showToast('Please fill in all required fields (First Name, Last Name, Email).', 'error');
+            if (!firstName || !lastName || !email || !password || !dateOfBirth || !barangayId || !purokId) {
+                showToast('Please fill in all required fields.', 'error');
+                return false;
+            }
+            
+            // Validate password match
+            if (password !== confirmPassword) {
+                showToast('Passwords do not match. Please check and try again.', 'error');
+                return false;
+            }
+            
+            // Validate password strength (minimum 8 characters)
+            if (password.length < 8) {
+                showToast('Password must be at least 8 characters long.', 'error');
                 return false;
             }
             
@@ -3319,7 +5630,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         async function validateStep2() {
-            const familyMembers = document.querySelectorAll('.family-member');
+            const familyMembers = document.querySelectorAll('.family-member-card');
             let hasValidMembers = false;
             
             for (let member of familyMembers) {
@@ -3376,53 +5687,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const middleInitial = document.querySelector('input[name="middle_initial"]').value;
             const lastName = document.querySelector('input[name="last_name"]').value;
             const email = document.querySelector('input[name="email"]').value;
-            const phone = document.querySelector('input[name="phone"]').value;
+            const phone = document.querySelector('input[name="phone"]').value || 'Not provided';
             const dob = document.querySelector('input[name="date_of_birth"]').value;
+            const barangaySelect = document.querySelector('select[name="barangay_id"]');
+            const barangay = barangaySelect ? barangaySelect.options[barangaySelect.selectedIndex].text : '';
             const purokSelect = document.querySelector('select[name="purok_id"]');
-            const purok = purokSelect.options[purokSelect.selectedIndex].text;
+            const purok = purokSelect ? purokSelect.options[purokSelect.selectedIndex].text : '';
             
             let fullName = firstName;
-            if (middleInitial) fullName += ' ' + middleInitial;
+            if (middleInitial) fullName += ' ' + middleInitial + '.';
             if (lastName) fullName += ' ' + lastName;
             
             personalInfo.innerHTML = `
-                <div class="grid grid-cols-2 gap-4">
-                    <div><strong>Full Name:</strong> ${fullName}</div>
-                    <div><strong>Email:</strong> ${email}</div>
-                    <div><strong>Phone:</strong> ${phone}</div>
-                    <div><strong>Date of Birth:</strong> ${dob}</div>
-                    <div><strong>Purok:</strong> ${purok}</div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Full Name</span>
+                    <span class="review-info-value">${fullName || 'Not provided'}</span>
+                </div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Email</span>
+                    <span class="review-info-value">${email || 'Not provided'}</span>
+                </div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Phone</span>
+                    <span class="review-info-value">${phone}</span>
+                </div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Date of Birth</span>
+                    <span class="review-info-value">${dob || 'Not provided'}</span>
+                </div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Barangay</span>
+                    <span class="review-info-value">${barangay || 'Not provided'}</span>
+                </div>
+                <div class="review-info-item">
+                    <span class="review-info-label">Purok</span>
+                    <span class="review-info-value">${purok || 'Not provided'}</span>
                 </div>
             `;
             
             // Populate family members
             const familyMembers = document.getElementById('review-family-members');
-            const familyMemberElements = document.querySelectorAll('.family-member');
+            const familyMemberElements = document.querySelectorAll('.family-member-card');
             let familyHTML = '';
             
             if (familyMemberElements.length === 0) {
-                familyHTML = '<p class="text-gray-500">No family members added.</p>';
+                familyHTML = '<p class="text-gray-500 text-sm">No family members added.</p>';
             } else {
                 familyMemberElements.forEach((member, index) => {
-                    const firstName = member.querySelector('input[name*="[first_name]"]').value;
-                    const middleInitial = member.querySelector('input[name*="[middle_initial]"]').value;
-                    const lastName = member.querySelector('input[name*="[last_name]"]').value;
-                    const relationship = member.querySelector('select[name*="[relationship]"]').value;
-                    const dob = member.querySelector('input[name*="[date_of_birth]"]').value;
+                    const firstName = member.querySelector('input[name*="[first_name]"]')?.value || '';
+                    const middleInitial = member.querySelector('input[name*="[middle_initial]"]')?.value || '';
+                    const lastName = member.querySelector('input[name*="[last_name]"]')?.value || '';
+                    const relationship = member.querySelector('select[name*="[relationship]"]')?.value || '';
+                    const dob = member.querySelector('input[name*="[date_of_birth]"]')?.value || '';
                     
                     let fullName = firstName;
-                    if (middleInitial) fullName += ' ' + middleInitial;
+                    if (middleInitial) fullName += ' ' + middleInitial + '.';
                     if (lastName) fullName += ' ' + lastName;
                     
                     if (firstName || lastName || relationship) {
                         familyHTML += `
-                            <div class="border-b border-gray-200 pb-2 mb-2 last:border-b-0">
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div><strong>Name:</strong> ${fullName}</div>
-                                    <div><strong>Relationship:</strong> ${relationship}</div>
-                                    <div><strong>Date of Birth:</strong> ${dob}</div>
+                            <div class="review-info-item">
+                                <span class="review-info-label">Name</span>
+                                <span class="review-info-value">${fullName || 'Not provided'}</span>
                                 </div>
+                            <div class="review-info-item">
+                                <span class="review-info-label">Relationship</span>
+                                <span class="review-info-value">${relationship || 'Not provided'}</span>
                             </div>
+                            <div class="review-info-item">
+                                <span class="review-info-label">Date of Birth</span>
+                                <span class="review-info-value">${dob || 'Not provided'}</span>
+                            </div>
+                            ${index < familyMemberElements.length - 1 ? '<div style="margin: 1rem 0; border-top: 1px solid #e5e7eb;"></div>' : ''}
                         `;
                     }
                 });
@@ -3678,16 +6014,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const firstNameInput = memberElement.querySelector('input[name*="[first_name]"]');
             const lastNameInput = memberElement.querySelector('input[name*="[last_name]"]');
             const middleInitialInput = memberElement.querySelector('input[name*="[middle_initial]"]');
+            const dateOfBirthInput = memberElement.querySelector('input[name*="[date_of_birth]"]');
             
-            if (firstNameInput && lastNameInput) {
-                // Add event listeners for real-time validation
-                [firstNameInput, lastNameInput, middleInitialInput].forEach(input => {
-                    if (input) {
-                        input.addEventListener('blur', function() {
+            // Setup validation for first name
+            if (firstNameInput) {
+                setupFieldValidation(firstNameInput, validateLettersOnly, 'First name', { 
+                    fieldType: 'letters' 
+                });
+                firstNameInput.addEventListener('blur', function() {
                             checkFamilyMemberDuplicate(memberElement);
                         });
                     }
+            
+            // Setup validation for last name
+            if (lastNameInput) {
+                setupFieldValidation(lastNameInput, validateLettersOnly, 'Last name', { 
+                    fieldType: 'letters' 
                 });
+                lastNameInput.addEventListener('blur', function() {
+                    checkFamilyMemberDuplicate(memberElement);
+                });
+            }
+            
+            // Setup validation for middle initial
+            if (middleInitialInput) {
+                setupFieldValidation(middleInitialInput, (value) => {
+                    if (!value || value.trim() === '') {
+                        return { valid: true, message: '' }; // Optional
+                    }
+                    
+                    // Check length first
+                    const trimmed = value.trim();
+                    if (trimmed.length > 1) {
+                        return { valid: false, message: 'Middle initial must be exactly 1 character.' };
+                    }
+                    
+                    // Validate it's a letter only (no numbers, no special chars)
+                    if (!/^[A-Za-zÀ-ÿ]$/.test(trimmed)) {
+                        return { 
+                            valid: false, 
+                            message: 'Middle initial must be a single letter.' 
+                        };
+                    }
+                    
+                    return { valid: true, message: '✅ Looks good!' };
+                }, 'Middle initial', { 
+                    fieldType: 'letters' 
+                });
+            }
+            
+            // Setup validation for date of birth (no age requirement for family members)
+            if (dateOfBirthInput) {
+                setupFieldValidation(dateOfBirthInput, (value) => {
+                    if (!value || value.trim() === '') {
+                        return { valid: true, message: '' }; // Optional for family members
+                    }
+                    
+                    const date = new Date(value);
+                    const today = new Date();
+                    
+                    if (isNaN(date.getTime())) {
+                        return { valid: false, message: 'Please enter a valid date.' };
+                    }
+                    
+                    if (date > today) {
+                        return { valid: false, message: 'Date of birth cannot be in the future.' };
+                    }
+                    
+                    return { valid: true, message: '' };
+                }, 'Date of birth');
             }
         }
         
@@ -3789,27 +6184,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         function updateProgressIndicator(currentStep) {
-            // Reset all steps
+            // Update header step indicator
+            const stepBadge = document.querySelector('.register-header-content .text-xs.font-medium');
+            const stepText = document.querySelector('.register-header-content .text-xs.text-white\\/70');
+            const subtitle = document.getElementById('register-modal-subtitle');
+            
+            if (stepBadge && stepText) {
+                const stepNames = {
+                    1: { badge: 'Step 1 of 3', text: 'Personal Information' },
+                    2: { badge: 'Step 2 of 3', text: 'Family Members' },
+                    3: { badge: 'Step 3 of 3', text: 'Review & Submit' }
+                };
+                
+                if (stepNames[currentStep]) {
+                    stepBadge.textContent = stepNames[currentStep].badge;
+                    stepText.textContent = stepNames[currentStep].text;
+                }
+            }
+            
+            // Show subtitle only on step 1, hide on steps 2 and 3
+            if (subtitle) {
+                if (currentStep === 1) {
+                    subtitle.style.display = 'block';
+                } else {
+                    subtitle.style.display = 'none';
+                }
+            }
+            
+            // Update all steps
             for (let i = 1; i <= 3; i++) {
-                const stepElement = document.getElementById(`modal-step-${i}`);
-                const stepText = stepElement.parentElement.querySelector('span');
-                const connector = stepElement.parentElement.nextElementSibling;
+                const stepNumber = document.getElementById(`modal-step-${i}`);
+                const stepItem = stepNumber.closest('.step-item');
+                const stepLabel = stepItem.querySelector('.step-label');
+                const dividerBefore = stepItem.previousElementSibling;
+                const dividerAfter = stepItem.nextElementSibling;
+                
+                // Remove all active/inactive classes
+                stepNumber.classList.remove('active', 'inactive');
+                stepItem.classList.remove('active');
                 
                 if (i < currentStep) {
                     // Completed step
-                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white';
-                    stepText.className = 'ml-3 text-sm font-medium text-gray-900';
-                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-900 rounded-full';
+                    stepNumber.classList.add('active');
+                    stepItem.classList.add('active');
+                    if (dividerBefore && dividerBefore.classList.contains('step-divider')) {
+                        dividerBefore.classList.add('completed');
+                    }
                 } else if (i === currentStep) {
                     // Current step
-                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-900 text-white';
-                    stepText.className = 'ml-3 text-sm font-medium text-gray-900';
-                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-200 rounded-full';
+                    stepNumber.classList.add('active');
+                    stepItem.classList.add('active');
                 } else {
                     // Future step
-                    stepElement.className = 'flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold bg-gray-200 text-gray-500';
-                    stepText.className = 'ml-3 text-sm font-medium text-gray-500';
-                    if (connector) connector.className = 'w-8 h-0.5 bg-gray-200 rounded-full';
+                    stepNumber.classList.add('inactive');
                 }
             }
         }
@@ -3821,9 +6248,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         function openLoginModal() {
-            document.getElementById('loginModal').classList.remove('hidden');
-            document.getElementById('loginModal').classList.add('flex');
+            const modal = document.getElementById('loginModal');
+            const submitBtn = document.getElementById('login-submit-btn');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
+            
+            // Reset loading state if modal was previously opened
+            if (submitBtn) {
+                submitBtn.classList.remove('loading');
+                const span = submitBtn.querySelector('span');
+                if (span) {
+                    span.textContent = 'Sign in';
+                }
+            }
+            
+            // Process logo to remove white background
+            setTimeout(() => {
+                initLogoProcessing();
+            }, 100);
+            
+            // Focus on email input for better UX
+            const emailInput = document.getElementById('login-email');
+            if (emailInput) {
+                setTimeout(() => emailInput.focus(), 100);
+                
+                // Setup login form validation
+                setupLoginValidation();
+            }
+        }
+        
+        // Setup login form validation
+        function setupLoginValidation() {
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            
+            function validateLoginForm() {
+                const email = emailInput?.value.trim();
+                const password = passwordInput?.value;
+                
+                // Basic email format check
+                const emailValid = email && VALIDATION_PATTERNS.email.test(email);
+                const passwordValid = password && password.length > 0;
+                
+                // Show validation feedback
+                if (emailInput) {
+                    emailInput.classList.remove('border-red-300', 'border-green-300');
+                    if (email && !emailValid) {
+                        emailInput.classList.add('border-red-300');
+                    } else if (email && emailValid) {
+                        emailInput.classList.add('border-green-300');
+                    }
+                }
+                
+                if (passwordInput) {
+                    passwordInput.classList.remove('border-red-300', 'border-green-300');
+                    if (password && !passwordValid) {
+                        passwordInput.classList.add('border-red-300');
+                    } else if (password && passwordValid) {
+                        passwordInput.classList.add('border-green-300');
+                    }
+                }
+                
+                return emailValid && passwordValid;
+            }
+            
+            // Real-time validation
+            if (emailInput) {
+                emailInput.addEventListener('input', function() {
+                    // Sanitize email input - remove banned characters but keep @, ., _, %, +, -
+                    let value = this.value;
+                    // Remove truly banned chars for emails (keep @ . _ % + - which are valid in emails)
+                    const sanitized = value.replace(/[!$^&*()={}\[\]:;"<>?\/\\|~`]/g, '');
+                    if (sanitized !== value) {
+                        const cursorPos = this.selectionStart;
+                        this.value = sanitized;
+                        this.setSelectionRange(Math.max(0, cursorPos - 1), Math.max(0, cursorPos - 1));
+                    }
+                    validateLoginForm();
+                });
+            }
+            
+            if (passwordInput) {
+                passwordInput.addEventListener('input', validateLoginForm);
+            }
         }
         
         function closeLoginModal() {
@@ -3965,60 +6474,182 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
+        // Toggle family member card expand/collapse
+        function toggleFamilyMemberCard(headerElement) {
+            const card = headerElement.closest('.family-member-card');
+            if (card) {
+                card.classList.toggle('expanded');
+            }
+        }
+        
+        // Remove family member card
+        function removeFamilyMember(buttonElement) {
+            const card = buttonElement.closest('.family-member-card');
+            if (card) {
+                // Add fade-out animation
+                card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(-20px)';
+                
+                setTimeout(() => {
+                    card.remove();
+                    // Update family member numbers
+                    updateFamilyMemberNumbers();
+                }, 300);
+            }
+        }
+        
+        // Update family member numbers after removal
+        function updateFamilyMemberNumbers() {
+            const cards = document.querySelectorAll('.family-member-card');
+            cards.forEach((card, index) => {
+                const titleElement = card.querySelector('.family-member-title');
+                if (titleElement) {
+                    titleElement.textContent = `Family Member ${index + 1}`;
+                }
+            });
+        }
+        
         // Add family member functionality
         document.getElementById('add-family-member').addEventListener('click', function() {
             const container = document.getElementById('family-members-container');
             const newMember = document.createElement('div');
-            newMember.className = 'family-member bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:border-blue-300';
+            newMember.className = 'family-member-card expanded';
             newMember.innerHTML = `
-                <div class="flex justify-between items-center mb-3">
-                    <h4 class="font-semibold text-gray-800 text-lg">Family Member ${familyMemberCount + 1}</h4>
-                    <button type="button" class="remove-family-member text-red-600 hover:text-red-700 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-all duration-200">Remove</button>
+                <div class="family-member-header" onclick="toggleFamilyMemberCard(this)">
+                    <div class="family-member-header-left">
+                        <svg class="family-member-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                        <span class="family-member-title">Family Member ${familyMemberCount + 1}</span>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">First Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][first_name]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="Juan" />
+                    <div class="family-member-header-right">
+                        <button type="button" class="remove-family-member-btn" onclick="event.stopPropagation(); removeFamilyMember(this)" aria-label="Remove family member">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
-                        <input type="text" name="family_members[${familyMemberCount}][middle_initial]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="D." maxlength="1" />
                     </div>
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">Last Name</label>
-                        <input type="text" name="family_members[${familyMemberCount}][last_name]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" placeholder="Dela Cruz" />
+                <div class="family-member-content">
+                    <!-- Row 1: First Name, Middle Initial, Last Name -->
+                    <div class="family-member-fields">
+                        <div>
+                            <input type="text" name="family_members[${familyMemberCount}][first_name]" 
+                                   class="register-input-field" 
+                                   placeholder="First Name" />
                     </div>
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">Relationship</label>
-                        <select name="family_members[${familyMemberCount}][relationship]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white">
-                            <option value="">Select Relationship</option>
-                            <option value="Father">Father</option>
-                            <option value="Mother">Mother</option>
-                            <option value="Son">Son</option>
-                            <option value="Daughter">Daughter</option>
-                            <option value="Brother">Brother</option>
-                            <option value="Sister">Sister</option>
-                            <option value="Grandfather">Grandfather</option>
-                            <option value="Grandmother">Grandmother</option>
-                            <option value="Other">Other</option>
-                        </select>
+                        <div>
+                            <input type="text" name="family_members[${familyMemberCount}][middle_initial]" 
+                                   class="register-input-field" 
+                                   placeholder="M.I." 
+                                   maxlength="1" />
+                        </div>
+                        <div>
+                            <input type="text" name="family_members[${familyMemberCount}][last_name]" 
+                                   class="register-input-field" 
+                                   placeholder="Last Name" />
+                        </div>
                     </div>
-                    <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
-                        <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-gray-900 focus:ring-2 focus:ring-gray-100 transition-all duration-200 outline-none bg-white" />
+                    
+                    <!-- Row 2: Relationship, Date of Birth -->
+                    <div class="family-member-fields-row2">
+                        <div class="w-full">
+                            <select name="family_members[${familyMemberCount}][relationship]" 
+                                    class="register-input-field appearance-none pr-10 w-full"
+                                    onchange="handleRelationshipChange(this, ${familyMemberCount})">
+                                <option value="">Relationship</option>
+                                <option value="Father">Father</option>
+                                <option value="Mother">Mother</option>
+                                <option value="Son">Son</option>
+                                <option value="Daughter">Daughter</option>
+                                <option value="Brother">Brother</option>
+                                <option value="Sister">Sister</option>
+                                <option value="Husband">Husband</option>
+                                <option value="Wife">Wife</option>
+                                <option value="Spouse">Spouse</option>
+                                <option value="Grandfather">Grandfather</option>
+                                <option value="Grandmother">Grandmother</option>
+                                <option value="Uncle">Uncle</option>
+                                <option value="Aunt">Aunt</option>
+                                <option value="Nephew">Nephew</option>
+                                <option value="Niece">Niece</option>
+                                <option value="Cousin">Cousin</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <input type="text" 
+                                   name="family_members[${familyMemberCount}][relationship_other]" 
+                                   id="relationship_other_${familyMemberCount}"
+                                   class="register-input-field mt-2 w-full transition-all duration-300 ease-in-out opacity-0 max-h-0 overflow-hidden" 
+                                   placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
+                                   maxlength="50"
+                                   style="display: none;" />
+                        </div>
+                        <div>
+                            <input type="date" name="family_members[${familyMemberCount}][date_of_birth]" 
+                                   class="register-input-field" 
+                                   placeholder="Date of Birth" />
+                        </div>
                     </div>
                 </div>
             `;
-            container.appendChild(newMember);
-            familyMemberCount++;
             
-            // Add remove functionality
-            newMember.querySelector('.remove-family-member').addEventListener('click', function() {
-                newMember.remove();
-            });
+            // Add fade-in animation
+            newMember.style.opacity = '0';
+            newMember.style.transform = 'translateY(-10px)';
+            container.appendChild(newMember);
+            
+            // Trigger animation
+            setTimeout(() => {
+                newMember.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                newMember.style.opacity = '1';
+                newMember.style.transform = 'translateY(0)';
+            }, 10);
+            
+            familyMemberCount++;
             
             // Add real-time validation for family member fields
             setupFamilyMemberValidation(newMember);
+            
+            // Scroll to new member card
+            newMember.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+        
+        // Handle relationship change to show/hide custom relationship input
+        function handleRelationshipChange(selectElement, memberIndex) {
+            const otherInput = document.getElementById('relationship_other_' + memberIndex);
+            if (otherInput) {
+                if (selectElement.value === 'Other') {
+                    // Show with smooth animation
+                    otherInput.classList.remove('opacity-0', 'max-h-0', 'overflow-hidden');
+                    otherInput.classList.add('opacity-100', 'max-h-20', 'mb-2');
+                    otherInput.style.display = 'block';
+                    otherInput.required = true;
+                    // Focus on the input
+                    setTimeout(() => {
+                        otherInput.focus();
+                    }, 100);
+                } else {
+                    // Hide with smooth animation
+                    otherInput.classList.remove('opacity-100', 'max-h-20', 'mb-2');
+                    otherInput.classList.add('opacity-0', 'max-h-0', 'overflow-hidden');
+                    otherInput.value = '';
+                    otherInput.required = false;
+                    setTimeout(() => {
+                        if (otherInput.value === '') {
+                            otherInput.style.display = 'none';
+                        }
+                    }, 300);
+                }
+            }
+        }
+        
+        // Setup validation for initial family member on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const firstFamilyMember = document.querySelector('.family-member-card');
+            if (firstFamilyMember) {
+                setupFamilyMemberValidation(firstFamilyMember);
+            }
         });
         
         // Close modal when clicking outside
@@ -4033,6 +6664,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 closeLoginModal();
             }
         });
+        
+        // Remove white background from logo using canvas
+        function removeLogoWhiteBackground() {
+            const logoImg = document.getElementById('login-logo-img');
+            const canvas = document.getElementById('login-logo-canvas');
+            
+            if (!logoImg || !canvas) return;
+            
+            // Function to process the image
+            function processImage(imgElement) {
+                try {
+                    const ctx = canvas.getContext('2d');
+                    // Use a higher resolution for better quality, then scale down
+                    const scale = 2; // 2x resolution for better quality
+                    canvas.width = (logoImg.clientWidth || 56) * scale;
+                    canvas.height = (logoImg.clientHeight || 56) * scale;
+                    
+                    // Draw the image scaled up
+                    ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+                    
+                    // Get image data
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    
+                    // Remove white/light pixels (make them transparent)
+                    // Threshold for white detection (240-255 range, lower = more aggressive)
+                    const whiteThreshold = 240;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        const a = data[i + 3];
+                        
+                        // If pixel is white or very light, make it transparent
+                        if (a > 0 && r >= whiteThreshold && g >= whiteThreshold && b >= whiteThreshold) {
+                            data[i + 3] = 0; // Set alpha to 0 (transparent)
+                        }
+                    }
+                    
+                    // Put the modified image data back
+                    ctx.putImageData(imageData, 0, 0);
+                    
+                    // Replace the image source with processed canvas
+                    const processedDataUrl = canvas.toDataURL('image/png');
+                    logoImg.src = processedDataUrl;
+                    logoImg.style.width = '56px';
+                    logoImg.style.height = '56px';
+                } catch (e) {
+                    // If processing fails, fall back to CSS blend mode
+                    console.log('Logo processing failed, using CSS blend mode:', e);
+                    logoImg.style.mixBlendMode = 'multiply';
+                }
+            }
+            
+            // If image is already loaded and has dimensions
+            if (logoImg.complete && logoImg.naturalWidth > 0) {
+                processImage(logoImg);
+            } else {
+                // Wait for image to load
+                const handleLoad = function() {
+                    processImage(logoImg);
+                    logoImg.removeEventListener('load', handleLoad);
+                };
+                logoImg.addEventListener('load', handleLoad);
+            }
+        }
+        
+        // Initialize logo processing
+        function initLogoProcessing() {
+            const logoImg = document.getElementById('login-logo-img');
+            if (!logoImg) return;
+            
+            // Small delay to ensure modal is rendered
+            setTimeout(() => {
+                removeLogoWhiteBackground();
+            }, 150);
+        }
+        
+        // Login form submission with loading state
+        const loginForm = document.getElementById('loginForm');
+        const loginSubmitBtn = document.getElementById('login-submit-btn');
+        
+        if (loginForm && loginSubmitBtn) {
+            loginForm.addEventListener('submit', function(e) {
+                const email = document.getElementById('login-email').value.trim();
+                const password = document.getElementById('login-password').value;
+                
+                // Basic validation
+                if (!email || !password) {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Show loading state
+                loginSubmitBtn.classList.add('loading');
+                loginSubmitBtn.querySelector('span').textContent = 'Signing in...';
+                
+                // Form will submit normally, but if there's an error, we'll handle it on return
+                // The loading state will be reset if the page reloads with an error
+            });
+        }
         
         // Active Link Management
         function setActiveLink(sectionId) {
@@ -4090,6 +6823,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Initialize: Set Home as active by default
         document.addEventListener('DOMContentLoaded', function() {
             setActiveLink('home');
+            
+            // Initialize logo processing on page load
+            initLogoProcessing();
             
             // Add click handlers to all nav links
             document.querySelectorAll('.nav-link, .nav-link-mobile').forEach(link => {
@@ -4338,15 +7074,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         
         // Email verification functions
+        let resendTimer = null;
+        let timerSeconds = 60;
+        
         function showVerificationModal() {
             const modal = document.getElementById('verificationModal');
+            const emailInput = document.getElementById('email-input');
+            const emailDisplay = document.getElementById('verification-email-display');
+            
+            if (emailInput && emailDisplay) {
+                emailDisplay.textContent = emailInput.value;
+            }
+            
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            
+            // Reset verification code input
+            const codeInput = document.getElementById('verificationCode');
+            if (codeInput) {
+                codeInput.value = '';
+                codeInput.focus();
+            }
+            
+            // Hide previous errors/success
+            document.getElementById('verificationError').classList.add('hidden');
+            document.getElementById('verificationSuccess').classList.add('hidden');
             
             // Show info toast about email verification
             showToast('Sending verification code to your email...', 'info');
             
-            // Request verification code immediately
+            // Request verification code immediately and start timer
             requestVerificationCode();
         }
         
@@ -4354,8 +7112,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const modal = document.getElementById('verificationModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-            document.getElementById('verificationCode').value = '';
+            document.body.style.overflow = 'auto';
+            
+            const codeInput = document.getElementById('verificationCode');
+            if (codeInput) {
+                codeInput.value = '';
+            }
+            
             document.getElementById('verificationError').classList.add('hidden');
+            document.getElementById('verificationSuccess').classList.add('hidden');
+            
+            // Clear timer
+            if (resendTimer) {
+                clearInterval(resendTimer);
+                resendTimer = null;
+            }
+            
+            // Reset timer UI
+            timerSeconds = 60;
+            updateResendTimer();
+        }
+        
+        function startResendTimer() {
+            // Clear existing timer
+            if (resendTimer) {
+                clearInterval(resendTimer);
+            }
+            
+            timerSeconds = 60;
+            const resendBtn = document.getElementById('resendBtn');
+            const timerDiv = document.getElementById('resend-timer');
+            const timerCount = document.getElementById('timer-count');
+            
+            resendBtn.disabled = true;
+            timerDiv.classList.add('active');
+            
+            resendTimer = setInterval(() => {
+                timerSeconds--;
+                if (timerCount) {
+                    timerCount.textContent = timerSeconds;
+                }
+                
+                if (timerSeconds <= 0) {
+                    clearInterval(resendTimer);
+                    resendTimer = null;
+                    resendBtn.disabled = false;
+                    timerDiv.classList.remove('active');
+                    if (timerCount) {
+                        timerCount.textContent = '0';
+                    }
+                }
+            }, 1000);
+        }
+        
+        function updateResendTimer() {
+            const timerCount = document.getElementById('timer-count');
+            const resendBtn = document.getElementById('resendBtn');
+            const timerDiv = document.getElementById('resend-timer');
+            
+            if (timerSeconds > 0) {
+                if (timerCount) timerCount.textContent = timerSeconds;
+                if (resendBtn) resendBtn.disabled = true;
+                if (timerDiv) timerDiv.classList.add('active');
+            } else {
+                if (resendBtn) resendBtn.disabled = false;
+                if (timerDiv) timerDiv.classList.remove('active');
+            }
         }
         
         async function requestVerificationCode() {
@@ -4367,6 +7189,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 showVerificationError('Please fill in email, first name, and last name first.');
                 return;
             }
+            
+            // Hide previous errors
+            document.getElementById('verificationError').classList.add('hidden');
+            document.getElementById('verificationSuccess').classList.add('hidden');
             
             try {
                 const formData = new FormData();
@@ -4383,23 +7209,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const result = await response.json();
                 
                 if (result.success) {
-                    showToast('Verification code sent!', 'success');
+                    showToast('Verification code sent to your email!', 'success');
+                    // Start resend timer
+                    startResendTimer();
                 } else {
-                    // Show both toast and modal error
                     showToast(result.message || 'Failed to send verification code', 'error');
                     showVerificationError(result.message || 'Failed to send verification code');
                 }
             } catch (error) {
+                console.error('Verification code request error:', error);
                 showToast('Network error. Please check your connection and try again.', 'error');
-                showVerificationError('Error sending verification code');
+                showVerificationError('Error sending verification code. Please try again.');
             }
         }
         
         async function verifyCode() {
             const code = document.getElementById('verificationCode').value.trim();
+            const errorDiv = document.getElementById('verificationError');
+            const successDiv = document.getElementById('verificationSuccess');
+            const errorText = document.getElementById('verificationErrorText');
+            
+            // Hide previous messages
+            errorDiv.classList.add('hidden');
+            successDiv.classList.add('hidden');
             
             if (!code || code.length !== 6) {
-                showVerificationError('Please enter a 6-digit code');
+                if (errorText) errorText.textContent = 'Please enter a 6-digit code';
+                errorDiv.classList.remove('hidden');
                 return;
             }
             
@@ -4416,32 +7252,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const result = await response.json();
                 
                 if (result.success) {
-                    showToast('Email verified!', 'success');
+                    // Show success message
+                    successDiv.classList.remove('hidden');
+                    
+                    // Mark email as verified
+                    window.emailVerified = true;
+                    
+                    // Clear timer
+                    if (resendTimer) {
+                        clearInterval(resendTimer);
+                        resendTimer = null;
+                    }
+                    
+                    // Wait a moment then proceed to step 2
+                    setTimeout(() => {
                     closeVerificationModal();
-                    goToStep(2);
+                        // Directly show step 2 without validation since email is verified
+                        document.querySelectorAll('.step-content').forEach(content => {
+                            content.classList.add('hidden');
+                        });
+                        document.getElementById('step-2').classList.remove('hidden');
+                        updateProgressIndicator(2);
+                    }, 1500);
                 } else {
-                    showVerificationError(result.message || 'Invalid verification code');
+                    if (errorText) errorText.textContent = result.message || 'Invalid verification code';
+                    errorDiv.classList.remove('hidden');
                 }
             } catch (error) {
-                showVerificationError('Error verifying code');
+                console.error('Verification error:', error);
+                if (errorText) errorText.textContent = 'Error verifying code. Please try again.';
+                errorDiv.classList.remove('hidden');
             }
         }
         
         function showVerificationError(message) {
             const errorDiv = document.getElementById('verificationError');
-            errorDiv.textContent = message;
+            const errorText = document.getElementById('verificationErrorText');
+            
+            if (errorText) errorText.textContent = message;
             errorDiv.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds
             setTimeout(() => {
                 errorDiv.classList.add('hidden');
             }, 5000);
         }
         
-        // Allow Enter key to verify
-        document.getElementById('verificationCode').addEventListener('keypress', function(e) {
+        // Allow Enter key to verify and auto-focus
+        const verificationCodeInput = document.getElementById('verificationCode');
+        if (verificationCodeInput) {
+            verificationCodeInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 verifyCode();
             }
         });
+            
+            // Auto-format: only numbers, max 6 digits
+            verificationCodeInput.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+            });
+        }
     </script>
 </body>
 </html>

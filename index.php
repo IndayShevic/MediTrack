@@ -975,6 +975,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 1rem;
         }
         
+        /* About Section Modern Animations */
+        .about-content {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .about-content.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .about-feature {
+            opacity: 0;
+            transform: translateX(20px);
+            transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .about-feature.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        
+        .about-stat {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+            transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .about-stat.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        
+        @keyframes numberCount {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        .about-stat.visible > div:first-child {
+            animation: numberCount 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        
         details summary {
             transition: all 0.3s ease;
         }
@@ -3355,45 +3404,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
 
         <!-- About Section -->
-        <section id="about" class="py-12 sm:py-16 lg:py-24 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/20 relative overflow-hidden">
-            <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+        <section id="about" class="py-20 sm:py-24 lg:py-32 bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
+            <!-- Decorative Background Elements -->
+            <div class="absolute top-0 right-0 w-96 h-96 bg-blue-100/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+            <div class="absolute bottom-0 left-0 w-96 h-96 bg-indigo-100/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+            
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <div class="text-center mb-10 sm:mb-12 lg:mb-16">
-                    <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">
-                        About <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600">MediTrack</span>
-                    </h2>
-                    <div class="w-24 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600 mx-auto rounded-full"></div>
+                <!-- Header Section -->
+                <div class="text-center mb-16 sm:mb-20 lg:mb-24">
+                    <div class="relative inline-block mb-6">
+                        <span class="text-6xl sm:text-7xl lg:text-8xl font-bold text-blue-600/10 select-none">01</span>
+                        <h2 class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 whitespace-nowrap">
+                            About MediTrack
+                        </h2>
+                    </div>
+                    <p class="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mt-6">
+                        Transforming barangay healthcare through intelligent medicine management
+                    </p>
                 </div>
                 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 mb-8 sm:mb-12">
-                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">What is MediTrack?</h3>
-                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
-                            MediTrack is a comprehensive web-based solution designed specifically for barangay health centers. It streamlines medicine inventory management and request processing, connecting residents, Barangay Health Workers (BHWs), and administrators in one unified platform.
-                        </p>
+                <!-- Main Content - Split Layout -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-16">
+                    <!-- Left Side - Main Description -->
+                    <div class="lg:col-span-7 about-content">
+                        <div class="bg-white rounded-2xl lg:rounded-3xl p-8 sm:p-10 lg:p-12 shadow-xl border border-gray-100 hover:shadow-2xl transition-all duration-500 relative overflow-hidden group">
+                            <!-- Accent Line -->
+                            <div class="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-blue-600 via-indigo-600 to-purple-600 group-hover:w-2 transition-all duration-500"></div>
+                            
+                            <div class="relative z-10">
+                                <h3 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">
+                                    Empowering Communities Through Technology
+                                </h3>
+                                <div class="space-y-5 text-gray-700 leading-relaxed">
+                                    <p class="text-base sm:text-lg">
+                                        <strong class="text-gray-900">MediTrack</strong> is a comprehensive web-based platform designed specifically for barangay health centers. Our system revolutionizes medicine management by connecting residents, health workers, and administrators in one seamless ecosystem.
+                                    </p>
+                                    <p class="text-base sm:text-lg">
+                                        We streamline every aspect of the medicine request process—from initial submission to inventory tracking and distribution. Our platform ensures transparency, efficiency, and most importantly, timely access to essential medicines for those who need them most.
+                                    </p>
+                                    <p class="text-base sm:text-lg">
+                                        Built with cutting-edge technology and user-centered design, MediTrack employs FEFO (First Expired, First Out) batch handling to guarantee medicine quality and safety while maintaining accurate real-time inventory tracking.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">Our Purpose</h3>
-                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
-                            We aim to improve healthcare accessibility at the barangay level by providing a reliable, efficient system for tracking medicine availability, processing requests, and ensuring timely distribution to residents who need them most.
-                        </p>
-                    </div>
-                </div>
-                
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
-                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">How It Works</h3>
-                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
-                            Residents can browse available medicines and submit requests with necessary documentation. BHWs review and approve requests, while administrators manage inventory using FEFO (First Expired, First Out) batch handling to ensure medicine quality and safety.
-                        </p>
-                    </div>
-                    
-                    <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10 shadow-lg border border-white/50">
-                        <h3 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">Why MediTrack Matters</h3>
-                        <p class="text-sm sm:text-base md:text-lg text-gray-700 text-justify leading-relaxed">
-                            Built with PHP, MySQL, and TailwindCSS, MediTrack offers role-based dashboards for Super Admins, BHWs, and Residents. It features a senior citizen maintenance allocation program and ensures accurate inventory tracking for healthier communities.
-                        </p>
+                    <!-- Right Side - Feature Highlights -->
+                    <div class="lg:col-span-5 space-y-6">
+                        <!-- Feature Card 1 -->
+                        <div class="about-feature bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 sm:p-8 border border-blue-100 hover:border-blue-200 transition-all duration-300 hover:shadow-lg">
+                            <div class="flex items-start gap-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Streamlined Workflow</h4>
+                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
+                                        Simple request submission and approval process for efficient medicine distribution.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Feature Card 2 -->
+                        <div class="about-feature bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 sm:p-8 border border-indigo-100 hover:border-indigo-200 transition-all duration-300 hover:shadow-lg">
+                            <div class="flex items-start gap-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Real-Time Tracking</h4>
+                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
+                                        Monitor inventory levels and request status with live updates and notifications.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Feature Card 3 -->
+                        <div class="about-feature bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 sm:p-8 border border-purple-100 hover:border-purple-200 transition-all duration-300 hover:shadow-lg">
+                            <div class="flex items-start gap-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-bold text-gray-900 mb-2">Secure & Reliable</h4>
+                                    <p class="text-sm sm:text-base text-gray-600 leading-relaxed">
+                                        Enterprise-grade security with role-based access control for data protection.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -7027,6 +7135,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }, index * 100);
             });
         }, 500);
+
+        // About section animations
+        const aboutElements = {
+            content: document.querySelector('.about-content'),
+            features: document.querySelectorAll('.about-feature'),
+            stats: document.querySelectorAll('.about-stat')
+        };
+
+        const aboutObserverOptions = {
+            threshold: 0.2,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        // Observe main content
+        if (aboutElements.content) {
+            const contentObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        contentObserver.unobserve(entry.target);
+                    }
+                });
+            }, aboutObserverOptions);
+            contentObserver.observe(aboutElements.content);
+        }
+
+        // Observe feature cards with stagger
+        if (aboutElements.features.length > 0) {
+            const featureObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry, index) => {
+                    if (entry.isIntersecting) {
+                        setTimeout(() => {
+                            entry.target.classList.add('visible');
+                        }, index * 150);
+                        featureObserver.unobserve(entry.target);
+                    }
+                });
+            }, aboutObserverOptions);
+            
+            aboutElements.features.forEach(feature => {
+                featureObserver.observe(feature);
+            });
+        }
+
+        // Observe stats with stagger
+        if (aboutElements.stats.length > 0) {
+            const statObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry, index) => {
+                    if (entry.isIntersecting) {
+                        setTimeout(() => {
+                            entry.target.classList.add('visible');
+                        }, index * 100);
+                        statObserver.unobserve(entry.target);
+                    }
+                });
+            }, aboutObserverOptions);
+            
+            aboutElements.stats.forEach(stat => {
+                statObserver.observe(stat);
+            });
+        }
 
         document.addEventListener('scroll', onScroll, { passive: true });
         window.addEventListener('load', onScroll);

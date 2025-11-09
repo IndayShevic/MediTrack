@@ -1878,7 +1878,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             opacity: 1;
         }
         
-        /* Modern Minimal Login Modal Styles */
+        /* MediTrack Login Modal Styles */
         #loginModal {
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
@@ -1887,25 +1887,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .login-modal-container {
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             background: #ffffff;
-            border-radius: 24px;
+            border-radius: 16px;
             box-shadow: 
-                0 20px 60px rgba(0, 0, 0, 0.12),
-                0 0 0 1px rgba(59, 130, 246, 0.08),
-                0 0 0 2px transparent;
+                0 20px 60px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(37, 99, 235, 0.1);
             position: relative;
             overflow: hidden;
             animation: modalFadeInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
             transition: box-shadow 0.3s ease;
-        }
-        
-        /* Gradient border effect on hover */
-        .login-modal-container:hover {
-            box-shadow: 
-                0 20px 60px rgba(0, 0, 0, 0.15),
-                0 0 0 1px rgba(59, 130, 246, 0.2),
-                0 0 0 2px rgba(139, 92, 246, 0.15);
         }
         
         @keyframes modalFadeInUp {
@@ -1920,124 +1911,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         /* Logo container */
-        .login-logo-wrapper {
-            position: relative;
+        .login-logo-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            margin-bottom: 1.5rem;
-            padding-top: 2rem;
-            background: transparent;
-            width: 100%;
-        }
-        
-        .login-logo-wrapper img {
-            width: 56px;
-            height: 56px;
-            object-fit: contain;
-            background: transparent !important;
-            border: none !important;
-            outline: none !important;
-            border-radius: 0;
-            padding: 0;
-            margin: 0;
-            display: block;
-            box-shadow: none !important;
-            -webkit-box-shadow: none !important;
-        }
-        
-        /* Canvas for processed logo (hidden, used for processing) */
-        .login-logo-canvas {
-            display: none;
-        }
-        
-        /* Remove any potential background box from logo wrapper */
-        .login-logo-wrapper::before,
-        .login-logo-wrapper::after {
-            display: none !important;
-            content: none !important;
-        }
-        
-        /* Modal header text */
-        .login-modal-title {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #111827;
+            padding: 2rem 2rem 1rem 2rem;
             margin-bottom: 0.5rem;
-            text-align: center;
-            letter-spacing: -0.02em;
         }
         
+        .login-logo-container img {
+            max-width: 120px;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+        
+        /* Welcome title */
+        .login-team-name {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+            margin-top: 0;
+            text-align: center;
+            letter-spacing: -0.01em;
+        }
+        
+        /* Modal subtitle */
         .login-modal-subtitle {
             font-size: 0.875rem;
             color: #6b7280;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.75rem;
         }
         
-        /* Input fields */
+        /* Input fields with floating labels */
         .login-input-wrapper {
             position: relative;
             margin-bottom: 1.25rem;
         }
         
-        .login-input-icon {
+        .login-input-label {
             position: absolute;
-            left: 1rem;
+            left: 0.875rem;
             top: 50%;
             transform: translateY(-50%);
-            width: 1.25rem;
-            height: 1.25rem;
+            font-size: 0.875rem;
             color: #9ca3af;
             pointer-events: none;
-            transition: color 0.2s ease;
+            transition: all 0.2s ease;
+            z-index: 1;
+            background: #ffffff;
         }
         
         .login-input-field {
             width: 100%;
-            padding: 0.875rem 1rem 0.875rem 3rem;
+            padding: 0.75rem 3rem 0.75rem 0.875rem;
             background: #ffffff;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            font-size: 0.9375rem;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 0.875rem;
             color: #111827;
             transition: all 0.2s ease;
             outline: none;
-        }
-        
-        .login-input-field::placeholder {
-            color: #9ca3af;
+            line-height: 1.5;
         }
         
         .login-input-field:focus {
-            background: #ffffff;
             border-color: #3b82f6;
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
         
-        .login-input-wrapper:focus-within .login-input-icon {
+        /* When input is focused or has value, move label up */
+        .login-input-wrapper:has(.login-input-field:focus) .login-input-label,
+        .login-input-wrapper:has(.login-input-field:not(:placeholder-shown)) .login-input-label {
+            top: -0.5rem;
+            transform: translateY(0);
+            left: 0.625rem;
+            font-size: 0.6875rem;
             color: #3b82f6;
+            background: #ffffff;
+            padding: 0 0.25rem;
+        }
+        
+        /* Fallback for browsers without :has() support - using JavaScript classes */
+        .login-input-wrapper.focused .login-input-label,
+        .login-input-wrapper.has-value .login-input-label {
+            top: -0.5rem;
+            transform: translateY(0);
+            left: 0.625rem;
+            font-size: 0.6875rem;
+            color: #3b82f6;
+            background: #ffffff;
+            padding: 0 0.25rem;
+        }
+        
+        .login-input-field::placeholder {
+            color: transparent;
+        }
+        
+        .login-input-icon {
+            display: none;
+        }
+        
+        /* Password field needs extra padding for eye icon */
+        .login-input-wrapper:has(.login-password-toggle) .login-input-field {
+            padding-right: 3rem;
+        }
+        
+        /* Ensure password toggle doesn't overlap label when floating */
+        .login-input-wrapper:has(.login-input-field:focus) .login-password-toggle,
+        .login-input-wrapper:has(.login-input-field:not(:placeholder-shown)) .login-password-toggle {
+            top: 50%;
         }
         
         /* Password toggle button */
         .login-password-toggle {
             position: absolute;
-            right: 1rem;
+            right: 0.875rem;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             color: #9ca3af;
             cursor: pointer;
-            padding: 0.25rem;
+            padding: 0.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: color 0.2s ease;
+            z-index: 2;
         }
         
         .login-password-toggle:hover {
-            color: #6b7280;
+            color: #3b82f6;
         }
         
         .login-password-toggle svg {
@@ -2048,11 +2055,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* Forgot password link */
         .login-forgot-link {
             display: block;
-            text-align: right;
-            font-size: 0.8125rem;
+            text-align: center;
+            font-size: 0.875rem;
             color: #6b7280;
             text-decoration: none;
-            margin-top: -0.75rem;
+            margin-top: -0.25rem;
             margin-bottom: 1.5rem;
             transition: color 0.2s ease;
         }
@@ -2067,12 +2074,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 1px solid #fecaca;
             color: #dc2626;
             padding: 0.75rem 1rem;
-            border-radius: 12px;
+            border-radius: 10px;
             font-size: 0.875rem;
             margin-bottom: 1.25rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            line-height: 1.5;
         }
         
         .login-error-message svg {
@@ -2081,21 +2089,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex-shrink: 0;
         }
         
-        /* Sign in button */
+        /* Login button with MediTrack theme */
         .login-submit-button {
             width: 100%;
-            padding: 0.875rem 1.5rem;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            padding: 0.75rem 1.25rem;
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             color: #ffffff;
             border: none;
-            border-radius: 12px;
-            font-size: 0.9375rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             margin-bottom: 1.5rem;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
         }
         
         .login-submit-button::before {
@@ -2111,7 +2122,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .login-submit-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+            background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
         }
         
         .login-submit-button:hover::before {
@@ -2146,11 +2158,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             to { transform: rotate(360deg); }
         }
         
-        /* Register link section */
+        /* Register section */
         .login-register-section {
             text-align: center;
-            padding-top: 1.5rem;
+            padding-top: 1rem;
             border-top: 1px solid #e5e7eb;
+            margin-top: 0.5rem;
         }
         
         .login-register-text {
@@ -2159,18 +2172,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 0.75rem;
         }
         
-        .login-register-link {
+        .login-register-button {
+            background: none;
             color: #3b82f6;
+            border: none;
+            padding: 0;
+            font-size: 0.875rem;
             font-weight: 600;
-            text-decoration: none;
+            text-transform: none;
+            letter-spacing: normal;
+            cursor: pointer;
             transition: color 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
+            text-decoration: none;
+            display: inline-block;
         }
         
-        .login-register-link:hover {
-            color: #8b5cf6;
+        .login-register-button:hover {
+            color: #2563eb;
+            text-decoration: underline;
         }
         
         /* Close button */
@@ -2178,12 +2197,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: absolute;
             top: 1rem;
             right: 1rem;
-            width: 2rem;
-            height: 2rem;
+            width: 2.25rem;
+            height: 2.25rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.95);
             border: 1px solid #e5e7eb;
             border-radius: 50%;
             color: #6b7280;
@@ -2194,63 +2213,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .login-close-button:hover {
             background: #f3f4f6;
-            color: #111827;
+            border-color: #d1d5db;
+            color: #374151;
             transform: rotate(90deg);
         }
         
-        /* Dark mode support */
-        @media (prefers-color-scheme: dark) {
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
             .login-modal-container {
-                background: #ffffff;
-            box-shadow: 
-                    0 20px 60px rgba(0, 0, 0, 0.4),
-                    0 0 0 1px rgba(59, 130, 246, 0.2);
+                max-width: calc(100% - 2rem);
+                border-radius: 14px;
             }
             
-            .login-modal-title {
-                color: #111827;
+            .login-logo-container {
+                padding: 1.5rem 1.5rem 0.75rem 1.5rem;
+            }
+            
+            .login-logo-container img {
+                max-width: 100px;
+            }
+            
+            .login-team-name {
+                font-size: 1.625rem;
             }
             
             .login-modal-subtitle {
-                color: #6b7280;
-            }
-            
-            .login-input-field {
-                background: #ffffff;
-                border-color: #e5e7eb;
-                color: #111827;
-            }
-            
-            .login-input-field:focus {
-                background: #ffffff;
-                border-color: #3b82f6;
-            }
-            
-            .login-register-section {
-                border-top-color: #e5e7eb;
-            }
-            
-            .login-close-button {
-                background: rgba(255, 255, 255, 0.9);
-                border-color: #e5e7eb;
-                color: #6b7280;
-            }
-            
-            .login-close-button:hover {
-                background: #f3f4f6;
-                color: #111827;
+                font-size: 0.8125rem;
+                margin-bottom: 1.5rem;
             }
         }
         
-        /* Responsive adjustments */
         @media (max-width: 480px) {
             .login-modal-container {
-                max-width: calc(100% - 2rem);
-                border-radius: 20px;
+                max-width: calc(100% - 1.5rem);
+                border-radius: 12px;
             }
             
-            .login-modal-title {
+            .login-modal-container > div {
+                padding: 1.5rem 1.5rem 2rem 1.5rem !important;
+            }
+            
+            .login-logo-container {
+                padding: 1.25rem 1.25rem 0.5rem 1.25rem;
+            }
+            
+            .login-logo-container img {
+                max-width: 90px;
+            }
+            
+            .login-team-name {
                 font-size: 1.5rem;
+            }
+            
+            .login-modal-subtitle {
+                font-size: 0.8125rem;
+                margin-bottom: 1.25rem;
+            }
+            
+            .login-input-wrapper {
+                margin-bottom: 1rem;
+            }
+            
+            .login-input-field {
+                padding: 0.6875rem 2.75rem 0.6875rem 0.75rem;
+                font-size: 0.8125rem;
+            }
+            
+            .login-submit-button {
+                padding: 0.6875rem 1.125rem;
+                font-size: 0.8125rem;
+                margin-bottom: 1.25rem;
+            }
+            
+            .login-register-section {
+                padding-top: 0.75rem;
+            }
+            
+            .login-register-text {
+                font-size: 0.8125rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            .login-register-button {
+                font-size: 0.8125rem;
+            }
+        }
+        
+        @media (max-width: 360px) {
+            .login-modal-container {
+                max-width: calc(100% - 1rem);
+            }
+            
+            .login-modal-container > div {
+                padding: 1.25rem 1.25rem 1.75rem 1.25rem !important;
+            }
+            
+            .login-logo-container img {
+                max-width: 80px;
             }
         }
         
@@ -4346,27 +4405,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Modern Minimal Login Modal -->
+    <!-- Modern Lotus Team Login Modal -->
     <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
         <div class="login-modal-container relative">
             <!-- Close Button -->
             <button onclick="closeLoginModal()" class="login-close-button" aria-label="Close modal">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
+                </svg>
+            </button>
                 
             <!-- Modal Content -->
-            <div class="p-8">
+            <div style="padding: 0 2.5rem 2.5rem 2.5rem;">
                 <!-- Logo -->
-                <div class="login-logo-wrapper">
-                    <img id="login-logo-img" src="public/assets/brand/logo.png" alt="MediTrack Logo" onerror="this.style.display='none'">
-                    <canvas id="login-logo-canvas" class="login-logo-canvas"></canvas>
-                    </div>
-                    
-                <!-- Title and Subtitle -->
-                <h2 class="login-modal-title">Welcome Back</h2>
-                <p class="login-modal-subtitle">Sign in to access your account</p>
+                <div class="login-logo-container">
+                    <img src="public/assets/brand/logo.png" alt="MediTrack Logo" onerror="this.style.display='none'">
+                </div>
+                
+                <!-- Welcome Title -->
+                <h2 class="login-team-name">Welcome Back</h2>
+                
+                <!-- Subtitle -->
+                <p class="login-modal-subtitle">Please login to your account</p>
                 
                 <!-- Login Form -->
                 <form id="loginForm" action="public/login.php" method="post">
@@ -4382,65 +4442,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     <!-- Email Input -->
                     <div class="login-input-wrapper">
+                        <label for="login-email" class="login-input-label">Email</label>
                         <input 
                             type="email" 
                             name="email" 
                             id="login-email"
                             required 
                             class="login-input-field" 
-                            placeholder="Email Address"
+                            placeholder=" "
                             autocomplete="email"
                         />
-                        <svg class="login-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
-                                </svg>
                     </div>
                     
                     <!-- Password Input -->
                     <div class="login-input-wrapper">
+                        <label for="login-password" class="login-input-label">Password</label>
                         <input 
                             type="password" 
                             name="password" 
                             id="login-password" 
                             required 
                             class="login-input-field" 
-                            placeholder="Password"
+                            placeholder=" "
                             autocomplete="current-password"
                         />
-                        <svg class="login-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                                   </svg>
                         <button 
                             type="button" 
                             onclick="togglePasswordVisibility('login-password', 'login-eye-icon')" 
                             class="login-password-toggle"
                             aria-label="Toggle password visibility"
                         >
-                            <svg id="login-eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                   </svg>
-                               </button>
-                       </div>
+                            <svg id="login-eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                        </button>
+                    </div>
                     
                     <!-- Forgot Password Link -->
                     <a href="#" class="login-forgot-link" onclick="event.preventDefault(); alert('Forgot password feature coming soon!'); return false;">Forgot password?</a>
                     
-                    <!-- Sign In Button -->
+                    <!-- Login Button -->
                     <button type="submit" class="login-submit-button" id="login-submit-btn">
-                        <span>Sign in</span>
+                        <span>LOG IN</span>
                     </button>
                 </form>
                 
-                <!-- Register Link Section -->
+                <!-- Register Section -->
                 <div class="login-register-section">
-                    <p class="login-register-text">New to MediTrack?</p>
-                    <button onclick="closeLoginModal(); openRegisterModal();" class="login-register-link">
-                        Register as Resident
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width: 1rem; height: 1rem;">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                        </svg>
-                    </button>
+                    <p class="login-register-text">Don't have an account? <button type="button" onclick="closeLoginModal(); openRegisterModal();" class="login-register-button">Register</button></p>
                 </div>
             </div>
         </div>
@@ -6813,78 +6863,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 submitBtn.classList.remove('loading');
                 const span = submitBtn.querySelector('span');
                 if (span) {
-                    span.textContent = 'Sign in';
+                    span.textContent = 'LOG IN';
                 }
             }
             
-            // Process logo to remove white background
-            setTimeout(() => {
-                initLogoProcessing();
-            }, 100);
+            // Initialize floating labels
+            initFloatingLabels();
             
             // Focus on email input for better UX
             const emailInput = document.getElementById('login-email');
             if (emailInput) {
                 setTimeout(() => emailInput.focus(), 100);
-                
-                // Setup login form validation
-                setupLoginValidation();
-            }
-        }
-        
-        // Setup login form validation
-        function setupLoginValidation() {
-            const emailInput = document.getElementById('login-email');
-            const passwordInput = document.getElementById('login-password');
-            
-            function validateLoginForm() {
-                const email = emailInput?.value.trim();
-                const password = passwordInput?.value;
-                
-                // Basic email format check
-                const emailValid = email && VALIDATION_PATTERNS.email.test(email);
-                const passwordValid = password && password.length > 0;
-                
-                // Show validation feedback
-                if (emailInput) {
-                    emailInput.classList.remove('border-red-300', 'border-green-300');
-                    if (email && !emailValid) {
-                        emailInput.classList.add('border-red-300');
-                    } else if (email && emailValid) {
-                        emailInput.classList.add('border-green-300');
-                    }
-                }
-                
-                if (passwordInput) {
-                    passwordInput.classList.remove('border-red-300', 'border-green-300');
-                    if (password && !passwordValid) {
-                        passwordInput.classList.add('border-red-300');
-                    } else if (password && passwordValid) {
-                        passwordInput.classList.add('border-green-300');
-                    }
-                }
-                
-                return emailValid && passwordValid;
-            }
-            
-            // Real-time validation
-            if (emailInput) {
-                emailInput.addEventListener('input', function() {
-                    // Sanitize email input - remove banned characters but keep @, ., _, %, +, -
-                    let value = this.value;
-                    // Remove truly banned chars for emails (keep @ . _ % + - which are valid in emails)
-                    const sanitized = value.replace(/[!$^&*()={}\[\]:;"<>?\/\\|~`]/g, '');
-                    if (sanitized !== value) {
-                        const cursorPos = this.selectionStart;
-                        this.value = sanitized;
-                        this.setSelectionRange(Math.max(0, cursorPos - 1), Math.max(0, cursorPos - 1));
-                    }
-                    validateLoginForm();
-                });
-            }
-            
-            if (passwordInput) {
-                passwordInput.addEventListener('input', validateLoginForm);
             }
         }
         
@@ -6894,24 +6883,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.body.style.overflow = 'auto';
         }
         
+        // Initialize floating labels for login inputs
+        function initFloatingLabels() {
+            const loginEmail = document.getElementById('login-email');
+            const loginPassword = document.getElementById('login-password');
+            
+            if (loginEmail) {
+                const emailWrapper = loginEmail.closest('.login-input-wrapper');
+                
+                // Check if input has value on load
+                if (loginEmail.value) {
+                    emailWrapper.classList.add('has-value');
+                }
+                
+                // Handle focus
+                loginEmail.addEventListener('focus', function() {
+                    emailWrapper.classList.add('focused');
+                });
+                
+                // Handle blur
+                loginEmail.addEventListener('blur', function() {
+                    emailWrapper.classList.remove('focused');
+                    if (loginEmail.value) {
+                        emailWrapper.classList.add('has-value');
+                    } else {
+                        emailWrapper.classList.remove('has-value');
+                    }
+                });
+                
+                // Handle input
+                loginEmail.addEventListener('input', function() {
+                    if (loginEmail.value) {
+                        emailWrapper.classList.add('has-value');
+                    } else {
+                        emailWrapper.classList.remove('has-value');
+                    }
+                });
+            }
+            
+            if (loginPassword) {
+                const passwordWrapper = loginPassword.closest('.login-input-wrapper');
+                
+                // Check if input has value on load
+                if (loginPassword.value) {
+                    passwordWrapper.classList.add('has-value');
+                }
+                
+                // Handle focus
+                loginPassword.addEventListener('focus', function() {
+                    passwordWrapper.classList.add('focused');
+                });
+                
+                // Handle blur
+                loginPassword.addEventListener('blur', function() {
+                    passwordWrapper.classList.remove('focused');
+                    if (loginPassword.value) {
+                        passwordWrapper.classList.add('has-value');
+                    } else {
+                        passwordWrapper.classList.remove('has-value');
+                    }
+                });
+                
+                // Handle input
+                loginPassword.addEventListener('input', function() {
+                    if (loginPassword.value) {
+                        passwordWrapper.classList.add('has-value');
+                    } else {
+                        passwordWrapper.classList.remove('has-value');
+                    }
+                });
+            }
+        }
+        
         // Toggle password visibility
         function togglePasswordVisibility(inputId, iconId) {
             const passwordInput = document.getElementById(inputId);
             const eyeIcon = document.getElementById(iconId);
             
+            if (!passwordInput || !eyeIcon) return;
+            
             if (passwordInput.type === 'password') {
                 passwordInput.type = 'text';
-                // Change to "eye-off" icon
+                // Change to "eye-off" icon (eye with slash)
                 eyeIcon.innerHTML = `
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
                 `;
+                eyeIcon.setAttribute('aria-label', 'Hide password');
             } else {
                 passwordInput.type = 'password';
-                // Change to "eye" icon
+                // Change to "eye" icon (visible)
                 eyeIcon.innerHTML = `
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                 `;
+                eyeIcon.setAttribute('aria-label', 'Show password');
             }
         }
         
@@ -7296,7 +7361,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Show loading state
                 loginSubmitBtn.classList.add('loading');
-                loginSubmitBtn.querySelector('span').textContent = 'Signing in...';
+                const span = loginSubmitBtn.querySelector('span');
+                if (span) {
+                    span.textContent = 'Signing in...';
+                }
                 
                 // Form will submit normally, but if there's an error, we'll handle it on return
                 // The loading state will be reset if the page reloads with an error
@@ -7360,8 +7428,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.addEventListener('DOMContentLoaded', function() {
             setActiveLink('home');
             
-            // Initialize logo processing on page load
-            initLogoProcessing();
+            // Logo processing removed - no logo in login modal
             
             // Add click handlers to all nav links
             document.querySelectorAll('.nav-link, .nav-link-mobile').forEach(link => {

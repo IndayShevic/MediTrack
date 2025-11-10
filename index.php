@@ -425,7 +425,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Return success response
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'message' => 'Registration submitted successfully!']);
-            
             exit;
             
         } catch (Throwable $e) {
@@ -3837,15 +3836,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 font-semibold"><?php echo htmlspecialchars($brand); ?></span>. All rights reserved.</p>
                 <p class="text-xs sm:text-sm text-gray-500">Making healthcare accessible for everyone.</p>
-                <p class="text-xs sm:text-sm text-gray-600 font-medium mb-2">Developed by:</p>
-                <div class="flex flex-row items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500 flex-wrap">
-                    <a href="mailto:lucianocanamocanjr@gmail.com" class="hover:text-blue-600 transition-colors duration-200 whitespace-nowrap">
-                        Luciano C. Canamocan Jr.
-                    </a>
-                    <span class="text-gray-300">•</span>
-                    <a href="mailto:vicvictacatane@gmail.com" class="hover:text-blue-600 transition-colors duration-200 whitespace-nowrap">
-                        Shevic Tacatane
-                    </a>
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <p class="text-xs text-gray-400 mb-2">Developed by</p>
+                    <div class="flex flex-row items-center justify-center gap-3 text-xs text-gray-500">
+                        <span class="font-medium text-gray-600">L. Canamocan</span>
+                        <span class="text-gray-300">×</span>
+                        <span class="font-medium text-gray-600">S. Tacatane</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -4412,16 +4409,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button onclick="closeLoginModal()" class="login-close-button" aria-label="Close modal">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
+                        </svg>
+                    </button>
                 
             <!-- Modal Content -->
             <div style="padding: 0 2.5rem 2.5rem 2.5rem;">
                 <!-- Logo -->
                 <div class="login-logo-container">
                     <img src="public/assets/brand/logo.png" alt="MediTrack Logo" onerror="this.style.display='none'">
-                </div>
-                
+                    </div>
+                    
                 <!-- Welcome Title -->
                 <h2 class="login-team-name">Welcome Back</h2>
                 
@@ -4475,9 +4472,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <svg id="login-eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                        </button>
-                    </div>
+                                   </svg>
+                               </button>
+                       </div>
                     
                     <!-- Forgot Password Link -->
                     <a href="#" class="login-forgot-link" onclick="event.preventDefault(); alert('Forgot password feature coming soon!'); return false;">Forgot password?</a>
@@ -6383,6 +6380,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             submitText.textContent = 'Submitting...';
             submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
             
+            // Check if email verification is completed
+            if (!window.emailVerified) {
+                showToast('Please verify your email address first before submitting registration.', 'error');
+                // Reset button state
+                submitBtn.disabled = false;
+                submitText.textContent = 'Submit Registration';
+                submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                
+                // Show verification modal
+                const email = document.querySelector('input[name="email"]')?.value.trim();
+                const firstName = document.querySelector('input[name="first_name"]')?.value.trim();
+                const lastName = document.querySelector('input[name="last_name"]')?.value.trim();
+                
+                if (email && firstName && lastName) {
+                    // Go back to step 1 to trigger email verification
+                    goToStep(1);
+                }
+                return;
+            }
+            
             // Validate required fields
             const requiredFields = [
                 'first_name', 'last_name', 'email', 'password', 
@@ -6415,7 +6432,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             console.log('Submitting form to:', form.action);
             console.log('Form data:', Object.fromEntries(formData));
             
-            fetch(form.action, {
+            fetch(form.action || window.location.href, {
                 method: 'POST',
                 body: formData
             })
@@ -6427,7 +6444,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Error('Network response was not ok');
             })
             .then(data => {
-                console.log('Success response:', data);
+                console.log('Response data:', data);
+                
                 if (data.success) {
                     // Clear saved form data on successful submission
                     clearRegisterFormData();
@@ -6451,8 +6469,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }, 2000);
                 } else {
-                    // Show error message
-                    showToast(data.message || 'Registration failed. Please try again.', 'error');
+                    // Show detailed error message
+                    const errorMsg = data.message || 'Registration failed. Please try again.';
+                    console.error('Registration failed:', errorMsg);
+                    showToast(errorMsg, 'error');
+                    
+                    // Also show error in the form if there's a flash message container
+                    const flashContainer = document.querySelector('.register-validation-message');
+                    if (flashContainer) {
+                        flashContainer.classList.remove('hidden');
+                        flashContainer.classList.add('error');
+                        flashContainer.innerHTML = `
+                            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>${errorMsg}</span>
+                        `;
+                    }
                     
                     // Reset button state
                     submitBtn.disabled = false;
@@ -6461,8 +6494,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast('Registration failed. Please try again.', 'error');
+                console.error('Registration error:', error);
+                const errorMsg = error.message || 'Registration failed. Please try again.';
+                showToast(errorMsg, 'error');
+                
+                // Also show error in the form
+                const flashContainer = document.querySelector('.register-validation-message');
+                if (flashContainer) {
+                    flashContainer.classList.remove('hidden');
+                    flashContainer.classList.add('error');
+                    flashContainer.innerHTML = `
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>${errorMsg}</span>
+                    `;
+                }
                 
                 // Reset button state
                 submitBtn.disabled = false;
@@ -6927,8 +6974,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Check if input has value on load
                 if (loginPassword.value) {
                     passwordWrapper.classList.add('has-value');
-                }
-                
+            }
+            
                 // Handle focus
                 loginPassword.addEventListener('focus', function() {
                     passwordWrapper.classList.add('focused');

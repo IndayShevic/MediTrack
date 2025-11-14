@@ -2311,6 +2311,176 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 max-width: 80px;
             }
         }
+
+        /* Forgot Password Modal Styles */
+        .forgot-password-modal-container {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 100%;
+            max-width: 28rem;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: fadeInScale 0.3s ease-out;
+        }
+
+        .forgot-password-modal-content {
+            padding: 2rem 2.5rem 2.5rem 2.5rem;
+        }
+
+        .forgot-password-close-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 2.25rem;
+            height: 2.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #e5e7eb;
+            border-radius: 50%;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+
+        .forgot-password-close-button:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #374151;
+            transform: rotate(90deg);
+        }
+
+        .forgot-password-close-button svg {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+
+        .forgot-password-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .forgot-password-subtitle {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.5rem;
+        }
+
+        .forgot-password-login-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+
+        .forgot-password-login-link:hover {
+            color: #1d4ed8;
+            text-decoration: underline;
+        }
+
+        .forgot-password-form {
+            margin-top: 1.5rem;
+        }
+
+        .forgot-password-input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .forgot-password-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            margin-left: 0.25rem;
+        }
+
+        .forgot-password-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: white;
+            color: #1f2937;
+        }
+
+        .forgot-password-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .forgot-password-submit-btn {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .forgot-password-submit-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .forgot-password-submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .forgot-password-message {
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .forgot-password-message.success {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+
+        .forgot-password-message.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        @media (max-width: 640px) {
+            .forgot-password-modal-container {
+                max-width: 100%;
+                margin: 1rem;
+            }
+
+            .forgot-password-modal-content {
+                padding: 1.5rem;
+            }
+
+            .forgot-password-title {
+                font-size: 1.25rem;
+            }
+        }
         
         /* Modern Registration Modal Styles */
         #registerModal {
@@ -3824,24 +3994,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
     </main>
 
-    <footer class="border-t border-gray-200 py-8 sm:py-10 bg-white/90 backdrop-blur-sm relative z-10">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center">
-                 <div class="flex flex-row items-center justify-center gap-2 sm:gap-3 mb-5 w-full">
-                    <div class="h-px w-10 sm:w-16 bg-gradient-to-r from-transparent via-blue-400 to-blue-600 flex-shrink-0"></div>
-                    <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
-                    <div class="w-6 sm:w-8 h-px bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex-shrink-0"></div>
-                    <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-purple-600 rounded-full flex-shrink-0"></div>
-                    <div class="h-px w-10 sm:w-16 bg-gradient-to-l from-transparent via-purple-400 to-purple-600 flex-shrink-0"></div>
+    <footer class="bg-gray-900 text-white relative overflow-hidden w-full z-10">
+        <!-- Decorative background -->
+        <div class="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-indigo-900/20"></div>
+        <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+        
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 pb-6 sm:pb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mb-8 sm:mb-12">
+                <!-- Company Info -->
+                <div class="lg:col-span-2">
+                    <div class="flex items-center space-x-3 mb-4 sm:mb-6">
+                        <img 
+                            class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-contain bg-white/10 p-1.5 shadow-lg" 
+                            src="public/assets/brand/logo.png" 
+                            alt="<?php echo htmlspecialchars($brand); ?> Logo"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                        />
+                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg hidden">
+                            <span class="text-white font-bold text-lg sm:text-xl"><?php echo strtoupper(substr(htmlspecialchars($brand), 0, 1)); ?></span>
+                        </div>
+                        <span class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                            <?php echo htmlspecialchars($brand); ?>
+                        </span>
+                    </div>
+                    <p class="text-gray-300 mb-4 sm:mb-6 max-w-md leading-relaxed text-sm sm:text-base">
+                        Making healthcare accessible for everyone in your community.
+                    </p>
+                    <div class="flex space-x-3 sm:space-x-4">
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Instagram">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                            </svg>
+                        </a>
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Facebook">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                        </a>
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="LinkedIn">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                        </a>
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Email">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                        </a>
+                    </div>
                 </div>
-                <p class="text-sm sm:text-base text-gray-600 mb-2">© <?php echo date('Y'); ?> <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 font-semibold"><?php echo htmlspecialchars($brand); ?></span>. All rights reserved.</p>
-                <p class="text-xs sm:text-sm text-gray-500">Making healthcare accessible for everyone.</p>
-                <div class="mt-4 pt-4 border-t border-gray-100">
-                    <p class="text-xs text-gray-400 mb-2">Developed by</p>
-                    <div class="flex flex-row items-center justify-center gap-3 text-xs text-gray-500">
-                        <span class="font-medium text-gray-600">L. Canamocan</span>
-                        <span class="text-gray-300">×</span>
-                        <span class="font-medium text-gray-600">S. Tacatane</span>
+
+                <!-- Quick Links -->
+                <div>
+                    <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-white">Quick Links</h3>
+                    <ul class="space-y-2 sm:space-y-3">
+                        <li><a href="#home" onclick="handleNavClick('home'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Home</a></li>
+                        <li><a href="#features" onclick="handleNavClick('features'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Features</a></li>
+                        <li><a href="#about" onclick="handleNavClick('about'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">About</a></li>
+                        <li><a href="#faq" onclick="handleNavClick('faq'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">FAQ</a></li>
+                        <li><a href="#contact" onclick="handleNavClick('contact'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Contact</a></li>
+                    </ul>
+                </div>
+
+                <!-- Support -->
+                <div>
+                    <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-white">Support</h3>
+                    <ul class="space-y-2 sm:space-y-3">
+                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Help Center</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Documentation</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Privacy Policy</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Terms of Service</a></li>
+                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Cookie Policy</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Newsletter Signup -->
+            <div class="border-t border-gray-800 pt-6 sm:pt-8 mb-6 sm:mb-8">
+                <div class="max-w-md mx-auto text-center">
+                    <h3 class="text-base sm:text-lg font-semibold mb-2 text-white">Stay Updated</h3>
+                    <p class="text-gray-300 mb-4 text-sm sm:text-base">Get the latest news and updates delivered to your inbox.</p>
+                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                        <input type="email" placeholder="Enter your email" class="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm sm:text-base">
+                        <button class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 hover:scale-105 transform shadow-lg text-sm sm:text-base whitespace-nowrap">
+                            Subscribe
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Bar -->
+            <div class="border-t border-gray-800 pt-6 sm:pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+                <p class="text-gray-400 text-xs sm:text-sm text-center md:text-left">
+                    © <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.
+                </p>
+                <div class="flex items-center space-x-4 sm:space-x-6 text-xs sm:text-sm text-gray-400">
+                    <span>Made with</span>
+                    <div class="flex items-center space-x-1">
+                        <svg class="w-3 h-3 sm:w-4 sm:h-4 text-red-500 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        <span>by <span class="text-blue-400">L. Canamocan</span> × <span class="text-blue-400">S. Tacatane</span></span>
                     </div>
                 </div>
             </div>
@@ -4477,7 +4730,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        </div>
                     
                     <!-- Forgot Password Link -->
-                    <a href="#" class="login-forgot-link" onclick="event.preventDefault(); alert('Forgot password feature coming soon!'); return false;">Forgot password?</a>
+                    <a href="#" class="login-forgot-link" onclick="event.preventDefault(); closeLoginModal(); openForgotPasswordModal(); return false;">Forgot password?</a>
                     
                     <!-- Login Button -->
                     <button type="submit" class="login-submit-button" id="login-submit-btn">
@@ -4489,6 +4742,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="login-register-section">
                     <p class="login-register-text">Don't have an account? <button type="button" onclick="closeLoginModal(); openRegisterModal();" class="login-register-button">Register</button></p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="forgot-password-modal-container relative">
+            <!-- Close Button -->
+            <button onclick="closeForgotPasswordModal()" class="forgot-password-close-button" aria-label="Close modal">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+            
+            <!-- Modal Content -->
+            <div class="forgot-password-modal-content">
+                <div class="text-center mb-6">
+                    <h1 class="forgot-password-title">Forgot password?</h1>
+                    <p class="forgot-password-subtitle">
+                        Remember your password?
+                        <a href="#" class="forgot-password-login-link" onclick="event.preventDefault(); closeForgotPasswordModal(); openLoginModal(); return false;">
+                            Login here
+                        </a>
+                    </p>
+                </div>
+                
+                <form id="forgotPasswordForm" class="forgot-password-form">
+                    <div id="forgot-password-message" class="forgot-password-message hidden"></div>
+                    
+                    <div class="forgot-password-input-group">
+                        <label for="forgot-email" class="forgot-password-label">Email address</label>
+                        <div class="relative">
+                            <input 
+                                type="email" 
+                                id="forgot-email" 
+                                name="email" 
+                                class="forgot-password-input" 
+                                required 
+                                aria-describedby="forgot-email-error"
+                                autocomplete="email"
+                            />
+                        </div>
+                        <p class="hidden text-xs text-red-600 mt-2" id="forgot-email-error">Please include a valid email address so we can get back to you</p>
+                    </div>
+                    
+                    <button type="submit" class="forgot-password-submit-btn" id="forgot-password-submit-btn">
+                        <span id="forgot-password-btn-text">Reset password</span>
+                        <span id="forgot-password-btn-loader" class="hidden">
+                            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -6929,6 +7237,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.getElementById('loginModal').classList.remove('flex');
             document.body.style.overflow = 'auto';
         }
+
+        // Forgot Password Modal Functions
+        function openForgotPasswordModal() {
+            const modal = document.getElementById('forgotPasswordModal');
+            const form = document.getElementById('forgotPasswordForm');
+            const messageDiv = document.getElementById('forgot-password-message');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            
+            // Reset form
+            if (form) {
+                form.reset();
+            }
+            
+            // Hide any previous messages
+            if (messageDiv) {
+                messageDiv.classList.add('hidden');
+                messageDiv.classList.remove('success', 'error');
+            }
+            
+            // Focus on email input
+            const emailInput = document.getElementById('forgot-email');
+            if (emailInput) {
+                setTimeout(() => emailInput.focus(), 100);
+            }
+        }
+        
+        function closeForgotPasswordModal() {
+            const modal = document.getElementById('forgotPasswordModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = 'auto';
+        }
         
         // Initialize floating labels for login inputs
         function initFloatingLabels() {
@@ -7392,6 +7735,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         // Login form submission with loading state
+        // Forgot Password Form Handler
+        const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+        if (forgotPasswordForm) {
+            forgotPasswordForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const emailInput = document.getElementById('forgot-email');
+                const submitBtn = document.getElementById('forgot-password-submit-btn');
+                const btnText = document.getElementById('forgot-password-btn-text');
+                const btnLoader = document.getElementById('forgot-password-btn-loader');
+                const messageDiv = document.getElementById('forgot-password-message');
+                const email = emailInput.value.trim();
+                
+                // Basic validation
+                if (!email) {
+                    showForgotPasswordMessage('Please enter your email address.', 'error');
+                    emailInput.focus();
+                    return;
+                }
+                
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    showForgotPasswordMessage('Please enter a valid email address.', 'error');
+                    emailInput.focus();
+                    return;
+                }
+                
+                // Disable button and show loading
+                submitBtn.disabled = true;
+                btnText.classList.add('hidden');
+                btnLoader.classList.remove('hidden');
+                messageDiv.classList.add('hidden');
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('email', email);
+                    
+                    const response = await fetch('public/forgot_password.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showForgotPasswordMessage(data.message, 'success');
+                        forgotPasswordForm.reset();
+                    } else {
+                        showForgotPasswordMessage(data.message || 'An error occurred. Please try again.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Forgot password error:', error);
+                    showForgotPasswordMessage('An error occurred. Please try again later.', 'error');
+                } finally {
+                    // Re-enable button
+                    submitBtn.disabled = false;
+                    btnText.classList.remove('hidden');
+                    btnLoader.classList.add('hidden');
+                }
+            });
+        }
+        
+        function showForgotPasswordMessage(message, type) {
+            const messageDiv = document.getElementById('forgot-password-message');
+            if (messageDiv) {
+                messageDiv.textContent = message;
+                messageDiv.classList.remove('hidden', 'success', 'error');
+                messageDiv.classList.add(type);
+            }
+        }
+
         const loginForm = document.getElementById('loginForm');
         const loginSubmitBtn = document.getElementById('login-submit-btn');
         

@@ -65,6 +65,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+            
+            // Clear BHW sidebar notification cache so counts update immediately
+            $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+            unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
         } elseif ($action === 'reject') {
             $reason = trim($_POST['reason'] ?? '');
             error_log('BHW Medicine Rejection: Request ID: ' . $id . ', Reason: ' . $reason);
@@ -88,12 +92,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log('BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No'));
                 file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No') . "\n", FILE_APPEND);
             }
+            
+            // Clear BHW sidebar notification cache so counts update immediately
+            $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+            unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
         }
     }
     redirect_to('bhw/requests.php');
 }
 
-$rows = db()->prepare('SELECT r.id, m.name AS medicine, r.status, r.created_at, r.requested_for, r.patient_name, r.patient_date_of_birth, r.relationship, r.reason, r.proof_image_path, r.rejection_reason, r.updated_at, res.first_name, res.last_name, fm.first_name AS family_first_name, fm.middle_initial AS family_middle_initial, fm.last_name AS family_last_name, fm.relationship AS family_relationship FROM requests r JOIN medicines m ON m.id=r.medicine_id JOIN residents res ON res.id=r.resident_id LEFT JOIN family_members fm ON fm.id=r.family_member_id WHERE r.bhw_id=? ORDER BY r.id DESC');
+$rows = db()->prepare('
+    SELECT 
+        r.id,
+        m.name AS medicine,
+        r.status,
+        r.created_at,
+        r.requested_for,
+        r.patient_name,
+        r.patient_date_of_birth,
+        r.relationship,
+        r.reason,
+        r.proof_image_path,
+        r.rejection_reason,
+        r.updated_at,
+        res.first_name,
+        res.last_name,
+        u.profile_image AS resident_profile_image,
+        fm.first_name AS family_first_name,
+        fm.middle_initial AS family_middle_initial,
+        fm.last_name AS family_last_name,
+        fm.relationship AS family_relationship
+    FROM requests r
+    JOIN medicines m ON m.id = r.medicine_id
+    JOIN residents res ON res.id = r.resident_id
+    JOIN users u ON u.id = res.user_id
+    LEFT JOIN family_members fm ON fm.id = r.family_member_id
+    WHERE r.bhw_id = ?
+    ORDER BY r.id DESC
+');
 $rows->execute([$user['id']]);
 $reqs = $rows->fetchAll();
 ?>
@@ -497,19 +533,65 @@ $reqs = $rows->fetchAll();
                                         <!-- Request ID -->
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center">
-                                                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
-                                                    <span class="text-white text-xs font-bold">#</span>
+                                                <div class="w-9 h-9 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-sm">
+                                                    <span class="text-white text-xs font-semibold tracking-wide">#<?php echo (int)$r['id']; ?></span>
                                                 </div>
                                                 <div>
-                                                    <div class="text-sm font-mono font-semibold text-gray-900"><?php echo (int)$r['id']; ?></div>
-                                                    <div class="text-xs text-gray-500">Request</div>
+                                                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Request</div>
+                                                    <div class="text-[11px] text-gray-400">
+                                                        <?php echo htmlspecialchars($r['status'] === 'submitted' ? 'Awaiting review' : ucfirst($r['status'])); ?>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
                                         
                                         <!-- Resident -->
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?></div>
+                                            <div class="flex items-center">
+                                                <?php if (!empty($r['resident_profile_image'])): ?>
+                                                    <div class="relative mr-3">
+                                                        <img src="<?php echo htmlspecialchars(upload_url($r['resident_profile_image'])); ?>"
+                                                             alt="Resident Avatar"
+                                                             class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                        <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold border-2 border-purple-500" style="display:none;">
+                                                            <?php 
+                                                            $firstInitial = !empty($r['first_name']) ? substr($r['first_name'], 0, 1) : 'R';
+                                                            $lastInitial = !empty($r['last_name']) ? substr($r['last_name'], 0, 1) : 'D';
+                                                            echo strtoupper($firstInitial . $lastInitial);
+                                                            ?>
+                                                        </div>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold border-2 border-purple-500 mr-3">
+                                                        <?php 
+                                                        $firstInitial = !empty($r['first_name']) ? substr($r['first_name'], 0, 1) : 'R';
+                                                        $lastInitial = !empty($r['last_name']) ? substr($r['last_name'], 0, 1) : 'D';
+                                                        echo strtoupper($firstInitial . $lastInitial);
+                                                        ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                                <div>
+                                                    <div class="text-sm font-medium text-gray-900">
+                                                        <?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?>
+                                                    </div>
+                                                    <?php if (!empty($r['family_first_name'])): ?>
+                                                        <div class="text-xs text-gray-500">
+                                                            For: <?php echo htmlspecialchars(trim(($r['family_first_name'] ?? '') . ' ' . ($r['family_last_name'] ?? ''))); ?>
+                                                            <?php if (!empty($r['family_relationship'])): ?>
+                                                                <span class="text-gray-400">· <?php echo htmlspecialchars($r['family_relationship']); ?></span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    <?php elseif (!empty($r['patient_name'])): ?>
+                                                        <div class="text-xs text-gray-500">
+                                                            For: <?php echo htmlspecialchars($r['patient_name']); ?>
+                                                            <?php if (!empty($r['relationship'])): ?>
+                                                                <span class="text-gray-400">· <?php echo htmlspecialchars($r['relationship']); ?></span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
                                         </td>
                                         
                                         <!-- Medicine -->

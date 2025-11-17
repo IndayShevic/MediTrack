@@ -81,8 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['flash'] = 'Family member approved successfully!';
                     $_SESSION['flash_type'] = 'success';
                     
-                    // Clear cache
-                    unset($_SESSION['bhw_notification_counts_' . $bhw_purok_id]);
+                    // Clear BHW sidebar notification cache so counts update immediately
+                    $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+                    unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
                     
                 } catch (Throwable $e) {
                     if (isset($pdo)) $pdo->rollBack();
@@ -102,8 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['flash'] = 'Family member addition rejected.';
                     $_SESSION['flash_type'] = 'success';
                     
-                    // Clear cache
-                    unset($_SESSION['bhw_notification_counts_' . $bhw_purok_id]);
+                    // Clear BHW sidebar notification cache so counts update immediately
+                    $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+                    unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
                     
                 } catch (Throwable $e) {
                     $_SESSION['flash'] = 'Failed to reject. Please try again.';

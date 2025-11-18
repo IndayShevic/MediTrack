@@ -1,18 +1,32 @@
 <?php
 declare(strict_types=1);
 // Root landing page for MediTrack
+
+// Start output buffering at the very beginning to catch any errors/warnings
+ob_start();
+
+// For POST requests, suppress error display (but still log errors) to prevent HTML in JSON responses
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    ini_set('display_errors', '0');
+    error_reporting(E_ALL); // Still report errors, just don't display them
+}
+
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/email_notifications.php';
 
-$user = current_user();
-if ($user) {
-    if ($user['role'] === 'super_admin') { header('Location: public/super_admin/dashboard.php'); exit; }
-    if ($user['role'] === 'bhw') { header('Location: public/bhw/dashboard.php'); exit; }
-    if ($user['role'] === 'resident') { header('Location: public/resident/dashboard.php'); exit; }
+// Only redirect logged-in users for GET requests, not POST requests
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $user = current_user();
+    if ($user) {
+        if ($user['role'] === 'super_admin') { header('Location: public/super_admin/dashboard.php'); exit; }
+        if ($user['role'] === 'bhw') { header('Location: public/bhw/dashboard.php'); exit; }
+        if ($user['role'] === 'resident') { header('Location: public/resident/dashboard.php'); exit; }
+    }
 }
 
 // Handle duplicate checking
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_duplicate') {
+    ob_clean(); // Clear any output
     header('Content-Type: application/json');
     
     $type = $_POST['type'] ?? '';
@@ -87,10 +101,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Handle registration form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $errors = [];
+    try {
+        // Clear any output that may have been generated (from includes, etc.)
+        ob_clean();
+        
+        $errors = [];
     
     // Check if email is verified
     if (!isset($_SESSION['email_verified']) || $_SESSION['email_verified'] !== true) {
+        ob_clean(); // Clear any output
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'Please verify your email address first']);
         exit;
@@ -101,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $verified_email = $_SESSION['verified_email'] ?? '';
     
     if ($email !== $verified_email) {
+        ob_clean(); // Clear any output
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'Email mismatch. Please verify your email again.']);
         exit;
@@ -423,6 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['email_verified'], $_SESSION['verified_email']);
             
             // Return success response
+            ob_clean(); // Clear any output
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'message' => 'Registration submitted successfully!']);
             exit;
@@ -437,14 +458,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - Stack trace: ' . $e->getTraceAsString() . "\n", FILE_APPEND);
             
             // Return error response
+            ob_clean(); // Clear any output
             header('Content-Type: application/json');
             echo json_encode(['success' => false, 'message' => 'Registration failed: ' . $e->getMessage()]);
             exit;
         }
     } else {
         // Return validation errors
+        ob_clean(); // Clear any output
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => implode('<br>', $errors)]);
+        exit;
+    }
+    } catch (Throwable $e) {
+        // Catch any unexpected errors that weren't caught by inner try-catch
+        ob_clean();
+        header('Content-Type: application/json');
+        http_response_code(500);
+        error_log('Unexpected error in registration POST handler: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        echo json_encode([
+            'success' => false, 
+            'message' => 'An unexpected error occurred. Please try again later.'
+        ]);
         exit;
     }
 }
@@ -2082,6 +2118,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             line-height: 1.5;
         }
         
+        .login-error-message.hidden {
+            display: none;
+        }
+        
         .login-error-message svg {
             width: 1.125rem;
             height: 1.125rem;
@@ -2322,8 +2362,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             max-height: 90vh;
             overflow-y: auto;
             animation: fadeInScale 0.3s ease-out;
-        }
-
+            }
+            
         .forgot-password-modal-content {
             padding: 2rem 2.5rem 2.5rem 2.5rem;
         }
@@ -2359,7 +2399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .forgot-password-title {
-            font-size: 1.5rem;
+                font-size: 1.5rem;
             font-weight: 700;
             color: #1f2937;
             margin-bottom: 0.5rem;
@@ -3994,112 +4034,157 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </section>
     </main>
 
-    <footer class="bg-gray-900 text-white relative overflow-hidden w-full z-10">
-        <!-- Decorative background -->
-        <div class="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-indigo-900/20"></div>
-        <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
-        
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 pb-6 sm:pb-8">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mb-8 sm:mb-12">
-                <!-- Company Info -->
-                <div class="lg:col-span-2">
-                    <div class="flex items-center space-x-3 mb-4 sm:mb-6">
-                        <img 
-                            class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-contain bg-white/10 p-1.5 shadow-lg" 
-                            src="public/assets/brand/logo.png" 
-                            alt="<?php echo htmlspecialchars($brand); ?> Logo"
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                        />
-                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg hidden">
-                            <span class="text-white font-bold text-lg sm:text-xl"><?php echo strtoupper(substr(htmlspecialchars($brand), 0, 1)); ?></span>
+    <footer class="bg-[#0b1431] text-gray-300 pt-4 pb-3 md:pt-10 lg:pt-12 md:pb-6 border-t-4 border-blue-500 rounded-t-xl shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Main Content Grid (Branding | Navigation | Subscribe) -->
+            <!-- Layout: Stacks on mobile, 3 columns on medium/large screens -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 lg:gap-10 border-b border-gray-700/50 pb-4 md:pb-8 lg:pb-10">
+                <!-- 1. Branding & Mission -->
+                <div class="col-span-1 space-y-2 md:space-y-4 md:pr-4">
+                    <div class="flex items-center justify-center md:justify-start space-x-2 sm:space-x-3">
+                        <div class="w-14 h-14 sm:w-16 sm:h-16 md:w-16 md:h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-md flex-shrink-0 transition-transform duration-200 hover:scale-105">
+                            <svg class="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                            </svg>
                         </div>
-                        <span class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                        <span class="text-lg sm:text-2xl md:text-3xl font-extrabold text-white tracking-wide">
                             <?php echo htmlspecialchars($brand); ?>
                         </span>
                     </div>
-                    <p class="text-gray-300 mb-4 sm:mb-6 max-w-md leading-relaxed text-sm sm:text-base">
+                    <p class="text-xs sm:text-sm md:text-base text-gray-400 leading-relaxed text-center md:text-left">
                         Making healthcare accessible for everyone in your community.
                     </p>
-                    <div class="flex space-x-3 sm:space-x-4">
-                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Instagram">
-                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <!-- Social Icons -->
+                    <div class="flex flex-row gap-3 justify-center md:justify-start mt-2 md:mt-4">
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 bg-white/10 hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation" aria-label="Instagram">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-300 hover:text-white" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                             </svg>
                         </a>
-                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Facebook">
-                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 bg-white/10 hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation" aria-label="Facebook">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-300 hover:text-white" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                             </svg>
                         </a>
-                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="LinkedIn">
-                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 bg-white/10 hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation" aria-label="LinkedIn">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-300 hover:text-white" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
                             </svg>
                         </a>
-                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg group" aria-label="Email">
-                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 bg-white/10 hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation" aria-label="Email">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-300 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                             </svg>
                         </a>
                     </div>
                 </div>
 
-                <!-- Quick Links -->
-                <div>
-                    <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-white">Quick Links</h3>
-                    <ul class="space-y-2 sm:space-y-3">
-                        <li><a href="#home" onclick="handleNavClick('home'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Home</a></li>
-                        <li><a href="#features" onclick="handleNavClick('features'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Features</a></li>
-                        <li><a href="#about" onclick="handleNavClick('about'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">About</a></li>
-                        <li><a href="#faq" onclick="handleNavClick('faq'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">FAQ</a></li>
-                        <li><a href="#contact" onclick="handleNavClick('contact'); return false;" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Contact</a></li>
+                <!-- 2. Quick Links -->
+                <div class="col-span-1 md:pl-10">
+                    <h3 class="text-sm sm:text-lg md:text-xl font-bold text-white mb-1.5 sm:mb-3 md:mb-4">Quick Links</h3>
+                    <ul class="space-y-1 sm:space-y-2 md:space-y-3">
+                        <li>
+                            <a href="#home" onclick="handleNavClick('home'); return false;" class="text-xs sm:text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-200 inline-block hover:translate-x-1 transform footer-link">
+                                Home
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#features" onclick="handleNavClick('features'); return false;" class="text-xs sm:text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-200 inline-block hover:translate-x-1 transform footer-link">
+                                Features
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#about" onclick="handleNavClick('about'); return false;" class="text-xs sm:text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-200 inline-block hover:translate-x-1 transform footer-link">
+                                About
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#faq" onclick="handleNavClick('faq'); return false;" class="text-xs sm:text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-200 inline-block hover:translate-x-1 transform footer-link">
+                                FAQ
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#contact" onclick="handleNavClick('contact'); return false;" class="text-xs sm:text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-200 inline-block hover:translate-x-1 transform footer-link">
+                                Contact
+                            </a>
+                        </li>
                     </ul>
                 </div>
-
-                <!-- Support -->
-                <div>
-                    <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-white">Support</h3>
-                    <ul class="space-y-2 sm:space-y-3">
-                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Help Center</a></li>
-                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Documentation</a></li>
-                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Privacy Policy</a></li>
-                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Terms of Service</a></li>
-                        <li><a href="#" class="text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform inline-block text-sm sm:text-base">Cookie Policy</a></li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Newsletter Signup -->
-            <div class="border-t border-gray-800 pt-6 sm:pt-8 mb-6 sm:mb-8">
-                <div class="max-w-md mx-auto text-center">
-                    <h3 class="text-base sm:text-lg font-semibold mb-2 text-white">Stay Updated</h3>
-                    <p class="text-gray-300 mb-4 text-sm sm:text-base">Get the latest news and updates delivered to your inbox.</p>
-                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                        <input type="email" placeholder="Enter your email" class="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm sm:text-base">
-                        <button class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 hover:scale-105 transform shadow-lg text-sm sm:text-base whitespace-nowrap">
+                
+                <!-- 3. Subscribe Section -->
+                <div class="col-span-1">
+                    <h3 class="text-sm sm:text-lg md:text-xl font-bold text-white mb-1.5 sm:mb-3 md:mb-4">Stay Updated</h3>
+                    <p class="text-xs sm:text-sm text-gray-400 mb-2 sm:mb-4">
+                        Get the latest news and updates delivered to your inbox.
+                    </p>
+                    <div class="flex flex-col space-y-1.5 sm:space-y-2">
+                        <input 
+                            type="email" 
+                            id="subscribeEmail"
+                            placeholder="Enter your email" 
+                            class="p-2 sm:p-3 max-w-sm w-full mx-auto md:max-w-full md:mx-0 rounded-lg bg-gray-800/50 border border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 text-xs sm:text-sm md:text-base"
+                        />
+                        <button 
+                            onclick="handleSubscribe()"
+                            class="max-w-sm w-full mx-auto md:max-w-full md:mx-0 bg-gradient-to-r from-blue-600 to-indigo-600 hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 active:bg-blue-800 text-white font-semibold py-2 sm:py-3 px-4 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.01] active:scale-95 touch-manipulation text-xs sm:text-sm md:text-base"
+                        >
                             Subscribe
                         </button>
                     </div>
+                    <div id="subscribeMessage" class="mt-1.5 sm:mt-3 text-xs sm:text-sm font-medium h-5"></div>
                 </div>
             </div>
 
-            <!-- Bottom Bar -->
-            <div class="border-t border-gray-800 pt-6 sm:pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-                <p class="text-gray-400 text-xs sm:text-sm text-center md:text-left">
-                    © <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.
+            <!-- Copyright Bar with Developer Credit -->
+            <div class="mt-4 md:mt-8 lg:mt-10 text-center space-y-1 sm:space-y-2">
+                <!-- Developer Credit Line -->
+                <p class="text-xs sm:text-sm font-medium text-blue-400">
+                    Developed by: <span class="text-blue-300">Tacatane S.</span> and <span class="text-blue-300">Canamocan L. Jr.</span>
                 </p>
-                <div class="flex items-center space-x-4 sm:space-x-6 text-xs sm:text-sm text-gray-400">
-                    <span>Made with</span>
-                    <div class="flex items-center space-x-1">
-                        <svg class="w-3 h-3 sm:w-4 sm:h-4 text-red-500 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                        </svg>
-                        <span>by <span class="text-blue-400">L. Canamocan</span> × <span class="text-blue-400">S. Tacatane</span></span>
-                    </div>
-                </div>
+                <!-- Standard Copyright -->
+                <p class="text-xs sm:text-sm text-gray-500">
+                    &copy; <?php echo date('Y'); ?> <?php echo htmlspecialchars($brand); ?>. All rights reserved.
+                </p>
             </div>
         </div>
     </footer>
+
+    <script>
+        // Subscribe button handler
+        function handleSubscribe() {
+            const emailInput = document.getElementById('subscribeEmail');
+            const messageElement = document.getElementById('subscribeMessage');
+            const email = emailInput.value.trim();
+
+            if (email === "") {
+                messageElement.textContent = "Please enter an email address.";
+                messageElement.classList.remove('text-green-400');
+                messageElement.classList.add('text-red-400');
+                return;
+            }
+
+            // Simple client-side validation for email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                messageElement.textContent = "Please enter a valid email address.";
+                messageElement.classList.remove('text-green-400');
+                messageElement.classList.add('text-red-400');
+                return;
+            }
+
+            // Simulate subscription success
+            messageElement.textContent = `Thanks for subscribing, ${email}!`;
+            messageElement.classList.remove('text-red-400');
+            messageElement.classList.add('text-green-400');
+            emailInput.value = ''; // Clear the input
+            
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                messageElement.textContent = '';
+            }, 3000);
+        }
+    </script>
+
 
     <!-- Scroll to Top Button -->
     <button id="scrollToTop" class="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-3 sm:p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 hidden z-50">
@@ -4681,14 +4766,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Login Form -->
                 <form id="loginForm" action="public/login.php" method="post">
                     <!-- Error Message -->
-                    <?php if (!empty($_SESSION['flash'])): ?>
-                        <div class="login-error-message">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span><?php echo htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></span>
-                        </div>
-                    <?php endif; ?>
+                    <div class="login-error-message <?php echo empty($_SESSION['flash']) ? 'hidden' : ''; ?>">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span><?php 
+                            if (!empty($_SESSION['flash'])) {
+                                echo htmlspecialchars($_SESSION['flash']); 
+                                unset($_SESSION['flash']); 
+                            }
+                        ?></span>
+                    </div>
                     
                     <!-- Email Input -->
                     <div class="login-input-wrapper">
@@ -4734,7 +4822,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     <!-- Login Button -->
                     <button type="submit" class="login-submit-button" id="login-submit-btn">
-                        <span>LOG IN</span>
+                        <span>LOGIN</span>
                     </button>
                 </form>
                 
@@ -4753,8 +4841,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button onclick="closeForgotPasswordModal()" class="forgot-password-close-button" aria-label="Close modal">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
+                        </svg>
+                    </button>
             
             <!-- Modal Content -->
             <div class="forgot-password-modal-content">
@@ -4768,7 +4856,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </p>
                 </div>
                 
-                <form id="forgotPasswordForm" class="forgot-password-form">
+                <form id="forgotPasswordForm" class="forgot-password-form" action="public/forgot_password.php" method="POST">
                     <div id="forgot-password-message" class="forgot-password-message hidden"></div>
                     
                     <div class="forgot-password-input-group">
@@ -4783,12 +4871,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 aria-describedby="forgot-email-error"
                                 autocomplete="email"
                             />
-                        </div>
+            </div>
                         <p class="hidden text-xs text-red-600 mt-2" id="forgot-email-error">Please include a valid email address so we can get back to you</p>
                     </div>
                     
                     <button type="submit" class="forgot-password-submit-btn" id="forgot-password-submit-btn">
-                        <span id="forgot-password-btn-text">Reset password</span>
+                        <span id="forgot-password-btn-text">Send OTP Code</span>
                         <span id="forgot-password-btn-loader" class="hidden">
                             <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -6744,12 +6832,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 method: 'POST',
                 body: formData
             })
-            .then(response => {
+            .then(async response => {
                 console.log('Response status:', response.status);
-                if (response.ok) {
-                    return response.json();
+                console.log('Response Content-Type:', response.headers.get('Content-Type'));
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('Content-Type') || '';
+                if (!contentType.includes('application/json')) {
+                    // Response is not JSON, likely HTML error page
+                    const text = await response.text();
+                    console.error('Server returned HTML instead of JSON:', text.substring(0, 500));
+                    throw new Error('Server returned an error page. Please check the console for details.');
                 }
-                throw new Error('Network response was not ok');
+                
+                // Try to parse JSON response (works for both success and error responses)
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    console.error('Failed to parse JSON response:', parseError);
+                    throw new Error('Invalid response from server. Please try again.');
+                }
+                
+                // If response is not ok, throw error with message from server
+                if (!response.ok) {
+                    const errorMessage = data.message || data.error || 'An error occurred on the server.';
+                    console.error('Server error:', errorMessage);
+                    throw new Error(errorMessage);
+                }
+                
+                // Success response
+                return data;
             })
             .then(data => {
                 console.log('Response data:', data);
@@ -7237,7 +7350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.getElementById('loginModal').classList.remove('flex');
             document.body.style.overflow = 'auto';
         }
-
+        
         // Forgot Password Modal Functions
         function openForgotPasswordModal() {
             const modal = document.getElementById('forgotPasswordModal');
@@ -7247,7 +7360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
-            
+                
             // Reset form
             if (form) {
                 form.reset();
@@ -7261,7 +7374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Focus on email input
             const emailInput = document.getElementById('forgot-email');
-            if (emailInput) {
+                if (emailInput) {
                 setTimeout(() => emailInput.focus(), 100);
             }
         }
@@ -7284,7 +7397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Check if input has value on load
                 if (loginEmail.value) {
                     emailWrapper.classList.add('has-value');
-                }
+                    }
                 
                 // Handle focus
                 loginEmail.addEventListener('focus', function() {
@@ -7298,7 +7411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         emailWrapper.classList.add('has-value');
                     } else {
                         emailWrapper.classList.remove('has-value');
-                    }
+            }
                 });
                 
                 // Handle input
@@ -7736,99 +7849,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Login form submission with loading state
         // Forgot Password Form Handler
-        const forgotPasswordForm = document.getElementById('forgotPasswordForm');
-        if (forgotPasswordForm) {
-            forgotPasswordForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const emailInput = document.getElementById('forgot-email');
-                const submitBtn = document.getElementById('forgot-password-submit-btn');
-                const btnText = document.getElementById('forgot-password-btn-text');
-                const btnLoader = document.getElementById('forgot-password-btn-loader');
-                const messageDiv = document.getElementById('forgot-password-message');
-                const email = emailInput.value.trim();
-                
-                // Basic validation
-                if (!email) {
-                    showForgotPasswordMessage('Please enter your email address.', 'error');
-                    emailInput.focus();
-                    return;
-                }
-                
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                    showForgotPasswordMessage('Please enter a valid email address.', 'error');
-                    emailInput.focus();
-                    return;
-                }
-                
-                // Disable button and show loading
-                submitBtn.disabled = true;
-                btnText.classList.add('hidden');
-                btnLoader.classList.remove('hidden');
-                messageDiv.classList.add('hidden');
-                
-                try {
-                    const formData = new FormData();
-                    formData.append('email', email);
-                    
-                    const response = await fetch('public/forgot_password.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        showForgotPasswordMessage(data.message, 'success');
-                        forgotPasswordForm.reset();
-                    } else {
-                        showForgotPasswordMessage(data.message || 'An error occurred. Please try again.', 'error');
-                    }
-                } catch (error) {
-                    console.error('Forgot password error:', error);
-                    showForgotPasswordMessage('An error occurred. Please try again later.', 'error');
-                } finally {
-                    // Re-enable button
-                    submitBtn.disabled = false;
-                    btnText.classList.remove('hidden');
-                    btnLoader.classList.add('hidden');
-                }
-            });
-        }
-        
-        function showForgotPasswordMessage(message, type) {
-            const messageDiv = document.getElementById('forgot-password-message');
-            if (messageDiv) {
-                messageDiv.textContent = message;
-                messageDiv.classList.remove('hidden', 'success', 'error');
-                messageDiv.classList.add(type);
-            }
-        }
+        // Forgot password form now submits directly to forgot_password.php
+        // No AJAX needed - the OTP flow uses separate pages
 
         const loginForm = document.getElementById('loginForm');
         const loginSubmitBtn = document.getElementById('login-submit-btn');
+        const loginErrorDiv = loginForm ? loginForm.querySelector('.login-error-message') : null;
         
         if (loginForm && loginSubmitBtn) {
-            loginForm.addEventListener('submit', function(e) {
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
                 const email = document.getElementById('login-email').value.trim();
                 const password = document.getElementById('login-password').value;
                 
+                // Hide any previous error messages
+                if (loginErrorDiv) {
+                    loginErrorDiv.classList.add('hidden');
+                }
+                
                 // Basic validation
                 if (!email || !password) {
-                    e.preventDefault();
+                    showLoginError('Email and password are required');
+                    return false;
+                }
+                
+                // Validate email format
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    showLoginError('Invalid email format');
                     return false;
                 }
                 
                 // Show loading state
                 loginSubmitBtn.classList.add('loading');
+                loginSubmitBtn.disabled = true;
                 const span = loginSubmitBtn.querySelector('span');
                 if (span) {
                     span.textContent = 'Signing in...';
                 }
                 
-                // Form will submit normally, but if there's an error, we'll handle it on return
-                // The loading state will be reset if the page reloads with an error
+                try {
+                    const formData = new FormData(loginForm);
+                    console.log('Sending login request for:', email);
+                    
+                    const response = await fetch('public/login.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    console.log('Login response status:', response.status);
+                    console.log('Login response headers:', response.headers);
+                    
+                    // Check if response is JSON
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (!contentType.includes('application/json')) {
+                        const text = await response.text();
+                        console.error('Server returned non-JSON response:', text.substring(0, 500));
+                        showLoginError('Server error. Please check the console for details.');
+                        loginSubmitBtn.classList.remove('loading');
+                        loginSubmitBtn.disabled = false;
+                        if (span) {
+                            span.textContent = 'LOG IN';
+                        }
+                        return;
+                    }
+                    
+                    const result = await response.json();
+                    console.log('Login response data:', result);
+                    
+                    if (result.success) {
+                        // Login successful - redirect
+                        console.log('Login successful, redirecting to:', result.redirect);
+                        if (result.redirect) {
+                            window.location.href = 'public/' + result.redirect;
+                        } else {
+                            window.location.reload();
+                        }
+                    } else {
+                        // Show error message
+                        console.log('Login failed:', result.message);
+                        showLoginError(result.message || 'Login failed. Please try again.');
+                        loginSubmitBtn.classList.remove('loading');
+                        loginSubmitBtn.disabled = false;
+                        if (span) {
+                            span.textContent = 'LOG IN';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    console.error('Error stack:', error.stack);
+                    showLoginError('An error occurred. Please try again.');
+                    loginSubmitBtn.classList.remove('loading');
+                    loginSubmitBtn.disabled = false;
+                    if (span) {
+                        span.textContent = 'LOG IN';
+                    }
+                }
             });
+        }
+        
+        function showLoginError(message) {
+            // Create or update error message div
+            let errorDiv = loginForm ? loginForm.querySelector('.login-error-message') : null;
+            
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.className = 'login-error-message';
+                errorDiv.innerHTML = `
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span></span>
+                `;
+                if (loginForm) {
+                    loginForm.insertBefore(errorDiv, loginForm.firstChild);
+                }
+            }
+            
+            const span = errorDiv.querySelector('span');
+            if (span) {
+                span.textContent = message;
+            }
+            errorDiv.classList.remove('hidden');
+            
+            // Shake animation
+            errorDiv.classList.add('animate-shake');
+            setTimeout(() => {
+                errorDiv.classList.remove('animate-shake');
+            }, 500);
         }
         
         // Active Link Management
@@ -7991,6 +8139,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Reopen register modal if there was an error or if returning from register
         if (urlParams.get('modal') === 'register') {
             openRegisterModal();
+            // Clear the URL parameter after opening
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        // Auto-open login modal when ?login=1 is in URL
+        if (urlParams.get('login') === '1') {
+            openLoginModal();
             // Clear the URL parameter after opening
             window.history.replaceState({}, document.title, window.location.pathname);
         }
@@ -8167,7 +8322,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+                const href = this.getAttribute('href');
+                // Skip if href is just '#' (invalid selector)
+                if (href === '#') return;
+                const target = document.querySelector(href);
                 if (target) {
                     target.scrollIntoView({
                         behavior: 'smooth',

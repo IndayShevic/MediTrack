@@ -2,13 +2,29 @@
 declare(strict_types=1);
 // Root landing page for MediTrack
 
-// Start output buffering at the very beginning to catch any errors/warnings
-ob_start();
+// Do not output PHP warnings/notices as HTML (they break JSON responses)
+@ini_set('display_errors', '0');
+@ini_set('log_errors', '1');
+@ini_set('error_log', __DIR__ . '/php-error.log');
 
-// For POST requests, suppress error display (but still log errors) to prevent HTML in JSON responses
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    ini_set('display_errors', '0');
-    error_reporting(E_ALL); // Still report errors, just don't display them
+// Ensure we can control all output (so JSON responses are not prefixed by PHP warnings/HTML)
+if (ob_get_level() === 0) {
+    ob_start();
+}
+
+/**
+ * Safely send a JSON response and terminate.
+ * This clears any buffered output (e.g. PHP warnings rendered as HTML)
+ * so the response body is valid JSON from the first byte.
+ */
+function send_json(array $payload, int $statusCode = 200): void {
+    if (ob_get_length()) {
+        ob_clean();
+    }
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload);
+    exit;
 }
 
 require_once __DIR__ . '/config/db.php';
@@ -26,9 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // Handle duplicate checking
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_duplicate') {
-    ob_clean(); // Clear any output
-    header('Content-Type: application/json');
-    
     $type = $_POST['type'] ?? '';
     $response = ['duplicate' => false, 'message' => ''];
     
@@ -95,8 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
     }
     
-    echo json_encode($response);
-    exit;
+    send_json($response);
 }
 
 // Handle registration form submission
@@ -109,10 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Check if email is verified
     if (!isset($_SESSION['email_verified']) || $_SESSION['email_verified'] !== true) {
-        ob_clean(); // Clear any output
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Please verify your email address first']);
-        exit;
+        send_json(['success' => false, 'message' => 'Please verify your email address first']);
     }
     
     // Verify that the email matches the verified email
@@ -120,10 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $verified_email = $_SESSION['verified_email'] ?? '';
     
     if ($email !== $verified_email) {
-        ob_clean(); // Clear any output
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Email mismatch. Please verify your email again.']);
-        exit;
+        send_json(['success' => false, 'message' => 'Email mismatch. Please verify your email again.']);
     }
     
     // Debug: Log all POST data
@@ -149,7 +155,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($value)) return '';
         
         // Remove script tags and HTML tags (prevent XSS)
-        $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi', '', $value);
+        // Note: PHP regex does not support the 'g' modifier; patterns are global by default.
+        $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
         $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
         
         // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
@@ -443,10 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['email_verified'], $_SESSION['verified_email']);
             
             // Return success response
-            ob_clean(); // Clear any output
-            header('Content-Type: application/json');
-            echo json_encode(['success' => true, 'message' => 'Registration submitted successfully!']);
-            exit;
+            send_json(['success' => true, 'message' => 'Registration submitted successfully!']);
             
         } catch (Throwable $e) {
             if (isset($pdo)) $pdo->rollBack();
@@ -458,17 +462,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             file_put_contents('debug.log', date('Y-m-d H:i:s') . ' - Stack trace: ' . $e->getTraceAsString() . "\n", FILE_APPEND);
             
             // Return error response
-            ob_clean(); // Clear any output
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'Registration failed: ' . $e->getMessage()]);
-            exit;
+            send_json(['success' => false, 'message' => 'Registration failed: ' . $e->getMessage()], 500);
         }
     } else {
         // Return validation errors
-        ob_clean(); // Clear any output
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => implode('<br>', $errors)]);
-        exit;
+        send_json(['success' => false, 'message' => implode('<br>', $errors)]);
     }
     } catch (Throwable $e) {
         // Catch any unexpected errors that weren't caught by inner try-catch
@@ -4645,7 +4643,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </svg>
                                     <span>Back</span>
                         </button>
-                                <button type="button" id="submitRegistrationBtn" onclick="handleFormSubmission()" class="register-submit-button" style="flex: 1; max-width: 300px;">
+                                <button type="button" id="submitRegistrationBtn" class="register-submit-button" style="flex: 1; max-width: 300px;">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
@@ -4912,344 +4910,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return options;
         }
         
-        // ============================================
-        // FORM DATA PERSISTENCE (localStorage)
-        // ============================================
-        const REGISTER_FORM_STORAGE_KEY = 'registerFormData';
-        let formSaveTimeout = null;
-        
-        // Save form data to localStorage
-        function saveRegisterFormData() {
-            try {
-                const formData = {
-                    // Step 1: Personal Information
-                    first_name: document.querySelector('input[name="first_name"]')?.value || '',
-                    middle_initial: document.querySelector('input[name="middle_initial"]')?.value || '',
-                    last_name: document.querySelector('input[name="last_name"]')?.value || '',
-                    email: document.querySelector('input[name="email"]')?.value || '',
-                    password: document.querySelector('input[name="password"]')?.value || '',
-                    confirm_password: document.querySelector('input[name="confirm_password"]')?.value || '',
-                    date_of_birth: document.querySelector('input[name="date_of_birth"]')?.value || '',
-                    phone: document.querySelector('input[name="phone"]')?.value || '',
-                    barangay_id: document.querySelector('select[name="barangay_id"]')?.value || '',
-                    purok_id: document.querySelector('select[name="purok_id"]')?.value || '',
-                    
-                    // Step 2: Family Members
-                    family_members: [],
-                    
-                    // Current step
-                    current_step: getCurrentStep() || 1
-                };
-                
-                // Save family members
-                const familyMemberInputs = document.querySelectorAll('[name^="family_members["]');
-                const familyMembersMap = {};
-                
-                familyMemberInputs.forEach(input => {
-                    const name = input.name;
-                    const match = name.match(/family_members\[(\d+)\]\[(\w+)\]/);
-                    if (match) {
-                        const index = parseInt(match[1]);
-                        const field = match[2];
-                        
-                        if (!familyMembersMap[index]) {
-                            familyMembersMap[index] = {};
-                        }
-                        familyMembersMap[index][field] = input.value || '';
-                    }
-                });
-                
-                // Convert map to array
-                formData.family_members = Object.keys(familyMembersMap).map(key => familyMembersMap[key]);
-                
-                // Save to localStorage
-                localStorage.setItem(REGISTER_FORM_STORAGE_KEY, JSON.stringify(formData));
-            } catch (error) {
-                console.error('Error saving form data:', error);
-            }
-        }
-        
-        // Restore form data from localStorage
-        function restoreRegisterFormData() {
-            try {
-                const savedData = localStorage.getItem(REGISTER_FORM_STORAGE_KEY);
-                if (!savedData) return false;
-                
-                const formData = JSON.parse(savedData);
-                
-                // Restore Step 1 fields
-                if (formData.first_name) {
-                    const field = document.querySelector('input[name="first_name"]');
-                    if (field) field.value = formData.first_name;
-                }
-                if (formData.middle_initial) {
-                    const field = document.querySelector('input[name="middle_initial"]');
-                    if (field) field.value = formData.middle_initial;
-                }
-                if (formData.last_name) {
-                    const field = document.querySelector('input[name="last_name"]');
-                    if (field) field.value = formData.last_name;
-                }
-                if (formData.email) {
-                    const field = document.querySelector('input[name="email"]');
-                    if (field) {
-                        field.value = formData.email;
-                        // Trigger email validation if email exists and function is available
-                        if (typeof checkEmailAvailability === 'function') {
-                            if (emailValidationTimeout) clearTimeout(emailValidationTimeout);
-                            emailValidationTimeout = setTimeout(() => {
-                                checkEmailAvailability(formData.email);
-                            }, 500);
-                        }
-                    }
-                }
-                if (formData.password) {
-                    const field = document.querySelector('input[name="password"]');
-                    if (field) field.value = formData.password;
-                }
-                if (formData.confirm_password) {
-                    const field = document.querySelector('input[name="confirm_password"]');
-                    if (field) field.value = formData.confirm_password;
-                }
-                if (formData.date_of_birth) {
-                    const field = document.querySelector('input[name="date_of_birth"]');
-                    if (field) field.value = formData.date_of_birth;
-                }
-                if (formData.phone) {
-                    const field = document.querySelector('input[name="phone"]');
-                    if (field) field.value = formData.phone;
-                }
-                
-                // Restore barangay and purok (need to handle purok options first)
-                if (formData.barangay_id) {
-                    const barangaySelect = document.querySelector('select[name="barangay_id"]');
-                    if (barangaySelect) {
-                        barangaySelect.value = formData.barangay_id;
-                        // Trigger change to populate puroks
-                        barangaySelect.dispatchEvent(new Event('change'));
-                        
-                        // Restore purok after puroks are loaded
-                        setTimeout(() => {
-                            if (formData.purok_id) {
-                                const purokSelect = document.querySelector('select[name="purok_id"]');
-                                if (purokSelect) {
-                                    purokSelect.value = formData.purok_id;
-                                }
-                            }
-                        }, 100);
-                    }
-                }
-                
-                // Restore family members
-                if (formData.family_members && formData.family_members.length > 0) {
-                    // Restore first family member (index 0)
-                    if (formData.family_members[0]) {
-                        restoreFamilyMember(0, formData.family_members[0]);
-                    }
-                    
-                    // Add and restore additional family members if any
-                    const container = document.getElementById('family-members-container');
-                    if (container) {
-                        for (let i = 1; i < formData.family_members.length; i++) {
-                            // Create new family member card
-                            const newMember = document.createElement('div');
-                            newMember.className = 'family-member-card expanded';
-                            newMember.innerHTML = `
-                                <div class="family-member-header" onclick="toggleFamilyMemberCard(this)">
-                                    <div class="family-member-header-left">
-                                        <svg class="family-member-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                        </svg>
-                                        <span class="family-member-title">Family Member ${i + 1}</span>
-                                    </div>
-                                    <div class="family-member-header-right">
-                                        <button type="button" class="remove-family-member-btn" onclick="event.stopPropagation(); removeFamilyMember(this)" aria-label="Remove family member">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="family-member-content">
-                                    <div class="family-member-fields">
-                                        <div>
-                                            <input type="text" name="family_members[${i}][first_name]" 
-                                                   class="register-input-field" 
-                                                   placeholder="First Name" />
-                                        </div>
-                                        <div>
-                                            <input type="text" name="family_members[${i}][middle_initial]" 
-                                                   class="register-input-field" 
-                                                   placeholder="M.I." 
-                                                   maxlength="1" />
-                                        </div>
-                                        <div>
-                                            <input type="text" name="family_members[${i}][last_name]" 
-                                                   class="register-input-field" 
-                                                   placeholder="Last Name" />
-                                        </div>
-                                    </div>
-                                    <div class="family-member-fields-row2">
-                                        <div class="w-full">
-                                            <select name="family_members[${i}][relationship]" 
-                                                    class="register-input-field appearance-none pr-10 w-full"
-                                                    onchange="handleRelationshipChange(this, ${i})">
-                                                ${generateRelationshipOptions(formData.family_members[i]?.relationship || null)}
-                                            </select>
-                                            <input type="text" 
-                                                   name="family_members[${i}][relationship_other]" 
-                                                   id="relationship_other_${i}"
-                                                   class="register-input-field mt-2 w-full transition-all duration-300 ease-in-out opacity-0 max-h-0 overflow-hidden" 
-                                                   placeholder="Specify relationship (e.g., Stepfather, Godmother, etc.)"
-                                                   maxlength="50"
-                                                   style="display: none;" />
-                                        </div>
-                                        <div>
-                                            <input type="date" name="family_members[${i}][date_of_birth]" 
-                                                   class="register-input-field" 
-                                                   placeholder="Date of Birth" />
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            
-                            container.appendChild(newMember);
-                            
-                            // Restore the data (relationship is already set in the template above)
-                            restoreFamilyMember(i, formData.family_members[i]);
-                        }
-                        
-                        // Update family member count to the highest index + 1
-                        familyMemberCount = formData.family_members.length;
-                    }
-                }
-                
-                // Restore current step
-                if (formData.current_step && formData.current_step > 1) {
-                    setTimeout(() => {
-                        goToStep(formData.current_step);
-                    }, 200);
-                }
-                
-                return true;
-            } catch (error) {
-                console.error('Error restoring form data:', error);
-                return false;
-            }
-        }
-        
-        // Restore a single family member
-        function restoreFamilyMember(index, memberData) {
-            const inputs = {
-                'first_name': document.querySelector(`input[name="family_members[${index}][first_name]"]`),
-                'middle_initial': document.querySelector(`input[name="family_members[${index}][middle_initial]"]`),
-                'last_name': document.querySelector(`input[name="family_members[${index}][last_name]"]`),
-                'relationship': document.querySelector(`select[name="family_members[${index}][relationship]"]`),
-                'relationship_other': document.querySelector(`input[name="family_members[${index}][relationship_other]"]`),
-                'date_of_birth': document.querySelector(`input[name="family_members[${index}][date_of_birth]"]`)
-            };
-            
-            if (inputs.first_name && memberData.first_name) {
-                inputs.first_name.value = memberData.first_name;
-            }
-            if (inputs.middle_initial && memberData.middle_initial) {
-                inputs.middle_initial.value = memberData.middle_initial;
-            }
-            if (inputs.last_name && memberData.last_name) {
-                inputs.last_name.value = memberData.last_name;
-            }
-            if (inputs.relationship && memberData.relationship) {
-                // Set the relationship value
-                inputs.relationship.value = memberData.relationship;
-                // Handle relationship change for "Other" option (must be called before setting relationship_other)
-                if (memberData.relationship === 'Other' && typeof handleRelationshipChange === 'function') {
-                    handleRelationshipChange(inputs.relationship, index);
-                    // Set relationship_other after a small delay to ensure the field is visible
-                    setTimeout(() => {
-                        if (inputs.relationship_other && memberData.relationship_other) {
-                            inputs.relationship_other.value = memberData.relationship_other;
-                        }
-                    }, 50);
-                } else if (inputs.relationship_other && memberData.relationship_other) {
-                    inputs.relationship_other.value = memberData.relationship_other;
-                }
-            }
-            if (inputs.date_of_birth && memberData.date_of_birth) {
-                inputs.date_of_birth.value = memberData.date_of_birth;
-            }
-        }
-        
-        // Get current step
-        function getCurrentStep() {
-            const step1 = document.getElementById('step-1');
-            const step2 = document.getElementById('step-2');
-            const step3 = document.getElementById('step-3');
-            
-            if (step1 && !step1.classList.contains('hidden')) return 1;
-            if (step2 && !step2.classList.contains('hidden')) return 2;
-            if (step3 && !step3.classList.contains('hidden')) return 3;
-            return 1;
-        }
-        
-        // Clear saved form data
-        function clearRegisterFormData() {
-            try {
-                localStorage.removeItem(REGISTER_FORM_STORAGE_KEY);
-            } catch (error) {
-                console.error('Error clearing form data:', error);
-            }
-        }
-        
-        // Debounced save function
-        function debouncedSaveFormData() {
-            if (formSaveTimeout) {
-                clearTimeout(formSaveTimeout);
-            }
-            formSaveTimeout = setTimeout(() => {
-                saveRegisterFormData();
-            }, 500); // Save 500ms after user stops typing
-        }
-        
-        // Setup auto-save listeners for form fields
-        function setupFormAutoSave() {
-            // Step 1 fields
-            const step1Fields = [
-                'input[name="first_name"]',
-                'input[name="middle_initial"]',
-                'input[name="last_name"]',
-                'input[name="email"]',
-                'input[name="password"]',
-                'input[name="confirm_password"]',
-                'input[name="date_of_birth"]',
-                'input[name="phone"]',
-                'select[name="barangay_id"]',
-                'select[name="purok_id"]'
-            ];
-            
-            step1Fields.forEach(selector => {
-                const field = document.querySelector(selector);
-                if (field) {
-                    field.addEventListener('input', debouncedSaveFormData);
-                    field.addEventListener('change', debouncedSaveFormData);
-                }
-            });
-            
-            // Family member fields - use event delegation for dynamic fields
-            const familyContainer = document.getElementById('family-members-container');
-            if (familyContainer) {
-                familyContainer.addEventListener('input', (e) => {
-                    if (e.target.matches('[name^="family_members["]')) {
-                        debouncedSaveFormData();
-                    }
-                });
-                familyContainer.addEventListener('change', (e) => {
-                    if (e.target.matches('[name^="family_members["]')) {
-                        debouncedSaveFormData();
-                    }
-                });
-            }
-        }
-        
         // Initialize barangay-purok relationship
         function initializeBarangayPurok() {
             const barangaySelect = document.getElementById('barangay-select');
@@ -5330,27 +4990,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validation state tracking
         const validationStates = {};
         
-        // Sanitize input by removing banned characters
+        // Sanitize input (frontend) - keep it simple and let validators enforce rules.
+        // We mainly strip control characters/emojis and trim; backend does strict sanitization.
         function sanitizeInput(value, allowedPattern, isEmail = false) {
             if (!value) return '';
             
-            // For emails, use different banned chars (allow @, ., _, %, +, -)
-            const bannedChars = isEmail ? /[!$%^&*()={}\[\]:;"<>?\/\\|~`]/g : BANNED_CHARS_NAMES;
-            
-            // Remove banned characters
-            let sanitized = value.replace(bannedChars, '');
+            let sanitized = String(value);
             
             // Remove control characters and emojis
             sanitized = sanitized.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
             sanitized = sanitized.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
             
-            // Trim leading/trailing spaces
+            // Trim leading/trailing spaces (inner spaces are preserved)
             sanitized = sanitized.trim();
-            
-            // Apply pattern if provided
-            if (allowedPattern) {
-                sanitized = sanitized.split('').filter(char => allowedPattern.test(char)).join('');
-            }
             
             return sanitized;
         }
@@ -5362,16 +5014,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Only show "required" message if field is actually empty
             if (!trimmed) {
                 return { valid: false, message: `${fieldName} is required.` };
-            }
-            
-            const sanitized = sanitizeInput(trimmed, VALIDATION_PATTERNS.name);
-            
-            if (sanitized !== trimmed) {
-                return { 
-                    valid: false, 
-                    message: '❌ Invalid input — special characters not allowed.',
-                    sanitized: sanitized
-                };
             }
             
             // Check for numbers
@@ -6214,27 +5856,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Reset email validation state
             window.isEmailValid = false;
             
-            // Initialize barangay-purok relationship first (needed for restore)
+            // Initialize barangay-purok relationship
             initializeBarangayPurok();
             
-            // Restore saved form data if available
-            setTimeout(() => {
-                const hasRestoredData = restoreRegisterFormData();
-                
-                // If no restored data, reset to step 1
-                if (!hasRestoredData) {
-                    document.querySelectorAll('.step-content').forEach(content => {
-                        content.classList.add('hidden');
-                    });
-                    document.getElementById('step-1').classList.remove('hidden');
-                    updateProgressIndicator(1);
-                }
-                
-                // Setup auto-save listeners after a short delay to ensure DOM is ready
-                setTimeout(() => {
-                    setupFormAutoSave();
-                }, 100);
-            }, 50);
+            // Always start at step 1 when opening the registration modal
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById('step-1').classList.remove('hidden');
+            updateProgressIndicator(1);
             
             // Add email input event listener for real-time validation
             const emailInput = document.getElementById('email-input');
@@ -6302,13 +5932,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if (firstNameField) {
                 setupFieldValidation(firstNameField, validateLettersOnly, 'First name', { 
-                    fieldType: 'letters' 
+                    fieldType: 'letters',
+                    autoSanitize: false // allow spaces while typing; backend will sanitize
                 });
             }
             
             if (lastNameField) {
                 setupFieldValidation(lastNameField, validateLettersOnly, 'Last name', { 
-                    fieldType: 'letters' 
+                    fieldType: 'letters',
+                    autoSanitize: false // allow spaces while typing; backend will sanitize
                 });
             }
             
@@ -6466,9 +6098,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update progress indicator
             updateProgressIndicator(step);
             
-            // Save current step and form data
-            saveRegisterFormData();
-            
             // If going to step 3, populate review
             if (step === 3) {
                 populateReview();
@@ -6563,15 +6192,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         async function validateStep1() {
-            const firstName = document.querySelector('input[name="first_name"]').value.trim();
-            const lastName = document.querySelector('input[name="last_name"]').value.trim();
-            const middleInitial = document.querySelector('input[name="middle_initial"]').value.trim();
-            const email = document.querySelector('input[name="email"]').value.trim();
-            const password = document.querySelector('input[name="password"]').value;
-            const confirmPassword = document.querySelector('input[name="confirm_password"]').value;
-            const dateOfBirth = document.querySelector('input[name="date_of_birth"]').value;
-            const barangayId = document.querySelector('select[name="barangay_id"]')?.value;
-            const purokId = document.querySelector('select[name="purok_id"]')?.value;
+            // Safely get field elements - check if they exist first
+            const firstNameInput = document.querySelector('input[name="first_name"]');
+            const lastNameInput = document.querySelector('input[name="last_name"]');
+            const middleInitialInput = document.querySelector('input[name="middle_initial"]');
+            const emailInput = document.querySelector('input[name="email"]') || document.querySelector('#email-input');
+            const passwordInput = document.querySelector('input[name="password"]');
+            const confirmPasswordInput = document.querySelector('input[name="confirm_password"]');
+            const dateOfBirthInput = document.querySelector('input[name="date_of_birth"]');
+            const barangaySelect = document.querySelector('select[name="barangay_id"]');
+            const purokSelect = document.querySelector('select[name="purok_id"]');
+            
+            // Check if required elements exist
+            if (!firstNameInput || !lastNameInput || !emailInput || !passwordInput || !confirmPasswordInput || !dateOfBirthInput || !barangaySelect || !purokSelect) {
+                console.error('Missing required form elements:', {
+                    firstName: !!firstNameInput,
+                    lastName: !!lastNameInput,
+                    email: !!emailInput,
+                    password: !!passwordInput,
+                    confirmPassword: !!confirmPasswordInput,
+                    dateOfBirth: !!dateOfBirthInput,
+                    barangay: !!barangaySelect,
+                    purok: !!purokSelect
+                });
+                showToast('Please fill in all required fields.', 'error');
+                return false;
+            }
+            
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            const middleInitial = middleInitialInput ? middleInitialInput.value.trim() : '';
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+            const dateOfBirth = dateOfBirthInput.value;
+            const barangayId = barangaySelect.value;
+            const purokId = purokSelect.value;
             
             if (!firstName || !lastName || !email || !password || !dateOfBirth || !barangayId || !purokId) {
                 showToast('Please fill in all required fields.', 'error');
@@ -6624,18 +6280,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             let hasValidMembers = false;
             
             for (let member of familyMembers) {
-                const firstName = member.querySelector('input[name*="[first_name]"]').value.trim();
-                const lastName = member.querySelector('input[name*="[last_name]"]').value.trim();
-                const middleInitial = member.querySelector('input[name*="[middle_initial]"]').value.trim();
-                const relationship = member.querySelector('select[name*="[relationship]"]').value;
-                const dob = member.querySelector('input[name*="[date_of_birth]"]').value;
+                // Safely get field elements - check if they exist first
+                const firstNameInput = member.querySelector('input[name*="[first_name]"]');
+                const lastNameInput = member.querySelector('input[name*="[last_name]"]');
+                const middleInitialInput = member.querySelector('input[name*="[middle_initial]"]');
+                const relationshipSelect = member.querySelector('select[name*="[relationship]"]');
+                const dobInput = member.querySelector('input[name*="[date_of_birth]"]');
                 
-                // Check if member has any data
-                if (firstName || lastName || relationship || dob) {
+                // Skip if required elements don't exist
+                if (!firstNameInput || !lastNameInput || !relationshipSelect || !dobInput) {
+                    continue;
+                }
+                
+                const firstName = firstNameInput.value.trim();
+                const lastName = lastNameInput.value.trim();
+                const middleInitial = middleInitialInput ? middleInitialInput.value.trim() : '';
+                const relationship = relationshipSelect.value;
+                const dob = dobInput.value;
+                
+                // Check if member has any data (skip completely empty cards)
+                const hasAnyData = firstName || lastName || (relationship && relationship !== '' && relationship !== '0') || dob;
+                
+                if (hasAnyData) {
                     hasValidMembers = true;
                     
-                    // Validate required fields
-                    if (!firstName || !lastName || !relationship || !dob) {
+                    // Validate required fields - all must be filled if any field has data
+                    if (!firstName || !lastName || !relationship || relationship === '' || relationship === '0' || !dob) {
                         showToast('Please fill in all fields for family members (First Name, Last Name, Relationship, Date of Birth).', 'error');
                         return false;
                     }
@@ -6776,26 +6446,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             submitText.textContent = 'Submitting...';
             submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
             
-            // Check if email verification is completed
-            if (!window.emailVerified) {
-                showToast('Please verify your email address first before submitting registration.', 'error');
-                // Reset button state
-                submitBtn.disabled = false;
-                submitText.textContent = 'Submit Registration';
-                submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
-                
-                // Show verification modal
-                const email = document.querySelector('input[name="email"]')?.value.trim();
-                const firstName = document.querySelector('input[name="first_name"]')?.value.trim();
-                const lastName = document.querySelector('input[name="last_name"]')?.value.trim();
-                
-                if (email && firstName && lastName) {
-                    // Go back to step 1 to trigger email verification
-                    goToStep(1);
-                }
-                return;
-            }
-            
             // Validate required fields
             const requiredFields = [
                 'first_name', 'last_name', 'email', 'password', 
@@ -6868,9 +6518,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 console.log('Response data:', data);
                 
                 if (data.success) {
-                    // Clear saved form data on successful submission
-                    clearRegisterFormData();
-                    
                     // Success - show success message
                     submitText.textContent = 'Registration Submitted!';
                     submitBtn.classList.remove('bg-gradient-to-r', 'from-green-600', 'to-emerald-600');
@@ -7087,7 +6734,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Setup validation for first name
             if (firstNameInput) {
                 setupFieldValidation(firstNameInput, validateLettersOnly, 'First name', { 
-                    fieldType: 'letters' 
+                    fieldType: 'letters',
+                    autoSanitize: false // allow spaces while typing
                 });
                 firstNameInput.addEventListener('blur', function() {
                             checkFamilyMemberDuplicate(memberElement);
@@ -7097,7 +6745,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Setup validation for last name
             if (lastNameInput) {
                 setupFieldValidation(lastNameInput, validateLettersOnly, 'Last name', { 
-                    fieldType: 'letters' 
+                    fieldType: 'letters',
+                    autoSanitize: false // allow spaces while typing
                 });
                 lastNameInput.addEventListener('blur', function() {
                     checkFamilyMemberDuplicate(memberElement);
@@ -7310,9 +6959,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         function closeRegisterModal() {
-            // Save form data before closing
-            saveRegisterFormData();
-            
             document.getElementById('registerModal').classList.add('hidden');
             document.getElementById('registerModal').classList.remove('flex');
             document.body.style.overflow = 'auto';
@@ -7979,6 +7625,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }, 500);
         }
         
+        // Forgot Password Form Handler
+        // Forgot password form now submits directly to forgot_password.php
+        // No AJAX needed - the OTP flow uses separate pages
+
         // Active Link Management
         function setActiveLink(sectionId) {
             // Remove active class from all desktop links

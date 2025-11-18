@@ -97,6 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log('BHW Approval: Successfully approved pending_id: ' . $pending_id);
                 file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Approval: Successfully approved pending_id: ' . $pending_id . "\n", FILE_APPEND);
                 set_flash('Resident registration approved successfully.', 'success');
+                
+                // Clear BHW sidebar notification cache so counts update immediately
+                $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+                unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
             }
         } catch (Throwable $e) {
             if (isset($pdo)) $pdo->rollBack();
@@ -126,6 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_email_notification(0, 'registration_rejection', 'Registration Rejected', 'Resident registration rejected: ' . $reason, $success);
                 
                 set_flash('Resident registration rejected.', 'success');
+                
+                // Clear BHW sidebar notification cache so counts update immediately
+                $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
+                unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
             }
         } catch (Throwable $e) {
             set_flash('Failed to reject registration.', 'error');

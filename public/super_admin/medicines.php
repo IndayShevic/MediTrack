@@ -184,6 +184,12 @@ $meds = db()->query('
     ORDER BY m.name ASC
 ')->fetchAll();
 $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->fetchAll();
+
+// Check if this is an AJAX request
+$isAjax = isset($_GET['ajax']) || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+
+// If AJAX request, we'll output content later - skip HTML structure
+if (!$isAjax):
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -240,7 +246,7 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
             <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
         </div>
         <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboard.php')); ?>">
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboardnew.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
@@ -453,9 +459,15 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
                 </div>
             </div>
         </div>
-
+    <?php endif; // End of if (!$isAjax) - close HTML structure for non-AJAX ?>
+    
+    <?php if ($isAjax): ?>
+        <!-- Content for AJAX -->
+        <div class="content-body">
+    <?php else: ?>
         <!-- Content -->
         <div class="content-body">
+    <?php endif; ?>
             <?php [$flash, $ft] = get_flash(); if ($flash): ?>
                 <div class="mb-6 p-4 rounded-lg <?php echo $ft==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'; ?> animate-fade-in">
                     <div class="flex items-center">
@@ -903,8 +915,8 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
             </div>
             <?php endif; ?>
         </div>
-    </main>
-
+    <?php if ($isAjax): ?>
+    <!-- Scripts for AJAX loaded content -->
     <script>
         // Filter and Search Functionality
         function filterMedicines() {
@@ -1311,7 +1323,12 @@ $categories = db()->query('SELECT id, name FROM categories ORDER BY name ASC')->
             // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>
-</body>
-</html>
+    <?php
+    exit; // Exit early for AJAX requests
+    endif; // End of $isAjax check (for non-AJAX, continue with full HTML)
+    ?>
+    </main>
+
+    <script>
 
 

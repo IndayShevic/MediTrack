@@ -2,6 +2,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
+require_once __DIR__ . '/includes/sidebar.php';
+require_once __DIR__ . '/includes/ajax_helpers.php';
+
+$isAjax = setup_dashboard_ajax_capture();
+redirect_to_dashboard_shell($isAjax);
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -87,6 +92,9 @@ $logoPath = get_setting('brand_logo_path');
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
             margin-bottom: 2rem !important;
         }
+        .legacy-brand-sidebar {
+            display: none !important;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -102,7 +110,12 @@ $logoPath = get_setting('brand_logo_path');
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50">
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <?php render_super_admin_sidebar([
+        'current_page' => basename($_SERVER['PHP_SELF'] ?? ''),
+        'user_data' => $user_data
+    ]); ?>
+    <!-- Legacy sidebar (hidden but kept for safety) -->
+    <aside class="sidebar legacy-brand-sidebar">
         <div class="sidebar-brand">
             <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
                 <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
@@ -116,7 +129,7 @@ $logoPath = get_setting('brand_logo_path');
             <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
         </div>
         <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboard.php')); ?>">
+            <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboardnew.php')); ?>">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
@@ -582,5 +595,6 @@ $logoPath = get_setting('brand_logo_path');
     </script>
 </body>
 </html>
+<?php deliver_dashboard_ajax_content($isAjax); ?>
 
 

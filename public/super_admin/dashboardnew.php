@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['super_admin']);
+require_once __DIR__ . '/includes/sidebar.php';
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -396,97 +397,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <div id="sidebarOverlay" class="sidebar-overlay"></div>
         
         <!-- Sidebar -->
-        <aside class="hidden md:flex md:flex-shrink-0 md:relative fixed md:left-0 left-[-16rem]">
-            <div id="sidebar" class="sidebar flex flex-col w-64 bg-white border-r border-gray-200 transition-all duration-300 overflow-hidden">
-                <div class="flex items-center justify-center h-16 px-4 bg-gradient-to-r from-purple-600 to-purple-800">
-                    <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                        <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg mr-2" alt="Logo" />
-                    <?php else: ?>
-                        <i class="fas fa-heartbeat text-white text-2xl mr-2"></i>
-                    <?php endif; ?>
-                    <span class="brand-text text-2xl font-bold text-white"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
-                </div>
-                <div class="flex flex-col flex-1 overflow-y-auto">
-                    <nav class="flex-1 px-2 py-4 space-y-1">
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboardnew.php')); ?>" class="sidebar-link <?php echo ($current_page == 'dashboardnew.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-home mr-3"></i>
-                            <span class="link-text">Dashboard</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php')); ?>" class="sidebar-link <?php echo ($current_page == 'medicines.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-pills mr-3"></i>
-                            <span class="link-text">Medicines</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/categories.php')); ?>" class="sidebar-link <?php echo ($current_page == 'categories.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-tags mr-3"></i>
-                            <span class="link-text">Categories</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/batches.php')); ?>" class="sidebar-link <?php echo ($current_page == 'batches.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-layer-group mr-3"></i>
-                            <span class="link-text">Batches</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>" class="sidebar-link <?php echo ($current_page == 'inventory.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-boxes mr-3"></i>
-                            <span class="link-text">Inventory</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/users.php')); ?>" class="sidebar-link <?php echo ($current_page == 'users.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-users mr-3"></i>
-                            <span class="link-text">Users</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="sidebar-link <?php echo ($current_page == 'allocations.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-user-friends mr-3"></i>
-                            <span class="link-text">Allocations</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/announcements.php')); ?>" class="sidebar-link <?php echo ($current_page == 'announcements.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-bullhorn mr-3"></i>
-                            <span class="link-text">Announcements</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/analytics.php')); ?>" class="sidebar-link <?php echo ($current_page == 'analytics.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-chart-bar mr-3"></i>
-                            <span class="link-text">Analytics</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>" class="sidebar-link <?php echo ($current_page == 'reports.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-file-alt mr-3"></i>
-                            <span class="link-text">Reports</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>" class="sidebar-link <?php echo ($current_page == 'settings_brand.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-cog mr-3"></i>
-                            <span class="link-text">Brand Settings</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/locations.php')); ?>" class="sidebar-link <?php echo ($current_page == 'locations.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-map-marker-alt mr-3"></i>
-                            <span class="link-text">Barangays & Puroks</span>
-                        </a>
-                        <a href="<?php echo htmlspecialchars(base_url('super_admin/email_logs.php')); ?>" class="sidebar-link <?php echo ($current_page == 'email_logs.php') ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">
-                            <i class="fas fa-envelope mr-3"></i>
-                            <span class="link-text">Email Logs</span>
-                        </a>
-                    </nav>
-                </div>
-                <div class="p-4 border-t border-gray-200">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <?php if (!empty($user_data['profile_image'])): ?>
-                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile" 
-                                     class="w-10 h-10 rounded-full object-cover"
-                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                            <?php endif; ?>
-                            <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center <?php echo !empty($user_data['profile_image']) ? 'hidden' : ''; ?>">
-                                <i class="fas fa-user text-purple-600"></i>
-                            </div>
-                        </div>
-                        <div class="ml-3 user-info">
-                            <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
-                            <p class="text-xs text-gray-500"><?php echo htmlspecialchars($user_data['email'] ?? 'admin@meditrack.com'); ?></p>
-                        </div>
-                    </div>
-                    <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="mt-3 w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition">
-                        <i class="fas fa-sign-out-alt mr-2"></i>
-                        <span class="link-text">Logout</span>
-                    </a>
-                </div>
-            </div>
-        </aside>
+        <?php render_super_admin_sidebar([
+            'current_page' => $current_page,
+            'user_data' => $user_data
+        ]); ?>
 
         <!-- Main Content -->
         <div class="flex flex-col flex-1 overflow-hidden">
@@ -1319,6 +1233,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     });
                 }
                 
+                // Handle initial target load if coming from redirect shell
+                const params = new URLSearchParams(window.location.search);
+                const target = params.get('target');
+                if (target) {
+                    loadPageContent(target);
+                }
+
                 // Handle browser back/forward buttons
                 window.addEventListener('popstate', function(e) {
                     if (e.state && e.state.url) {

@@ -86,13 +86,63 @@ $users = db()->query("
     SELECT u.id, u.email, u.role, u.purok_id, 
            CONCAT(IFNULL(u.first_name,''),' ',IFNULL(u.last_name,'')) AS name, 
            u.created_at, p.name AS purok_name, b.name AS barangay_name,
-           r.date_of_birth
+           r.date_of_birth, r.id as resident_id
     FROM users u 
     LEFT JOIN puroks p ON u.purok_id = p.id 
     LEFT JOIN barangays b ON p.barangay_id = b.id 
     LEFT JOIN residents r ON r.user_id = u.id
     ORDER BY u.created_at DESC
-")->fetchAll();
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch family members for resident users
+$family_members_by_user = [];
+foreach ($users as $user) {
+    $user_id = (int)$user['id'];
+    $family_members_by_user[$user_id] = []; // Initialize as empty
+    
+    // Check if user is a resident
+    if (strtolower($user['role']) === 'resident') {
+        // Get resident_id - try from query result first, then fetch directly if needed
+        $resident_id = null;
+        
+        // Check if resident_id exists in query result (may be NULL from LEFT JOIN)
+        if (isset($user['resident_id']) && $user['resident_id'] !== null && $user['resident_id'] !== '') {
+            $resident_id = (int)$user['resident_id'];
+        } else {
+            // If not in query result, fetch it directly from residents table
+            try {
+                $resident_check = db()->prepare('SELECT id FROM residents WHERE user_id = ? LIMIT 1');
+                $resident_check->execute([$user_id]);
+                $resident_row = $resident_check->fetch();
+                if ($resident_row && !empty($resident_row['id'])) {
+                    $resident_id = (int)$resident_row['id'];
+                }
+            } catch (Exception $e) {
+                // Ignore error, resident_id stays null
+            }
+        }
+        
+        // If we have a resident_id, fetch family members from family_members table
+        if ($resident_id && $resident_id > 0) {
+            try {
+                $family_members_stmt = db()->prepare('
+                    SELECT id, full_name, relationship, age, created_at
+                    FROM family_members
+                    WHERE resident_id = ?
+                    ORDER BY relationship, full_name
+                ');
+                $family_members_stmt->execute([$resident_id]);
+                $fetched_family = $family_members_stmt->fetchAll();
+                if ($fetched_family && count($fetched_family) > 0) {
+                    $family_members_by_user[$user_id] = $fetched_family;
+                }
+            } catch (Exception $e) {
+                // Keep empty array on error
+                $family_members_by_user[$user_id] = [];
+            }
+        }
+    }
+}
 
 // Calculate age for resident users
 foreach ($users as &$user) {
@@ -278,124 +328,6 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Users Management</h1>
-                    <p class="text-gray-600 mt-1">Manage system users and their roles</p>
-                </div>
-                <div class="flex items-center space-x-6">
-                    <!-- Current Time Display -->
-                    <div class="text-right">
-                        <div class="text-sm text-gray-500">Current Time</div>
-                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
-                    </div>
-                    
-                    <!-- Night Mode Toggle -->
-                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- Notifications -->
-                    <div class="relative">
-                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
-                            </svg>
-                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
-                        </button>
-                    </div>
-                    
-                    <!-- Profile Section -->
-                    <div class="relative" id="profile-dropdown">
-                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <?php if (!empty($user_data['profile_image'])): ?>
-                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile Picture" 
-                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
-                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                            <div class="text-left">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
-                                </div>
-                                <div class="text-xs text-gray-500">Super Admin</div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
-                        
-                        <!-- Profile Dropdown Menu -->
-                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
-                            <!-- User Info Section -->
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="text-sm font-semibold text-gray-900">
-                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
-                                </div>
-                                <div class="text-sm text-gray-500">
-                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
-                                </div>
-                            </div>
-                            
-                            <!-- Menu Items -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('super_admin/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                    Edit Profile
-                                </a>
-                                <a href="<?php echo base_url('super_admin/settings_brand.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    </svg>
-                                    Account Settings
-                                </a>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Support
-                                </a>
-                            </div>
-                            
-                            <!-- Separator -->
-                            <div class="border-t border-gray-100 my-1"></div>
-                            
-                            <!-- Sign Out -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                    </svg>
-                                    Sign Out
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Content -->
         <div class="content-body">
@@ -551,8 +483,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
             <!-- Users Data Table -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
+                <div class="overflow-x-auto -webkit-overflow-scrolling-touch" style="-webkit-overflow-scrolling: touch;">
+                    <table class="min-w-full divide-y divide-gray-200" style="min-width: 800px;">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
@@ -581,8 +513,32 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                                     <?php echo strtoupper(substr($u['name'], 0, 2)); ?>
                                                 </span>
                                             </div>
-                                            <div class="text-sm font-medium text-gray-900">
-                                                <?php echo htmlspecialchars($u['name']); ?>
+                                            <div class="flex-1">
+                                                <div class="text-sm font-medium text-gray-900">
+                                                    <?php echo htmlspecialchars($u['name']); ?>
+                                                </div>
+                                                <?php 
+                                                $user_id_check = (int)$u['id'];
+                                                // Check if user is a resident
+                                                if (strtolower($u['role']) === 'resident') {
+                                                    $family_members_list = $family_members_by_user[$user_id_check] ?? [];
+                                                    $family_count = count($family_members_list);
+                                                    
+                                                    // Show link if user has family members
+                                                    if ($family_count > 0):
+                                                ?>
+                                                        <button onclick="toggleUserFamilyMembers(<?php echo $user_id_check; ?>)" 
+                                                                class="mt-1 text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1 transition-colors cursor-pointer">
+                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                            </svg>
+                                                            <span><?php echo $family_count; ?> family member<?php echo $family_count !== 1 ? 's' : ''; ?></span>
+                                                            <svg id="user-family-arrow-<?php echo $user_id_check; ?>" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                                            </svg>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                <?php } ?>
                                             </div>
                                         </div>
                                     </td>
@@ -687,6 +643,77 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                         </div>
                                     </td>
                                 </tr>
+                                
+                                <!-- Family Members Row (only for resident users) -->
+                                <?php 
+                                $user_id = (int)$u['id'];
+                                $family_members = $family_members_by_user[$user_id] ?? [];
+                                if (strtolower($u['role']) === 'resident' && !empty($family_members)): 
+                                ?>
+                                    <tr id="family-row-<?php echo $user_id; ?>" class="hidden bg-gradient-to-br from-blue-50 to-indigo-50" style="max-height: 0; opacity: 0; overflow: hidden;">
+                                        <td colspan="8" class="px-6 py-4">
+                                            <div class="space-y-3">
+                                                <div class="flex items-center justify-between mb-3">
+                                                    <div class="flex items-center space-x-3">
+                                                        <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <h4 class="font-semibold text-gray-900">Family Members</h4>
+                                                            <p class="text-sm text-gray-600"><?php echo count($family_members); ?> member<?php echo count($family_members) !== 1 ? 's' : ''; ?> registered</p>
+                                                        </div>
+                                                    </div>
+                                                    <button onclick="toggleUserFamilyMembers(<?php echo $user_id; ?>)" 
+                                                            class="text-gray-400 hover:text-gray-600 transition-colors">
+                                                        <svg id="user-family-toggle-<?php echo $user_id; ?>" class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                
+                                                <div id="user-family-members-<?php echo $user_id; ?>" class="space-y-2">
+                                                    <?php foreach ($family_members as $fm): ?>
+                                                        <div class="bg-white rounded-lg p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
+                                                            <div class="flex items-center justify-between">
+                                                                <div class="flex items-center space-x-4 flex-1">
+                                                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                                                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                                                        </svg>
+                                                                    </div>
+                                                                    <div class="flex-1 min-w-0">
+                                                                        <div class="flex items-center space-x-2 mb-1">
+                                                                            <h5 class="font-semibold text-gray-900"><?php echo htmlspecialchars($fm['full_name']); ?></h5>
+                                                                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                                                                Family Member
+                                                                            </span>
+                                                                        </div>
+                                                                        <div class="flex items-center space-x-4 text-sm text-gray-600">
+                                                                            <span class="flex items-center space-x-1">
+                                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                                                                </svg>
+                                                                                <span><?php echo htmlspecialchars($fm['relationship']); ?></span>
+                                                                            </span>
+                                                                            <span class="flex items-center space-x-1">
+                                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                                                </svg>
+                                                                                <span>Age: <?php echo (int)$fm['age']; ?></span>
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -974,6 +1001,51 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 modal.style.display = 'none';
                 modal.style.visibility = 'hidden';
                 modal.style.opacity = '0';
+            }
+        }
+        
+        // Toggle family members row for a user
+        function toggleUserFamilyMembers(userId) {
+            const familyRow = document.getElementById('family-row-' + userId);
+            const toggleIcon = document.getElementById('user-family-toggle-' + userId);
+            const arrowIcon = document.getElementById('user-family-arrow-' + userId);
+            
+            if (!familyRow) return;
+            
+            const isHidden = familyRow.classList.contains('hidden');
+            
+            if (isHidden) {
+                // Show family members
+                familyRow.classList.remove('hidden');
+                familyRow.style.overflow = 'visible';
+                familyRow.style.maxHeight = '0';
+                familyRow.style.opacity = '0';
+                
+                // Animate in
+                requestAnimationFrame(() => {
+                    familyRow.style.transition = 'max-height 0.4s ease-out, opacity 0.4s ease-out';
+                    const contentHeight = familyRow.querySelector('td').scrollHeight;
+                    familyRow.style.maxHeight = contentHeight + 'px';
+                    familyRow.style.opacity = '1';
+                });
+                
+                // Rotate icons
+                if (toggleIcon) toggleIcon.style.transform = 'rotate(180deg)';
+                if (arrowIcon) arrowIcon.style.transform = 'rotate(180deg)';
+            } else {
+                // Hide family members
+                familyRow.style.transition = 'max-height 0.3s ease-in, opacity 0.3s ease-in';
+                familyRow.style.maxHeight = '0';
+                familyRow.style.opacity = '0';
+                familyRow.style.overflow = 'hidden';
+                
+                setTimeout(() => {
+                    familyRow.classList.add('hidden');
+                }, 300);
+                
+                // Rotate icons back
+                if (toggleIcon) toggleIcon.style.transform = 'rotate(0deg)';
+                if (arrowIcon) arrowIcon.style.transform = 'rotate(0deg)';
             }
         }
         

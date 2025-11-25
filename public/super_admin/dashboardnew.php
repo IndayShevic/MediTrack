@@ -96,6 +96,49 @@ try {
     $pending_requests = 0;
 }
 
+// Fetch recent pending requests for notifications
+try {
+    $recent_pending_requests = db()->query('
+        SELECT r.id, r.status, r.created_at,
+               CONCAT(IFNULL(u.first_name,"")," ",IFNULL(u.last_name,"")) as requester_name,
+               DATE_FORMAT(r.created_at, "%b %d, %Y") as formatted_date
+        FROM requests r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.status = "submitted"
+        ORDER BY r.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+} catch (Exception $e) {
+    $recent_pending_requests = [];
+}
+
+// Fetch inventory alerts for notifications
+try {
+    $inventory_alerts = db()->query('
+        SELECT ia.id, ia.severity, ia.message, ia.created_at,
+               m.name as medicine_name,
+               DATE_FORMAT(ia.created_at, "%b %d, %Y") as formatted_date
+        FROM inventory_alerts ia
+        JOIN medicines m ON ia.medicine_id = m.id
+        WHERE ia.is_acknowledged = FALSE
+        ORDER BY 
+            CASE ia.severity
+                WHEN "critical" THEN 1
+                WHEN "high" THEN 2
+                WHEN "medium" THEN 3
+                ELSE 4
+            END,
+            ia.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+    $alerts_count = count($inventory_alerts);
+} catch (Exception $e) {
+    $inventory_alerts = [];
+    $alerts_count = 0;
+}
+
+$total_notifications = $pending_requests + $alerts_count;
+
 // Fetch recent activity data with error handling
 try {
     $recent_medicines = db()->query('SELECT name, created_at FROM medicines ORDER BY created_at DESC LIMIT 3')->fetchAll();
@@ -229,7 +272,15 @@ try {
 $greeting = 'Welcome back';
 
 // Get current page for active state
-$current_page = basename($_SERVER['PHP_SELF']);
+// Determine current page for sidebar highlighting.
+// When using the unified dashboard shell with ?target=..., prefer the target.
+$current_page = basename($_SERVER['PHP_SELF'] ?? '');
+if (!empty($_GET['target'])) {
+    $targetPath = parse_url((string)$_GET['target'], PHP_URL_PATH);
+    if (is_string($targetPath) && $targetPath !== '') {
+        $current_page = basename($targetPath);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -239,7 +290,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <title>Super Admin Dashboard - MediTrack</title>
     <script src="https://cdn.tailwindcss.com" onerror="console.error('Tailwind CSS failed to load')"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" onerror="console.error('Font Awesome failed to load')">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js" onerror="console.error('Chart.js failed to load')"></script>
+    <!-- FullCalendar for announcements calendar and similar views -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js" onerror="console.error('FullCalendar failed to load')"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body {
@@ -254,31 +308,20 @@ $current_page = basename($_SERVER['PHP_SELF']);
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        .sidebar-link:hover {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .sidebar-link {
+            transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+        }
+        .sidebar-link:hover:not(.active) {
+            background: linear-gradient(135deg, #e5e7eb 0%, #e5e7eb 100%);
+            color: #4b5563;
         }
         .sidebar-link.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            color: #ffffff;
         }
-        /* Sidebar collapse */
+        /* Sidebar styles */
         .sidebar {
             width: 16rem; /* w-64 */
-        }
-        .sidebar-collapsed .sidebar {
-            width: 4rem; /* w-16 */
-        }
-        .sidebar-collapsed .brand-text,
-        .sidebar-collapsed .link-text,
-        .sidebar-collapsed .user-info {
-            display: none;
-        }
-        .sidebar-collapsed .sidebar-link {
-            justify-content: center;
-        }
-        .sidebar-collapsed .sidebar-link i {
-            margin-right: 0;
         }
         
         /* Prevent white screen - ensure content is always visible */
@@ -289,6 +332,77 @@ $current_page = basename($_SERVER['PHP_SELF']);
         #app {
             min-height: 100vh;
             display: flex !important;
+            height: auto;
+            overflow: visible;
+        }
+        
+        /* Ensure main content can scroll */
+        #main-content-area {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            height: auto;
+            min-height: calc(100vh - 4rem);
+            max-height: none;
+        }
+        
+        #dashboard-main-wrapper {
+            height: auto;
+            min-height: 100vh;
+            overflow: visible;
+        }
+        
+        /* On desktop, allow proper scrolling */
+        @media (min-width: 1025px) {
+            #app {
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            #dashboard-main-wrapper {
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            #main-content-area {
+                overflow-y: auto;
+                height: calc(100vh - 4rem);
+                max-height: calc(100vh - 4rem);
+            }
+        }
+        
+        /* On mobile and tablet, allow full page scroll */
+        @media (max-width: 1024px) {
+            #app {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+            
+            #dashboard-main-wrapper {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+            
+            #main-content-area {
+                overflow-y: visible;
+                height: auto;
+                min-height: calc(100vh - 4rem);
+                max-height: none;
+            }
+            
+            /* Ensure body can scroll on mobile */
+            body {
+                overflow-x: hidden;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* Dashboard shell layout: offset main content by sidebar width on desktop
+           without affecting other pages that use the shared design system */
+        .dashboard-shell #dashboard-main-wrapper {
+            margin-left: 280px;
         }
         
         /* Mobile sidebar overlay */
@@ -301,45 +415,33 @@ $current_page = basename($_SERVER['PHP_SELF']);
             bottom: 0;
             background: rgba(0, 0, 0, 0.5);
             z-index: 40;
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
         }
         .sidebar-overlay.show {
             display: block;
         }
         
-        /* Responsive styles */
-        @media (max-width: 1024px) {
-            aside {
-                position: fixed;
-                left: -16rem;
-                z-index: 50;
-                transition: left 0.3s ease;
-                height: 100vh;
-                top: 0;
-                display: flex !important;
-            }
-            aside.show {
-                left: 0;
-            }
-            aside .sidebar {
-                height: 100vh;
-                width: 16rem;
-            }
-            main {
-                margin-left: 0 !important;
-            }
-            .grid.lg\\:grid-cols-2 {
-                grid-template-columns: 1fr;
-            }
+        /* ============================================
+           COMPREHENSIVE RESPONSIVE DESIGN SYSTEM
+           Mobile-first approach with fluid layouts
+           ============================================ */
+        
+        /* Base responsive utilities */
+        * {
+            box-sizing: border-box;
         }
         
-        @media (min-width: 1025px) {
-            aside {
-                position: relative !important;
-                left: 0 !important;
-            }
-            .sidebar-overlay {
-                display: none !important;
-            }
+        /* Container max-widths for readability */
+        .container-responsive {
+            width: 100%;
+            max-width: 100%;
+        }
+        
+        /* Inner content container for max-width on desktop */
+        .content-container {
+            width: 100%;
+            margin: 0 auto;
         }
         
         /* Fix chart container to prevent jumping */
@@ -353,24 +455,495 @@ $current_page = basename($_SERVER['PHP_SELF']);
             min-height: 250px;
         }
         
-        @media (max-width: 768px) {
-            .grid.md\\:grid-cols-2 {
-                grid-template-columns: 1fr;
+        /* Notification and Profile Dropdowns */
+        #notificationDropdown,
+        #profileDropdown {
+            animation: fadeInDown 0.2s ease-out;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
             }
-            .grid.lg\\:grid-cols-4 {
-                grid-template-columns: 1fr;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
+        }
+        
+        /* Ensure dropdowns are above other content */
+        #notificationDropdown,
+        #profileDropdown {
+            z-index: 1000;
+        }
+        
+        /* Mobile responsive dropdowns */
+        @media (max-width: 640px) {
+            #notificationDropdown {
+                right: 0;
+                left: auto;
+                width: calc(100vw - 2rem);
+                max-width: 20rem;
+            }
+            
+            #profileDropdown {
+                right: 0;
+                left: auto;
+                width: calc(100vw - 2rem);
+                max-width: 16rem;
+            }
+        }
+        
+        /* ============================================
+           MOBILE: max-width 640px
+           - Hamburger sidebar
+           - Vertical stacking
+           - Full-width buttons/cards
+           - Reduced padding, tap-friendly spacing
+           ============================================ */
+        @media (max-width: 640px) {
+            /* Sidebar - Hidden by default, hamburger menu */
+            #sidebar-aside {
+                display: none !important;
+                position: fixed !important;
+                left: -16rem !important;
+                z-index: 50 !important;
+                transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                height: 100vh !important;
+                top: 0 !important;
+                will-change: left;
+            }
+            
+            #sidebar-aside.show {
+                left: 0 !important;
+                display: flex !important;
+                visibility: visible !important;
+            }
+            
+            #sidebar-aside.show.hidden {
+                display: flex !important;
+                visibility: visible !important;
+            }
+            
+            /* Ensure sidebar is visible when shown */
+            #sidebar-aside.show,
+            #sidebar-aside.show * {
+                visibility: visible !important;
+            }
+            
+            #sidebar {
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+                height: 100vh;
+                width: 16rem;
+                max-width: 85vw;
+            }
+            
+            .sidebar-link {
+                min-height: 48px; /* Tap-friendly */
+                padding: 0.875rem 1rem;
+                font-size: 0.9375rem;
+            }
+            
+            /* Main content - full width, allow scrolling, visible when sidebar is open */
+            main {
+                margin-left: 0 !important;
+                padding: 0.75rem !important; /* Reduced padding */
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                height: auto !important;
+                min-height: 100vh !important;
+                position: relative !important;
+                z-index: 1 !important;
+            }
+            
+            /* When sidebar is open, main content should still be visible */
+            #sidebar-aside.show ~ #dashboard-main-wrapper main {
+                margin-left: 0 !important;
+                width: 100% !important;
+            }
+            
+            /* Ensure app container allows scrolling */
+            #app {
+                height: auto !important;
+                min-height: 100vh !important;
+                overflow: visible !important;
+            }
+            
+            #dashboard-main-wrapper {
+                height: auto !important;
+                min-height: 100vh !important;
+                overflow: visible !important;
+                position: relative !important;
+                z-index: 1 !important;
+            }
+            
+            /* Sidebar should slide over content, not push it */
+            #sidebar-aside {
+                position: fixed !important;
+                z-index: 50 !important;
+            }
+            
+            /* Overlay should be behind sidebar but above content */
+            .sidebar-overlay {
+                z-index: 40 !important;
+            }
+            
+            .dashboard-shell #dashboard-main-wrapper {
+                margin-left: 0;
+            }
+            
+            /* Header - compact */
+            header {
+                padding: 0.625rem 0.75rem !important;
+                height: auto !important;
+                min-height: 3.5rem;
+            }
+            
             header h1 {
-                font-size: 1.25rem;
+                font-size: 1rem !important;
             }
-            .bg-white.rounded-xl {
-                padding: 1rem;
+            
+            header .flex {
+                gap: 0.5rem;
             }
-            table {
+            
+            /* Grids - single column */
+            .grid,
+            .grid.md\\:grid-cols-2,
+            .grid.lg\\:grid-cols-2,
+            .grid.lg\\:grid-cols-3,
+            .grid.lg\\:grid-cols-4 {
+                grid-template-columns: 1fr !important;
+                gap: 0.75rem !important; /* Reduced gap */
+            }
+            
+            /* Cards - full width, reduced padding */
+            .bg-white.rounded-xl,
+            .card {
+                width: 100% !important;
+                padding: 0.875rem !important; /* Reduced padding */
+                margin-bottom: 0.75rem;
+            }
+            
+            /* Buttons - full width, tap-friendly */
+            button:not(.icon-only):not([class*="w-"]),
+            .btn:not(.icon-only):not([class*="w-"]) {
+                width: 100% !important;
+                min-height: 44px; /* iOS tap target */
+                padding: 0.75rem 1rem;
+                font-size: 0.875rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            /* Forms - full width, tap-friendly */
+            input,
+            select,
+            textarea {
+                width: 100% !important;
+                font-size: 16px !important; /* Prevents zoom on iOS */
+                min-height: 44px;
+                padding: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+            
+            /* Tables - horizontal scroll */
+            .table-wrapper,
+            .overflow-x-auto {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                -ms-overflow-style: -ms-autohiding-scrollbar;
+                width: 100%;
+            }
+            
+            .table-wrapper table,
+            .overflow-x-auto table {
+                display: table;
+                min-width: 600px;
                 font-size: 0.875rem;
             }
-            table th, table td {
-                padding: 0.5rem;
+            
+            .table-wrapper table thead,
+            .overflow-x-auto table thead {
+                display: table-header-group;
+            }
+            
+            .table-wrapper table tbody,
+            .overflow-x-auto table tbody {
+                display: table-row-group;
+            }
+            
+            .table-wrapper table tr,
+            .overflow-x-auto table tr {
+                display: table-row;
+            }
+            
+            .table-wrapper table th,
+            .table-wrapper table td,
+            .overflow-x-auto table th,
+            .overflow-x-auto table td {
+                display: table-cell;
+                padding: 0.5rem 0.375rem;
+            }
+            
+            /* Typography - smaller but readable */
+            h1 { font-size: 1.5rem !important; }
+            h2 { font-size: 1.25rem !important; }
+            h3 { font-size: 1.125rem !important; }
+            
+            /* Spacing - reduced but consistent */
+            .mb-6, .mb-8 { margin-bottom: 1rem !important; }
+            .p-4, .p-6, .p-8 { padding: 0.75rem !important; }
+        }
+        
+        /* ============================================
+           TABLET: 641px - 1024px
+           - Partial sidebar or wider layout
+           - 2-column grids
+           - Appropriate text/icon scaling
+           ============================================ */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            /* Sidebar - hidden by default, hamburger menu */
+            #sidebar-aside {
+                display: none !important;
+                position: fixed !important;
+                left: -16rem !important;
+                z-index: 50 !important;
+                transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                height: 100vh !important;
+                top: 0 !important;
+                will-change: left;
+            }
+            
+            #sidebar-aside.show {
+                left: 0 !important;
+                display: flex !important;
+            }
+            
+            #sidebar-aside.show.hidden {
+                display: flex !important;
+            }
+            
+            #sidebar {
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+                height: 100vh;
+                width: 18rem; /* Wider on tablet */
+                max-width: 75vw;
+            }
+            
+            .sidebar-link {
+                min-height: 48px;
+                padding: 1rem;
+                font-size: 1rem;
+            }
+            
+            /* Main content - full width */
+            main {
+                margin-left: 0 !important;
+                padding: 1rem 1.25rem !important;
+            }
+            
+            .dashboard-shell #dashboard-main-wrapper {
+                margin-left: 0;
+            }
+            
+            /* Header */
+            header {
+                padding: 0.875rem 1.25rem !important;
+            }
+            
+            header h1 {
+                font-size: 1.25rem !important;
+            }
+            
+            /* Grids - 2 columns */
+            .grid.md\\:grid-cols-2 {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 1rem !important;
+            }
+            
+            .grid.lg\\:grid-cols-3,
+            .grid.lg\\:grid-cols-4 {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 1rem !important;
+            }
+            
+            /* Cards - 2 columns where appropriate */
+            .bg-white.rounded-xl,
+            .card {
+                padding: 1.25rem !important;
+            }
+            
+            /* Buttons - not full width, but larger */
+            button:not(.icon-only):not([class*="w-"]),
+            .btn:not(.icon-only):not([class*="w-"]) {
+                min-height: 44px;
+                padding: 0.875rem 1.5rem;
+                font-size: 0.9375rem;
+            }
+            
+            /* Forms */
+            input,
+            select,
+            textarea {
+                font-size: 16px !important;
+                min-height: 44px;
+                padding: 0.875rem;
+            }
+            
+            /* Tables - better spacing */
+            .table-wrapper table th,
+            .table-wrapper table td,
+            .overflow-x-auto table th,
+            .overflow-x-auto table td {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.9375rem;
+            }
+            
+            /* Typography */
+            h1 { font-size: 1.875rem !important; }
+            h2 { font-size: 1.5rem !important; }
+            h3 { font-size: 1.25rem !important; }
+            
+            /* Spacing */
+            .mb-6 { margin-bottom: 1.5rem !important; }
+            .mb-8 { margin-bottom: 2rem !important; }
+            .p-4 { padding: 1rem !important; }
+            .p-6 { padding: 1.25rem !important; }
+            .p-8 { padding: 1.5rem !important; }
+        }
+        
+        /* ============================================
+           DESKTOP: 1025px and above
+           - Full sidebar and navigation
+           - Multi-column grids (3-4 columns)
+           - Max-width for readability
+           ============================================ */
+        @media (min-width: 1025px) {
+            /* Sidebar - always visible */
+            aside {
+                position: relative !important;
+                left: 0 !important;
+                display: flex !important;
+            }
+            
+            .sidebar-overlay {
+                display: none !important;
+            }
+            
+            /* Main content - offset by sidebar */
+            main {
+                margin-left: 0 !important;
+                padding: 1.5rem 2rem !important;
+                max-width: 100%;
+            }
+            
+            .dashboard-shell #dashboard-main-wrapper {
+                margin-left: 16rem; /* Sidebar width */
+                max-width: calc(100% - 16rem);
+            }
+            
+            /* Inner content container for max-width on desktop */
+            .content-container {
+                max-width: 1400px;
+                margin: 0 auto;
+            }
+            
+            /* Header */
+            header {
+                padding: 1rem 1.5rem !important;
+            }
+            
+            header h1 {
+                font-size: 1.5rem !important;
+            }
+            
+            /* Grids - multi-column */
+            .grid.md\\:grid-cols-2 {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 1.5rem !important;
+            }
+            
+            .grid.lg\\:grid-cols-2 {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 1.5rem !important;
+            }
+            
+            .grid.lg\\:grid-cols-3 {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 1.5rem !important;
+            }
+            
+            .grid.lg\\:grid-cols-4 {
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 1.5rem !important;
+            }
+            
+            /* Cards - comfortable padding */
+            .bg-white.rounded-xl,
+            .card {
+                padding: 1.5rem !important;
+            }
+            
+            /* Buttons - standard size */
+            button:not(.icon-only):not([class*="w-"]),
+            .btn:not(.icon-only):not([class*="w-"]) {
+                min-height: 44px;
+                padding: 0.75rem 1.5rem;
+                font-size: 0.9375rem;
+            }
+            
+            /* Forms */
+            input,
+            select,
+            textarea {
+                font-size: 16px;
+                min-height: 44px;
+                padding: 0.75rem 1rem;
+            }
+            
+            /* Tables - full table display */
+            .table-wrapper table,
+            .overflow-x-auto table {
+                font-size: 0.9375rem;
+            }
+            
+            .table-wrapper table th,
+            .table-wrapper table td,
+            .overflow-x-auto table th,
+            .overflow-x-auto table td {
+                padding: 1rem 0.75rem;
+            }
+            
+            /* Typography */
+            h1 { font-size: 2rem !important; }
+            h2 { font-size: 1.75rem !important; }
+            h3 { font-size: 1.5rem !important; }
+            
+            /* Spacing */
+            .mb-6 { margin-bottom: 1.5rem !important; }
+            .mb-8 { margin-bottom: 2rem !important; }
+            .p-4 { padding: 1rem !important; }
+            .p-6 { padding: 1.5rem !important; }
+            .p-8 { padding: 2rem !important; }
+        }
+        
+        /* ============================================
+           LARGE DESKTOP: 1440px and above
+           - Max-width containers for optimal readability
+           ============================================ */
+        @media (min-width: 1440px) {
+            .content-container {
+                max-width: 1600px;
+            }
+            
+            main {
+                padding: 2rem 2.5rem !important;
+            }
+            
+            .dashboard-shell #dashboard-main-wrapper {
+                max-width: calc(100% - 16rem);
+            }
             }
         }
         
@@ -380,6 +953,25 @@ $current_page = basename($_SERVER['PHP_SELF']);
             }
             .gap-6 {
                 gap: 1rem;
+            }
+            
+            /* Smaller screens - stack everything */
+            .flex.flex-row {
+                flex-direction: column;
+            }
+            
+            /* Mobile modals */
+            .modal,
+            [class*="modal"] {
+                margin: 0.5rem;
+                max-width: calc(100% - 1rem);
+            }
+            
+            /* Mobile cards */
+            .card,
+            .bg-white.rounded-xl {
+                padding: 1rem;
+                margin-bottom: 1rem;
             }
         }
     </style>
@@ -392,7 +984,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             #app { display: flex !important; }
         </style>
     </noscript>
-    <div id="app" class="flex h-screen overflow-hidden">
+    <div id="app" class="flex min-h-screen dashboard-shell">
         <!-- Mobile Sidebar Overlay -->
         <div id="sidebarOverlay" class="sidebar-overlay"></div>
         
@@ -403,50 +995,160 @@ $current_page = basename($_SERVER['PHP_SELF']);
         ]); ?>
 
         <!-- Main Content -->
-        <div class="flex flex-col flex-1 overflow-hidden">
+        <div id="dashboard-main-wrapper" class="flex flex-col flex-1 min-h-screen">
             <!-- Top Header -->
-            <header class="bg-white shadow-sm border-b border-gray-200">
-                <div class="flex items-center justify-between px-4 py-4 sm:px-6">
-                    <div class="flex items-center">
-                        <button id="mobileMenuToggle" class="md:hidden text-gray-500 hover:text-gray-700 mr-3">
+            <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+                <div class="flex items-center justify-between px-3 py-3 sm:px-4 sm:py-4 md:px-6 h-16">
+                    <!-- Left Section: Menu + Logo/Title -->
+                    <div class="flex items-center flex-1 min-w-0 h-full">
+                        <button id="mobileMenuToggle" class="md:hidden text-gray-500 hover:text-gray-700 mr-2 sm:mr-3 flex-shrink-0 flex items-center justify-center w-10 h-10" aria-label="Toggle menu" type="button">
                             <i class="fas fa-bars text-xl"></i>
                         </button>
-                        <button id="sidebarToggle" class="hidden md:inline-flex text-gray-500 hover:text-gray-700 mr-4">
-                            <i class="fas fa-bars text-xl"></i>
-                        </button>
-                        <!-- Mobile Logo -->
-                        <div class="md:hidden flex items-center mr-3">
+                        <!-- Mobile Logo + Title -->
+                        <div class="md:hidden flex items-center min-w-0 flex-1 h-full">
                             <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
+                                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg flex-shrink-0 mr-2" alt="Logo" />
                             <?php else: ?>
-                                <i class="fas fa-heartbeat text-purple-600 text-2xl"></i>
+                                <i class="fas fa-heartbeat text-purple-600 text-2xl mr-2 flex-shrink-0"></i>
                             <?php endif; ?>
+                            <h1 class="text-lg sm:text-xl font-bold text-gray-900 truncate leading-none"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></h1>
                         </div>
-                        <!-- Mobile Title -->
-                        <div class="md:hidden">
-                            <h1 class="text-xl font-bold text-gray-900"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></h1>
+                        <!-- Desktop Title (hidden on mobile) -->
+                        <div class="hidden md:flex items-center h-full">
+                            <h1 class="text-xl font-bold text-gray-900 leading-none"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></h1>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <button class="relative text-gray-500 hover:text-gray-700">
+                    
+                    <!-- Right Section: Notifications + Profile (aligned with hamburger and MediTrack) -->
+                    <div class="flex items-center space-x-2 sm:space-x-3 flex-shrink-0 h-full">
+                        <!-- Notifications Dropdown -->
+                        <div class="relative">
+                            <button id="notificationBtn" class="relative text-gray-500 hover:text-gray-700 flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Notifications" type="button">
                             <i class="fas fa-bell text-xl"></i>
-                            <?php if ($pending_requests > 0): ?>
-                                <span class="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500"></span>
+                                <?php if ($total_notifications > 0): ?>
+                                    <span class="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-500"></span>
+                                    <span class="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full"><?php echo $total_notifications > 9 ? '9+' : $total_notifications; ?></span>
                             <?php endif; ?>
                         </button>
-                        <div class="flex items-center space-x-3">
-                            <div class="text-right hidden sm:block">
-                                <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
-                                <p class="text-xs text-gray-500">Super Administrator</p>
+                            
+                            <!-- Notifications Dropdown Menu -->
+                            <div id="notificationDropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden">
+                                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold text-gray-900">Notifications</h3>
+                                    <?php if ($total_notifications > 0): ?>
+                                        <span class="px-2 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded-full"><?php echo $total_notifications; ?> new</span>
+                                    <?php endif; ?>
                             </div>
-                            <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                                <div class="overflow-y-auto max-h-80">
+                                    <?php if ($total_notifications === 0): ?>
+                                        <div class="p-6 text-center text-gray-500">
+                                            <i class="fas fa-bell-slash text-3xl mb-2 text-gray-300"></i>
+                                            <p>No new notifications</p>
+                                        </div>
+                                    <?php else: ?>
+                                        <?php if ($pending_requests > 0): ?>
+                                            <div class="p-3 border-b border-gray-100 bg-blue-50">
+                                                <p class="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Pending Requests</p>
+                                                <?php foreach ($recent_pending_requests as $req): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block p-2 hover:bg-blue-100 rounded transition-colors mb-1">
+                                                        <div class="flex items-start space-x-2">
+                                                            <div class="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <p class="text-sm font-medium text-gray-900 truncate">New request from <?php echo htmlspecialchars($req['requester_name'] ?: 'User'); ?></p>
+                                                                <p class="text-xs text-gray-500"><?php echo htmlspecialchars($req['formatted_date']); ?></p>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                                <?php if ($pending_requests > 5): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block p-2 text-sm text-blue-600 hover:bg-blue-100 rounded text-center font-medium">
+                                                        View all <?php echo $pending_requests; ?> requests
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($alerts_count > 0): ?>
+                                            <div class="p-3 border-b border-gray-100 bg-red-50">
+                                                <p class="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Inventory Alerts</p>
+                                                <?php foreach ($inventory_alerts as $alert): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>" class="block p-2 hover:bg-red-100 rounded transition-colors mb-1">
+                                                        <div class="flex items-start space-x-2">
+                                                            <div class="flex-shrink-0">
+                                                                <?php if ($alert['severity'] === 'critical'): ?>
+                                                                    <i class="fas fa-exclamation-circle text-red-600 mt-1"></i>
+                                                                <?php elseif ($alert['severity'] === 'high'): ?>
+                                                                    <i class="fas fa-exclamation-triangle text-orange-500 mt-1"></i>
+                                                                <?php else: ?>
+                                                                    <i class="fas fa-info-circle text-yellow-500 mt-1"></i>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($alert['medicine_name']); ?></p>
+                                                                <p class="text-xs text-gray-600 truncate"><?php echo htmlspecialchars($alert['message']); ?></p>
+                                                                <p class="text-xs text-gray-500 mt-1"><?php echo htmlspecialchars($alert['formatted_date']); ?></p>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                                <?php if ($alerts_count > 5): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>" class="block p-2 text-sm text-red-600 hover:bg-red-100 rounded text-center font-medium">
+                                                        View all <?php echo $alerts_count; ?> alerts
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="p-3 border-t border-gray-200 bg-gray-50">
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block text-center text-sm text-gray-600 hover:text-gray-900 font-medium">
+                                        View All Notifications
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Profile Dropdown -->
+                        <div class="relative">
+                            <button id="profileBtn" class="flex items-center space-x-2 sm:space-x-3 h-full rounded-lg hover:bg-gray-100 transition-colors px-2" type="button">
+                                <div class="text-right hidden sm:flex items-center h-full">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-900 leading-tight"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
+                                        <p class="text-xs text-gray-500 leading-tight">Super Administrator</p>
+                                    </div>
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center flex-shrink-0 cursor-pointer">
                                 <?php if (!empty($user_data['profile_image'])): ?>
                                     <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
                                          alt="Profile" 
                                          class="w-10 h-10 rounded-full object-cover"
                                          onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                 <?php endif; ?>
-                                <i class="fas fa-user text-purple-600 <?php echo !empty($user_data['profile_image']) ? 'hidden' : ''; ?>"></i>
+                                    <i class="fas fa-user text-gray-600 text-base <?php echo !empty($user_data['profile_image']) ? 'hidden' : ''; ?>"></i>
+                            </div>
+                            </button>
+                            
+                            <!-- Profile Dropdown Menu -->
+                            <div id="profileDropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                                <div class="p-4 border-b border-gray-200">
+                                    <p class="text-sm font-semibold text-gray-900"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
+                                    <p class="text-xs text-gray-500"><?php echo htmlspecialchars($user_data['email'] ?? 'admin@meditrack.com'); ?></p>
+                                </div>
+                                <div class="py-2">
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/profile.php')); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                        <i class="fas fa-user-circle w-5 mr-3 text-gray-400"></i>
+                                        <span>My Profile</span>
+                                    </a>
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                        <i class="fas fa-cog w-5 mr-3 text-gray-400"></i>
+                                        <span>Settings</span>
+                                    </a>
+                                    <div class="border-t border-gray-200 my-2"></div>
+                                    <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                        <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+                                        <span>Logout</span>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -454,7 +1156,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </header>
 
             <!-- Main Content Area -->
-            <main id="main-content-area" class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <main id="main-content-area" class="flex-1 overflow-y-auto container-responsive">
                 <!-- Greeting Section -->
                 <div class="mb-6">
                     <h1 class="text-2xl font-semibold text-gray-900 mb-1">Welcome back, Super Admin</h1>
@@ -1084,54 +1786,206 @@ $current_page = basename($_SERVER['PHP_SELF']);
             initCharts();
             animateStats();
             
-            // Initialize sidebar toggle
-            const appRoot = document.getElementById('app');
-            const desktopToggle = document.getElementById('sidebarToggle');
+            // Get mobile menu toggle and sidebar elements
             const mobileToggle = document.getElementById('mobileMenuToggle');
-            
-            if (desktopToggle && appRoot) {
-                desktopToggle.addEventListener('click', function () {
-                    appRoot.classList.toggle('sidebar-collapsed');
+            const sidebarAside = document.getElementById('sidebar-aside');
+            const overlay = document.getElementById('sidebarOverlay');
+            const sidebarLinks = document.querySelectorAll('aside .sidebar-link');
+
+            function setActiveSidebarLink(urlOrHref) {
+                if (!urlOrHref) return;
+                let targetPath;
+                try {
+                    const tmpUrl = new URL(urlOrHref, window.location.origin);
+                    targetPath = tmpUrl.pathname;
+                } catch (e) {
+                    targetPath = urlOrHref;
+                }
+
+                sidebarLinks.forEach(link => {
+                    const href = link.getAttribute('href') || '';
+                    let linkPath = href;
+                    try {
+                        const tmp = new URL(href, window.location.origin);
+                        linkPath = tmp.pathname;
+                    } catch (e) {}
+
+                    if (linkPath === targetPath) {
+                        link.classList.add('active');
+                    } else {
+                        link.classList.remove('active');
+                    }
                 });
             }
             
-            if (mobileToggle) {
-                const sidebar = document.querySelector('aside');
-                const overlay = document.getElementById('sidebarOverlay');
-                
+            // Preserve sidebar scroll position across full page reloads
+            const sidebarScrollContainer = document.getElementById('super-admin-sidebar-scroll');
+            const SIDEBAR_SCROLL_KEY = 'saSidebarScrollTop';
+
+            if (sidebarScrollContainer) {
+                // Restore previous scroll
+                const savedScroll = parseInt(localStorage.getItem(SIDEBAR_SCROLL_KEY) || '0', 10);
+                if (!Number.isNaN(savedScroll)) {
+                    sidebarScrollContainer.scrollTop = savedScroll;
+                }
+
+                // Save on scroll
+                sidebarScrollContainer.addEventListener('scroll', function () {
+                    localStorage.setItem(SIDEBAR_SCROLL_KEY, String(sidebarScrollContainer.scrollTop));
+                });
+            }
+
+            // Mobile sidebar helpers
                 function openMobileSidebar() {
-                    if (sidebar) {
-                        sidebar.classList.add('show');
-                        sidebar.style.display = 'flex';
+                if (sidebarAside) {
+                    // Remove hidden class if present (from Tailwind)
+                    sidebarAside.classList.remove('hidden');
+                    sidebarAside.classList.add('show');
+                    sidebarAside.style.left = '0';
+                    sidebarAside.style.display = 'flex';
+                    sidebarAside.style.zIndex = '50';
+                    sidebarAside.style.position = 'fixed';
+                    sidebarAside.style.top = '0';
+                    sidebarAside.style.height = '100vh';
                     }
                     if (overlay) {
                         overlay.classList.add('show');
-                    }
-                    document.body.style.overflow = 'hidden';
+                    overlay.style.display = 'block';
+                    overlay.style.zIndex = '40';
+                }
+                // Prevent body scroll ONLY when sidebar is open
+                // Store current scroll position
+                const scrollY = window.scrollY;
+                document.body.style.position = 'fixed';
+                document.body.style.top = `-${scrollY}px`;
+                document.body.style.width = '100%';
+                document.body.setAttribute('data-scroll-y', scrollY.toString());
                 }
                 
                 function closeMobileSidebar() {
-                    if (sidebar) {
-                        sidebar.classList.remove('show');
+                if (sidebarAside) {
+                    sidebarAside.classList.remove('show');
+                    sidebarAside.style.left = '-16rem';
+                    // On mobile, hide it completely after transition
+                    if (window.innerWidth <= 1024) {
+                        setTimeout(() => {
+                            if (sidebarAside && !sidebarAside.classList.contains('show')) {
+                                sidebarAside.style.display = 'none';
+                            }
+                        }, 300); // Wait for transition to complete
+                    }
                     }
                     if (overlay) {
                         overlay.classList.remove('show');
-                    }
-                    document.body.style.overflow = '';
+                    overlay.style.display = 'none';
                 }
+                // Restore body scroll and position
+                const scrollY = document.body.getAttribute('data-scroll-y');
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+                document.body.removeAttribute('data-scroll-y');
+                // Restore scroll position
+                if (scrollY) {
+                    window.scrollTo(0, parseInt(scrollY, 10));
+                }
+            }
+            
+            // Helper to check if sidebar is open
+            function isMobileSidebarOpen() {
+                return sidebarAside && sidebarAside.classList.contains('show');
+            }
+
+            // AJAX content loading function (used on desktop + mobile)
+            function loadPageContent(url) {
+                const mainContent = document.getElementById('main-content-area');
+                if (!mainContent) return;
+
+                // Show loading state
+                mainContent.innerHTML = '<div class="flex items-center justify-center h-64"><div class="text-center"><div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div><p class="text-gray-600">Loading...</p></div></div>';
+
+                // Add ajax parameter to URL
+                const ajaxUrl = url + (url.includes('?') ? '&' : '?') + 'ajax=1';
+
+                // Fetch content
+                fetch(ajaxUrl, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Replace content
+                    mainContent.innerHTML = html;
+
+                    // Execute any scripts in the loaded content
+                    const scripts = mainContent.querySelectorAll('script');
+                    scripts.forEach(oldScript => {
+                        const newScript = document.createElement('script');
+                        if (oldScript.src) {
+                            newScript.src = oldScript.src;
+                        } else {
+                            newScript.textContent = oldScript.textContent;
+                        }
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    });
+
+                    // Update URL without reload and update active sidebar state
+                    window.history.pushState({url: url}, '', url);
+                    setActiveSidebarLink(url);
+                })
+                .catch(error => {
+                    console.error('Error loading content:', error);
+                    mainContent.innerHTML = '<div class="p-6 bg-red-50 border border-red-200 rounded-lg"><p class="text-red-700">Error loading content. Please <a href=\"' + url + '\" class=\"underline\">refresh the page</a>.</p></div>';
+                });
+            }
+
+            // Mobile menu toggle wiring - ensure it works properly
+            if (mobileToggle) {
+                // Remove any existing handlers first
+                mobileToggle.onclick = null;
                 
-                mobileToggle.addEventListener('click', function (e) {
+                // Use direct onclick for maximum compatibility
+                mobileToggle.onclick = function(e) {
                     e.stopPropagation();
-                    if (sidebar && sidebar.classList.contains('show')) {
+                    e.preventDefault();
+                    if (isMobileSidebarOpen()) {
                         closeMobileSidebar();
                     } else {
                         openMobileSidebar();
                     }
-                });
+                };
+
+                // Also add event listener as backup
+                mobileToggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (isMobileSidebarOpen()) {
+                        closeMobileSidebar();
+                    } else {
+                        openMobileSidebar();
+                    }
+                }, { passive: false });
+                
+                // Ensure button is visible and clickable
+                mobileToggle.style.display = 'flex';
+                mobileToggle.style.cursor = 'pointer';
+                mobileToggle.style.pointerEvents = 'auto';
                 
                 // Close sidebar when clicking overlay
                 if (overlay) {
-                    overlay.addEventListener('click', function() {
+                    overlay.onclick = function(e) {
+                        e.stopPropagation();
+                        closeMobileSidebar();
+                    };
+                    overlay.addEventListener('click', function(e) {
+                        e.stopPropagation();
                         closeMobileSidebar();
                     });
                 }
@@ -1139,22 +1993,24 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 // Close sidebar when clicking outside on mobile
                 document.addEventListener('click', function(e) {
                     if (window.innerWidth <= 1024) {
-                        if (sidebar && sidebar.classList.contains('show')) {
-                            if (!sidebar.contains(e.target) && !mobileToggle.contains(e.target)) {
+                        if (isMobileSidebarOpen()) {
+                            if (sidebarAside && !sidebarAside.contains(e.target) && 
+                                mobileToggle && !mobileToggle.contains(e.target) &&
+                                overlay && !overlay.contains(e.target)) {
                                 closeMobileSidebar();
                             }
                         }
                     }
                 });
+            }
                 
-                // Close sidebar when clicking on a link inside sidebar on mobile
-                const sidebarLinks = document.querySelectorAll('aside .sidebar-link');
+            // Handle sidebar link clicks (desktop + mobile)
                 sidebarLinks.forEach(link => {
                     link.addEventListener('click', function(e) {
                         // Handle AJAX navigation
                         const href = this.getAttribute('href');
                         if (href && !href.includes('#') && !this.hasAttribute('data-no-ajax')) {
-                            // Skip dashboard link - it's the current page
+                        // Skip dashboard shell link - let it perform a normal navigation
                             if (href.includes('dashboardnew.php')) {
                                 if (window.innerWidth <= 1024) {
                                     closeMobileSidebar();
@@ -1164,12 +2020,12 @@ $current_page = basename($_SERVER['PHP_SELF']);
                             
                             e.preventDefault();
                             
-                            // Close mobile sidebar
+                        // Close mobile sidebar if needed
                             if (window.innerWidth <= 1024) {
                                 closeMobileSidebar();
                             }
                             
-                            // Update active state
+                        // Immediately update active state based on the clicked link
                             sidebarLinks.forEach(l => l.classList.remove('active'));
                             this.classList.add('active');
                             
@@ -1183,55 +2039,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         }
                     });
                 });
-                
-                // AJAX content loading function
-                function loadPageContent(url) {
-                    const mainContent = document.getElementById('main-content-area');
-                    if (!mainContent) return;
-                    
-                    // Show loading state
-                    mainContent.innerHTML = '<div class="flex items-center justify-center h-64"><div class="text-center"><div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div><p class="text-gray-600">Loading...</p></div></div>';
-                    
-                    // Add ajax parameter to URL
-                    const ajaxUrl = url + (url.includes('?') ? '&' : '?') + 'ajax=1';
-                    
-                    // Fetch content
-                    fetch(ajaxUrl, {
-                        method: 'GET',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        return response.text();
-                    })
-                    .then(html => {
-                        // Replace content
-                        mainContent.innerHTML = html;
-                        
-                        // Execute any scripts in the loaded content
-                        const scripts = mainContent.querySelectorAll('script');
-                        scripts.forEach(oldScript => {
-                            const newScript = document.createElement('script');
-                            if (oldScript.src) {
-                                newScript.src = oldScript.src;
-                            } else {
-                                newScript.textContent = oldScript.textContent;
-                            }
-                            oldScript.parentNode.replaceChild(newScript, oldScript);
-                        });
-                        
-                        // Update URL without reload
-                        window.history.pushState({url: url}, '', url);
-                    })
-                    .catch(error => {
-                        console.error('Error loading content:', error);
-                        mainContent.innerHTML = '<div class="p-6 bg-red-50 border border-red-200 rounded-lg"><p class="text-red-700">Error loading content. Please <a href="' + url + '" class="underline">refresh the page</a>.</p></div>';
-                    });
-                }
                 
                 // Handle initial target load if coming from redirect shell
                 const params = new URLSearchParams(window.location.search);
@@ -1260,7 +2067,81 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     // For forms in AJAX-loaded content, allow normal submission
                     // (they will redirect after POST)
                 });
+            
+            // Notification Dropdown Handler
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            const profileBtn = document.getElementById('profileBtn');
+            const profileDropdown = document.getElementById('profileDropdown');
+            
+            // Toggle notification dropdown
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !notificationDropdown.classList.contains('hidden');
+                    
+                    // Close profile dropdown if open
+                    if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                    
+                    // Toggle notification dropdown
+                    if (isOpen) {
+                        notificationDropdown.classList.add('hidden');
+                    } else {
+                        notificationDropdown.classList.remove('hidden');
+                    }
+                });
             }
+            
+            // Toggle profile dropdown
+            if (profileBtn && profileDropdown) {
+                profileBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !profileDropdown.classList.contains('hidden');
+                    
+                    // Close notification dropdown if open
+                    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                    
+                    // Toggle profile dropdown
+                    if (isOpen) {
+                        profileDropdown.classList.add('hidden');
+                    } else {
+                        profileDropdown.classList.remove('hidden');
+                    }
+                });
+            }
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                // Close notification dropdown
+                if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                    if (!notificationBtn.contains(e.target) && !notificationDropdown.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                }
+                
+                // Close profile dropdown
+                if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                    if (!profileBtn.contains(e.target) && !profileDropdown.contains(e.target)) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                }
+            });
+            
+            // Close dropdowns on escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                    if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                }
+            });
         });
     </script>
 </body>

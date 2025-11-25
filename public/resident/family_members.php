@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['resident']);
+require_once __DIR__ . '/includes/header.php';
 
 // Helper function to get upload URL (uploads are at project root, not in public/)
 function upload_url(string $path): string {
@@ -80,6 +81,16 @@ try {
     $pending_requests = (int)$pendingStmt->fetch()['count'];
 } catch (Throwable $e) {
     $pending_requests = 0;
+}
+
+// Get recent requests for header notifications
+$recent_requests = [];
+try {
+    $recentStmt = db()->prepare('SELECT r.id, r.status, r.created_at, m.name AS medicine_name FROM requests r LEFT JOIN medicines m ON r.medicine_id = m.id WHERE r.resident_id = ? ORDER BY r.created_at DESC LIMIT 5');
+    $recentStmt->execute([$resident_id]);
+    $recent_requests = $recentStmt->fetchAll();
+} catch (Throwable $e) {
+    $recent_requests = [];
 }
 
 // Handle form submission
@@ -346,13 +357,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($errors)) {
             try {
-                // Insert as pending
-                $stmt = db()->prepare('
-                    INSERT INTO resident_family_additions 
-                    (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, "pending")
-                ');
-                $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob, $profile_image_path]);
+                // Insert as pending - try with profile_image first, fallback if column doesn't exist
+                try {
+                    $stmt = db()->prepare('
+                        INSERT INTO resident_family_additions 
+                        (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, "pending")
+                    ');
+                    $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob, $profile_image_path]);
+                } catch (PDOException $e) {
+                    // If profile_image column doesn't exist, insert without it
+                    if (strpos($e->getMessage(), 'profile_image') !== false) {
+                        $stmt = db()->prepare('
+                            INSERT INTO resident_family_additions 
+                            (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, status) 
+                            VALUES (?, ?, ?, ?, ?, ?, "pending")
+                        ');
+                        $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob]);
+                    } else {
+                        throw $e;
+                    }
+                }
                 
                 $_SESSION['flash'] = 'Family member added! Awaiting BHW verification.';
                 $_SESSION['flash_type'] = 'success';
@@ -370,10 +395,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete_pending') {
         $id = (int)($_POST['id'] ?? 0);
         try {
-            // Get profile image path before deleting
-            $getImage = db()->prepare('SELECT profile_image FROM resident_family_additions WHERE id = ? AND resident_id = ?');
-            $getImage->execute([$id, $resident_id]);
-            $member = $getImage->fetch();
+            // Get profile image path before deleting (if column exists)
+            $member = null;
+            try {
+                $getImage = db()->prepare('SELECT profile_image FROM resident_family_additions WHERE id = ? AND resident_id = ?');
+                $getImage->execute([$id, $resident_id]);
+                $member = $getImage->fetch();
+            } catch (PDOException $e) {
+                // If profile_image column doesn't exist, just proceed without it
+                if (strpos($e->getMessage(), 'profile_image') === false) {
+                    throw $e;
+                }
+            }
             
             // Can only delete own pending members
             $stmt = db()->prepare('
@@ -383,7 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$id, $resident_id]);
             
             // Delete profile image if exists
-            if ($member && $member['profile_image']) {
+            if ($member && !empty($member['profile_image'])) {
                 $image_path = __DIR__ . '/../../uploads/profiles/' . basename($member['profile_image']);
                 if (file_exists($image_path)) {
                     unlink($image_path);
@@ -482,15 +515,38 @@ $approved_family->execute([$resident_id]);
 $approved_members = $approved_family->fetchAll();
 
 // Get pending family additions (only truly pending ones, not approved or rejected)
-$pending_family = db()->prepare('
-    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status, 
-           rejection_reason, created_at, updated_at
-    FROM resident_family_additions 
-    WHERE resident_id = ? AND status = "pending"
-    ORDER BY created_at DESC
-');
-$pending_family->execute([$resident_id]);
-$pending_members = $pending_family->fetchAll();
+// Check if profile_image column exists first
+try {
+    $pending_family = db()->prepare('
+        SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status, 
+               rejection_reason, created_at, updated_at
+        FROM resident_family_additions 
+        WHERE resident_id = ? AND status = "pending"
+        ORDER BY created_at DESC
+    ');
+    $pending_family->execute([$resident_id]);
+    $pending_members = $pending_family->fetchAll();
+} catch (PDOException $e) {
+    // If profile_image column doesn't exist, select without it
+    if (strpos($e->getMessage(), 'profile_image') !== false) {
+        $pending_family = db()->prepare('
+            SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, status, 
+                   rejection_reason, created_at, updated_at
+            FROM resident_family_additions 
+            WHERE resident_id = ? AND status = "pending"
+            ORDER BY created_at DESC
+        ');
+        $pending_family->execute([$resident_id]);
+        $pending_members = $pending_family->fetchAll();
+        // Add null profile_image to each member for consistency
+        foreach ($pending_members as &$member) {
+            $member['profile_image'] = null;
+        }
+        unset($member);
+    } else {
+        throw $e;
+    }
+}
 
 function calculateAge($dob) {
     $birthDate = new DateTime($dob);
@@ -511,6 +567,7 @@ function calculateAge($dob) {
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/resident-animations.css')); ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
@@ -694,19 +751,45 @@ function calculateAge($dob) {
                 </svg>
                 Family Members
             </a>
-            <a href="<?php echo htmlspecialchars(base_url('resident/profile.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
-                </svg>
-                Profile
-            </a>
         </nav>
         
         <!-- Sidebar Footer -->
         <div class="sidebar-footer">
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex items-center mb-3">
+                <div class="flex-shrink-0">
+                    <?php if (!empty($user_data['profile_image'])): ?>
+                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                             alt="Profile" 
+                             class="w-10 h-10 rounded-full object-cover border-2 border-green-500"
+                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500 hidden">
+                            <?php 
+                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                            echo strtoupper($firstInitial . $lastInitial); 
+                            ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
+                            <?php 
+                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                            echo strtoupper($firstInitial . $lastInitial); 
+                            ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <div class="ml-3 flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">
+                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
+                    </p>
+                    <p class="text-xs text-gray-600 truncate">
+                        <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
+                    </p>
+                </div>
+            </div>
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
                 Logout
@@ -716,158 +799,19 @@ function calculateAge($dob) {
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">My Family Members</h1>
-                    <p class="text-gray-600 mt-1">Manage your family members for medicine requests</p>
-                </div>
-                <div class="flex items-center space-x-6">
-                    <!-- Current Time Display -->
-                    <div class="text-right">
-                        <div class="text-sm text-gray-500">Current Time</div>
-                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
-                    </div>
-                    
-                    <!-- Night Mode Toggle -->
-                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- Notifications -->
-                    <div class="relative">
-                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
-                            </svg>
-                            <?php if ($pending_requests > 0): ?>
-                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $pending_requests; ?></span>
-                            <?php endif; ?>
-                        </button>
-                    </div>
-                    
-                    <!-- Profile Section -->
-                    <div class="relative" id="profile-dropdown">
-                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <?php if (!empty($user_data['profile_image'])): ?>
-                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile Picture" 
-                                     class="w-8 h-8 rounded-full object-cover border-2 border-green-500"
-                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500" style="display:none;">
-                                <?php 
-                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                                echo strtoupper($firstInitial . $lastInitial); 
-                                ?>
-                            </div>
-                            <?php else: ?>
-                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                            <div class="text-left">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Resident'); ?>
-                                </div>
-                                <div class="text-xs text-gray-500"><?php echo $is_senior ? 'Senior Citizen' : 'Resident'; ?></div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
-                        
-                        <!-- Profile Dropdown Menu -->
-                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
-                            <!-- User Info Section -->
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="flex items-center space-x-3 mb-3">
-                                    <?php 
-                                    // Check if profile image exists (same logic as profile.php)
-                                    $profile_img = isset($user_data['profile_image']) && !empty(trim($user_data['profile_image'])) ? $user_data['profile_image'] : null;
-                                    if ($profile_img): 
-                                    ?>
-                                        <img src="<?php echo htmlspecialchars(upload_url($profile_img)); ?>" 
-                                             alt="Profile Picture" 
-                                             class="w-12 h-12 rounded-full object-cover border-2 border-green-500"
-                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-base border-2 border-green-500" style="display:none;">
-                                            <?php 
-                                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                                            echo strtoupper($firstInitial . $lastInitial); 
-                                            ?>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-base border-2 border-green-500">
-                                            <?php 
-                                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                                            echo strtoupper($firstInitial . $lastInitial); 
-                                            ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="text-sm font-semibold text-gray-900 truncate">
-                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
-                                </div>
-                                        <div class="text-xs text-gray-500 truncate">
-                                    <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
-                                        </div>
-                                    </div>
-                                </div>
-                                <?php if ($is_senior): ?>
-                                    <div>
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                                            </svg>
-                                            Senior Citizen
-                                        </span>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Menu Items -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('resident/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                    Edit Profile
-                                </a>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Support
-                                </a>
-                            </div>
-                            
-                            <!-- Separator -->
-                            <div class="border-t border-gray-100 my-1"></div>
-                            
-                            <!-- Sign Out -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                    </svg>
-                                    Sign Out
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <?php render_resident_header([
+            'user_data' => $user_data,
+            'is_senior' => $is_senior,
+            'pending_requests' => $pending_requests,
+            'recent_requests' => $recent_requests
+        ]); ?>
+        
+        <!-- Page Title -->
+        <div class="p-4 sm:p-6 lg:p-8">
+            <div class="mb-6">
+                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 mb-1">My Family Members</h1>
+                <p class="text-gray-600">Manage your family members for medicine requests</p>
             </div>
-        </div>
 
         <div class="content-body">
         <div class="flex items-center justify-between mb-6">

@@ -40,8 +40,8 @@ if (!function_exists('render_super_admin_sidebar')) {
         ];
 
         ?>
-        <aside class="hidden md:flex md:flex-shrink-0 md:relative fixed md:left-0 left-[-16rem]">
-            <div id="sidebar" class="sidebar flex flex-col w-64 bg-white border-r border-gray-200 transition-all duration-300 overflow-hidden">
+        <aside id="sidebar-aside" class="hidden md:flex md:flex-shrink-0 md:relative fixed md:left-0 left-[-16rem] z-50">
+            <div id="sidebar" class="sidebar flex flex-col w-64 bg-white border-r border-gray-200 transition-all duration-300 overflow-hidden h-screen">
                 <div class="flex items-center justify-center h-16 px-4 bg-gradient-to-r from-purple-600 to-purple-800">
                     <?php if (!empty($logo)): ?>
                         <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg mr-2" alt="Logo" />
@@ -50,7 +50,7 @@ if (!function_exists('render_super_admin_sidebar')) {
                     <?php endif; ?>
                     <span class="brand-text text-2xl font-bold text-white"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
                 </div>
-                <div class="flex flex-col flex-1 overflow-y-auto">
+                <div id="super-admin-sidebar-scroll" class="flex flex-col flex-1 overflow-y-auto">
                     <nav class="flex-1 px-2 py-4 space-y-1">
                         <?php foreach ($nav_items as $item):
                             $href = htmlspecialchars(base_url($item['href']));

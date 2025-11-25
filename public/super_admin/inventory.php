@@ -960,10 +960,10 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
         
-        /* Fix main content positioning */
+        /* Fix main content positioning – rely on shared layout for width/offset,
+           only enforce height and background here so it works both inside the
+           dashboard shell and when opened directly. */
         .main-content {
-            margin-left: 280px !important;
-            width: calc(100% - 280px) !important;
             min-height: 100vh !important;
             position: relative !important;
             z-index: 1 !important;
@@ -979,6 +979,177 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             padding: 2rem !important;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
             margin-bottom: 2rem !important;
+            display: none !important; /* Hidden - using global shell header */
+        }
+        
+        /* Enhanced Modern UI Components */
+        .inventory-card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .inventory-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+        }
+        
+        /* Enhanced Table Design */
+        .inventory-table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .inventory-table thead th {
+            background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            padding: 1rem;
+            border-bottom: 2px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .inventory-table tbody tr {
+            transition: all 0.2s ease;
+        }
+        
+        .inventory-table tbody tr:hover {
+            background: linear-gradient(to right, #f9fafb, #ffffff);
+            transform: scale(1.01);
+        }
+        
+        .inventory-table tbody td {
+            padding: 1rem;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        /* Status Badge Enhancements */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Loading Skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        /* Enhanced Button Styles */
+        .btn-modern {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 600;
+            letter-spacing: 0.025em;
+        }
+        
+        .btn-modern::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn-modern:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        /* Enhanced Search Input */
+        .search-input-modern {
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .search-input-modern:focus {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.1), 0 4px 6px -2px rgba(59, 130, 246, 0.05);
+        }
+        
+        /* Smooth Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .animate-fade-in-up {
+            animation: fadeInUp 0.5s ease-out forwards;
+        }
+        
+        /* Enhanced Chart Container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            padding: 1rem;
+            background: linear-gradient(to bottom, #ffffff, #f9fafb);
+            border-radius: 0.75rem;
+        }
+        
+        /* Improved Accessibility */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+        
+        /* Focus States for Accessibility */
+        *:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+            border-radius: 0.25rem;
+        }
+        
+        /* Enhanced Empty States */
+        .empty-state {
+            padding: 3rem;
+            text-align: center;
+            color: #6b7280;
+        }
+        
+        .empty-state svg {
+            width: 4rem;
+            height: 4rem;
+            margin: 0 auto 1rem;
+            opacity: 0.5;
         }
         
         .stat-card {
@@ -1364,181 +1535,96 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Inventory Management</h1>
-                    <p class="text-gray-600 mt-1">Track medicine stock levels and manage inventory adjustments</p>
+        
+        <!-- Enhanced Inventory Action Bar -->
+        <div class="mb-8 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="flex-1">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Inventory Management</h1>
+                    <p class="text-gray-600 text-sm">Comprehensive stock monitoring, analytics, and management</p>
                 </div>
-                <div class="flex items-center space-x-6">
-                    <!-- Current Time Display -->
-                    <div class="text-right">
-                        <div class="text-sm text-gray-500">Current Time</div>
-                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
-                    </div>
-                    
-                    <!-- Night Mode Toggle -->
-                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                <div class="flex flex-wrap items-center gap-3">
+                    <button onclick="openAlertsModal()" 
+                            class="btn-modern relative flex items-center px-5 py-2.5 <?php echo $alerts_count > 0 ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 animate-pulse' : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'; ?> text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                         </svg>
+                        <span>View Alerts</span>
+                        <?php if ($alerts_count > 0): ?>
+                            <span class="ml-2 bg-yellow-400 text-red-900 text-xs font-bold rounded-full px-2.5 py-1 shadow-md animate-bounce">
+                                <?php echo $alerts_count; ?>
+                            </span>
+                        <?php endif; ?>
                     </button>
-                    
-                    <!-- Notifications -->
-                    <div class="relative">
-                        <button onclick="openAlertsModal()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Inventory Alerts">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                            </svg>
-                            <?php if ($alerts_count > 0): ?>
-                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $alerts_count; ?></span>
-                            <?php endif; ?>
-                        </button>
-                    </div>
-                    
-                    <!-- Profile Section -->
-                    <div class="relative" id="profile-dropdown">
-                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <?php if (!empty($user_data['profile_image'])): ?>
-                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile Picture" 
-                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
-                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                            <div class="text-left">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
-                                </div>
-                                <div class="text-xs text-gray-500">Super Admin</div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
-                        
-                        <!-- Profile Dropdown Menu -->
-                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
-                            <!-- User Info Section -->
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="text-sm font-semibold text-gray-900">
-                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
-                                </div>
-                                <div class="text-sm text-gray-500">
-                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
-                                </div>
-                            </div>
-                            
-                            <!-- Menu Items -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('super_admin/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                    Edit Profile
-                                </a>
-                                <a href="<?php echo base_url('super_admin/settings_brand.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    </svg>
-                                    Account Settings
-                                </a>
-                                <div class="border-t border-gray-100 my-1"></div>
-                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                    </svg>
-                                    Logout
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                    <button onclick="exportInventoryReport()" 
+                            class="btn-modern flex items-center px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <span>Export Report</span>
+                    </button>
+                    <button onclick="window.print()" 
+                            class="btn-modern flex items-center px-5 py-2.5 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                        </svg>
+                        <span>Print</span>
+                    </button>
                 </div>
             </div>
         </div>
-        
-        <!-- Inventory Action Buttons -->
-        <div class="mb-6 flex items-center justify-end gap-3">
-            <button onclick="openAlertsModal()" class="relative flex items-center px-4 py-2 <?php echo $alerts_count > 0 ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'; ?> text-white rounded-lg transition-colors shadow-md">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                </svg>
-                View Alerts
-                <?php if ($alerts_count > 0): ?>
-                    <span class="ml-2 bg-yellow-400 text-red-900 text-xs font-bold rounded-full px-2 py-0.5">
-                        <?php echo $alerts_count; ?>
-                    </span>
-                <?php endif; ?>
-            </button>
-            <button onclick="exportInventoryReport()" class="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-                Export Report
-            </button>
-            <button onclick="window.print()" class="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-md">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                </svg>
-                Print
-            </button>
-        </div>
-                <!-- Filter and Search Bar -->
-                <div class="mt-6 flex flex-col md:flex-row items-center gap-4">
-                    <div class="flex-1 w-full relative">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                            </svg>
+                <!-- Enhanced Filter and Search Bar -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+                    <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+                        <div class="flex-1 relative">
+                            <label for="inventorySearch" class="sr-only">Search medicines</label>
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </div>
+                            <input type="text" 
+                                   id="inventorySearch" 
+                                   placeholder="Search medicines by name, status, or batch..." 
+                                   class="search-input-modern w-full pl-11 pr-20 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300 text-gray-900 placeholder-gray-400"
+                                   onkeyup="filterInventory()"
+                                   aria-label="Search inventory">
+                            <div class="absolute inset-y-0 right-0 pr-4 flex items-center">
+                                <span id="searchCount" class="text-xs text-gray-500 font-semibold bg-gray-100 px-2 py-1 rounded-md"></span>
+                            </div>
                         </div>
-                        <input type="text" id="inventorySearch" placeholder="Search medicines by name..." 
-                               class="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
-                               onkeyup="filterInventory()">
-                        <div class="absolute inset-y-0 right-0 pr-4 flex items-center">
-                            <span id="searchCount" class="text-xs text-gray-500 font-medium"></span>
-                    </div>
+                        <div class="relative min-w-[200px]">
+                            <label for="statusFilter" class="sr-only">Filter by status</label>
+                            <select id="statusFilter" 
+                                    class="w-full pl-10 pr-10 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300 appearance-none bg-white text-gray-900 cursor-pointer"
+                                    onchange="filterInventory()"
+                                    aria-label="Filter by status">
+                                <option value="">All Status</option>
+                                <option value="out-of-stock">🔴 Out of Stock</option>
+                                <option value="low-stock">🟠 Low Stock</option>
+                                <option value="expiring-soon">🟡 Expiring Soon</option>
+                                <option value="in-stock">🟢 In Stock</option>
+                            </select>
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
                         </div>
-                    <div class="relative">
-                        <select id="statusFilter" class="pl-10 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300 appearance-none bg-white" onchange="filterInventory()">
-                            <option value="">All Status</option>
-                            <option value="out-of-stock">Out of Stock</option>
-                            <option value="low-stock">Low Stock</option>
-                            <option value="expiring-soon">Expiring Soon</option>
-                            <option value="in-stock">In Stock</option>
-                        </select>
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                        <button onclick="clearFilters()" 
+                                class="btn-modern px-6 py-3.5 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-xl hover:from-gray-200 hover:to-gray-300 transition-all shadow-sm font-semibold flex items-center justify-center gap-2 hover:shadow-md transform hover:scale-105"
+                                aria-label="Clear all filters">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
+                            <span>Clear Filters</span>
+                        </button>
                     </div>
-                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </div>
-                    </div>
-                    <button onclick="clearFilters()" class="px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-xl hover:from-gray-200 hover:to-gray-300 transition-all shadow-sm font-medium flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                        Clear
-                    </button>
                 </div>
             </div>
         </div>
@@ -2159,18 +2245,18 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                         </button>
                     </div>
                     
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
+                    <div class="overflow-x-auto rounded-xl border border-gray-200">
+                        <table class="inventory-table w-full">
                             <thead>
-                                <tr class="border-b border-gray-200">
-                                    <th class="text-left py-3 px-4 font-semibold text-gray-700">Medicine</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Current Stock</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Min Level</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Active Batches</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Earliest Expiry</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Total Dispensed</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
-                                    <th class="text-center py-3 px-4 font-semibold text-gray-700">Actions</th>
+                                <tr>
+                                    <th class="text-left">Medicine</th>
+                                    <th class="text-center">Current Stock</th>
+                                    <th class="text-center">Min Level</th>
+                                    <th class="text-center">Active Batches</th>
+                                    <th class="text-center">Earliest Expiry</th>
+                                    <th class="text-center">Total Dispensed</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -3132,98 +3218,227 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             }
         }
 
-        // Stock Movement Chart
+        // Enhanced Stock Movement Chart with better visualization
         <?php if (!empty($stock_movements)): ?>
-        const stockMovementData = <?php echo json_encode($stock_movements); ?>;
-        
-        const ctx = document.getElementById('stockMovementChart');
-        if (ctx) {
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: stockMovementData.map(d => {
-                        const date = new Date(d.date);
-                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    }),
-                    datasets: [
-                        {
-                            label: 'Stock In',
-                            data: stockMovementData.map(d => d.stock_in),
-                            borderColor: 'rgb(34, 197, 94)',
-                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Stock Out',
-                            data: stockMovementData.map(d => d.stock_out),
-                            borderColor: 'rgb(239, 68, 68)',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        title: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
+        (function() {
+            try {
+                const stockMovementData = <?php echo json_encode($stock_movements, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+                
+                if (!stockMovementData || stockMovementData.length === 0) {
+                    console.warn('No stock movement data available');
+                    return;
+                }
+                
+                const ctx = document.getElementById('stockMovementChart');
+                if (!ctx) {
+                    console.warn('Chart canvas element not found');
+                    return;
+                }
+                
+                // Wait for Chart.js to be fully loaded
+                if (typeof Chart === 'undefined') {
+                    console.error('Chart.js library not loaded');
+                    return;
+                }
+                
+                const chartConfig = {
+                    type: 'line',
+                    data: {
+                        labels: stockMovementData.map(d => {
+                            try {
+                                const date = new Date(d.date);
+                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            } catch (e) {
+                                return d.date || 'Unknown';
                             }
+                        }),
+                        datasets: [
+                            {
+                                label: 'Stock In',
+                                data: stockMovementData.map(d => parseInt(d.stock_in) || 0),
+                                borderColor: 'rgb(34, 197, 94)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                                borderWidth: 3,
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 7,
+                                pointBackgroundColor: 'rgb(34, 197, 94)',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2,
+                                cubicInterpolationMode: 'monotone'
+                            },
+                            {
+                                label: 'Stock Out',
+                                data: stockMovementData.map(d => parseInt(d.stock_out) || 0),
+                                borderColor: 'rgb(239, 68, 68)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                borderWidth: 3,
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 5,
+                                pointHoverRadius: 7,
+                                pointBackgroundColor: 'rgb(239, 68, 68)',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2,
+                                cubicInterpolationMode: 'monotone'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20,
+                                    font: {
+                                        size: 13,
+                                        weight: '600',
+                                        family: "'Inter', sans-serif"
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: {
+                                    size: 14,
+                                    weight: '600'
+                                },
+                                bodyFont: {
+                                    size: 13
+                                },
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                borderWidth: 1,
+                                displayColors: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.parsed.y} units`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    precision: 0,
+                                    font: {
+                                        size: 12,
+                                        family: "'Inter', sans-serif"
+                                    },
+                                    color: '#6b7280'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false,
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 12,
+                                        family: "'Inter', sans-serif"
+                                    },
+                                    color: '#6b7280'
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 1500,
+                            easing: 'easeOutQuart'
                         }
                     }
-                }
-            });
-        }
-        <?php endif; ?>
-
-        // Filter inventory table with animations
-        function filterInventory() {
-            const searchTerm = document.getElementById('inventorySearch').value.toLowerCase();
-            const statusFilter = document.getElementById('statusFilter').value;
-            const tableRows = document.querySelectorAll('.inventory-row');
-            const searchCountEl = document.getElementById('searchCount');
-            
-            let visibleCount = 0;
-            
-            tableRows.forEach((row, index) => {
-                const medicineName = row.getAttribute('data-medicine-name').toLowerCase();
-                const status = row.getAttribute('data-status').toLowerCase();
+                };
                 
-                const matchesSearch = medicineName.includes(searchTerm);
-                const matchesStatus = !statusFilter || status.includes(statusFilter);
-                
-                if (matchesSearch && matchesStatus) {
-                    row.style.display = '';
-                    row.style.animation = `fadeInUp 0.4s ease-out ${index * 0.05}s forwards`;
-                    row.style.opacity = '0';
-                    setTimeout(() => { row.style.opacity = '1'; }, index * 50);
-                    visibleCount++;
-                } else {
-                    row.style.opacity = '0';
-                    setTimeout(() => { row.style.display = 'none'; }, 300);
-                }
-            });
-            
-            // Update search count
-            if (searchCountEl) {
-                if (searchTerm || statusFilter) {
-                    searchCountEl.textContent = `${visibleCount} result${visibleCount !== 1 ? 's' : ''}`;
-                } else {
-                    searchCountEl.textContent = '';
+                // Initialize chart
+                new Chart(ctx, chartConfig);
+            } catch (error) {
+                console.error('Error initializing stock movement chart:', error);
+                const ctx = document.getElementById('stockMovementChart');
+                if (ctx) {
+                    ctx.parentElement.innerHTML = '<div class="text-center py-8 text-gray-500"><p>Unable to load chart. Please refresh the page.</p></div>';
                 }
             }
+        })();
+        <?php endif; ?>
+
+        // Enhanced Filter inventory table with debouncing and better performance
+        let filterTimeout;
+        function filterInventory() {
+            // Clear existing timeout for debouncing
+            clearTimeout(filterTimeout);
+            
+            // Debounce the filter function for better performance
+            filterTimeout = setTimeout(() => {
+                try {
+                    const searchInput = document.getElementById('inventorySearch');
+                    const statusSelect = document.getElementById('statusFilter');
+                    const searchCountEl = document.getElementById('searchCount');
+                    
+                    if (!searchInput || !statusSelect) {
+                        console.error('Filter elements not found');
+                        return;
+                    }
+                    
+                    const searchTerm = searchInput.value.trim().toLowerCase();
+                    const statusFilter = statusSelect.value;
+                    const tableRows = document.querySelectorAll('.inventory-row');
+                    
+                    if (!tableRows.length) {
+                        if (searchCountEl) searchCountEl.textContent = '';
+                        return;
+                    }
+                    
+                    let visibleCount = 0;
+                    const fragment = document.createDocumentFragment();
+                    
+                    // Use requestAnimationFrame for smooth animations
+                    requestAnimationFrame(() => {
+                        tableRows.forEach((row, index) => {
+                            const medicineName = row.getAttribute('data-medicine-name')?.toLowerCase() || '';
+                            const status = row.getAttribute('data-status')?.toLowerCase() || '';
+                            
+                            const matchesSearch = !searchTerm || medicineName.includes(searchTerm);
+                            const matchesStatus = !statusFilter || status.includes(statusFilter);
+                            
+                            if (matchesSearch && matchesStatus) {
+                                row.style.display = '';
+                                row.classList.add('animate-fade-in-up');
+                                row.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
+                                visibleCount++;
+                            } else {
+                                row.style.display = 'none';
+                                row.classList.remove('animate-fade-in-up');
+                            }
+                        });
+                        
+                        // Update search count with smooth transition
+                        if (searchCountEl) {
+                            if (searchTerm || statusFilter) {
+                                searchCountEl.textContent = `${visibleCount} result${visibleCount !== 1 ? 's' : ''}`;
+                                searchCountEl.classList.add('bg-blue-100', 'text-blue-700');
+                            } else {
+                                searchCountEl.textContent = '';
+                                searchCountEl.classList.remove('bg-blue-100', 'text-blue-700');
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error filtering inventory:', error);
+                }
+            }, 150); // 150ms debounce delay
         }
         
         // Clear all filters
@@ -3233,39 +3448,119 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             filterInventory();
         }
         
-        // Export inventory report to CSV
+        // Enhanced Export inventory report to CSV with error handling
         function exportInventoryReport() {
-            // Prepare CSV data
-            let csv = 'Medicine Name,Current Stock,Minimum Level,Active Batches,Earliest Expiry,Total Dispensed,Status\n';
-            
-            const tableRows = document.querySelectorAll('.inventory-row');
-            tableRows.forEach(row => {
-                if (row.style.display !== 'none') {
-                    const cols = row.querySelectorAll('td');
-                    const medicineName = row.getAttribute('data-medicine-name');
-                    const currentStock = cols[1].textContent.trim();
-                    const minLevel = cols[2].textContent.trim();
-                    const activeBatches = cols[3].textContent.trim();
-                    const earliestExpiry = cols[4].textContent.trim();
-                    const totalDispensed = cols[5].textContent.trim();
-                    const status = cols[6].textContent.trim();
-                    
-                    csv += `"${medicineName}","${currentStock}","${minLevel}","${activeBatches}","${earliestExpiry}","${totalDispensed}","${status}"\n`;
+            try {
+                // Show loading state
+                const exportBtn = event?.target?.closest('button') || document.querySelector('button[onclick*="exportInventoryReport"]');
+                const originalText = exportBtn?.innerHTML;
+                if (exportBtn) {
+                    exportBtn.disabled = true;
+                    exportBtn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Exporting...';
                 }
-            });
-            
-            // Create download link
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            const date = new Date().toISOString().split('T')[0];
-            
-            link.setAttribute('href', url);
-            link.setAttribute('download', `inventory_report_${date}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+                
+                // Prepare CSV data with BOM for Excel compatibility
+                const BOM = '\uFEFF';
+                let csv = BOM + 'Medicine Name,Current Stock,Minimum Level,Active Batches,Earliest Expiry,Total Dispensed,Status\n';
+                
+                const tableRows = document.querySelectorAll('.inventory-row:not([style*="display: none"])');
+                
+                if (tableRows.length === 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Data',
+                        text: 'No inventory data available to export.',
+                        confirmButtonColor: '#3b82f6'
+                    });
+                    if (exportBtn) {
+                        exportBtn.disabled = false;
+                        exportBtn.innerHTML = originalText;
+                    }
+                    return;
+                }
+                
+                tableRows.forEach(row => {
+                    try {
+                        const cols = row.querySelectorAll('td');
+                        if (cols.length < 7) return;
+                        
+                        const medicineName = row.getAttribute('data-medicine-name') || '';
+                        const currentStock = cols[1]?.textContent?.trim() || '0';
+                        const minLevel = cols[2]?.textContent?.trim() || 'N/A';
+                        const activeBatches = cols[3]?.textContent?.trim() || '0';
+                        const earliestExpiry = cols[4]?.textContent?.trim() || 'N/A';
+                        const totalDispensed = cols[5]?.textContent?.trim() || '0';
+                        const status = cols[6]?.textContent?.trim() || 'Unknown';
+                        
+                        // Escape quotes and handle special characters
+                        const escapeCSV = (str) => {
+                            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                                return `"${str.replace(/"/g, '""')}"`;
+                            }
+                            return str;
+                        };
+                        
+                        csv += `${escapeCSV(medicineName)},${escapeCSV(currentStock)},${escapeCSV(minLevel)},${escapeCSV(activeBatches)},${escapeCSV(earliestExpiry)},${escapeCSV(totalDispensed)},${escapeCSV(status)}\n`;
+                    } catch (err) {
+                        console.warn('Error processing row:', err);
+                    }
+                });
+                
+                // Create download link with better error handling
+                try {
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    const date = new Date().toISOString().split('T')[0];
+                    const timestamp = new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '-');
+                    
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `inventory_report_${date}_${timestamp}.csv`);
+                    link.style.visibility = 'hidden';
+                    link.style.position = 'absolute';
+                    document.body.appendChild(link);
+                    link.click();
+                    
+                    // Cleanup
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    // Show success message
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Export Successful',
+                        text: `Inventory report exported successfully (${tableRows.length} items)`,
+                        timer: 2000,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                } catch (err) {
+                    throw new Error('Failed to create download: ' + err.message);
+                }
+                
+                // Restore button
+                if (exportBtn) {
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Export Failed',
+                    text: error.message || 'An error occurred while exporting the report. Please try again.',
+                    confirmButtonColor: '#ef4444'
+                });
+                
+                // Restore button on error
+                const exportBtn = document.querySelector('button[onclick*="exportInventoryReport"]');
+                if (exportBtn) {
+                    exportBtn.disabled = false;
+                }
+            }
         }
 
         // Scroll to Top Button

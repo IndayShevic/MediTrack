@@ -59,12 +59,27 @@ $totalResidents = 0;
 $totalUsers = 0;
 $avgApprovalTime = 0;
 $totalStockValue = 0;
+// Request trend rows for multi-status analytics chart
+$requestTrendRows = [];
 $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
 try {
     // Active medicines only
     $totalMeds = (int)db()->query('SELECT COUNT(*) AS c FROM medicines WHERE is_active = 1')->fetch()['c'];
 } catch (Throwable $e) {}
+
+// Request trend per status over the last 14 days
+try {
+    $requestTrendRows = db()->query("
+        SELECT DATE(created_at) AS d, status, COUNT(*) AS c
+        FROM requests
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+        GROUP BY DATE(created_at), status
+        ORDER BY d
+    ")->fetchAll() ?: [];
+} catch (Throwable $e) {
+    $requestTrendRows = [];
+}
 
 try {
     // Expiring batches (only non-expired, non-zero stock)
@@ -255,8 +270,8 @@ try {
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
+        <!-- Header (hidden, using global shell header instead) -->
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
@@ -376,8 +391,8 @@ try {
 
         <!-- Content -->
         <div class="content-body">
-            <!-- Primary Statistics Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Primary Statistics Cards (focused on key KPIs) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <!-- Total Medicines Card -->
                 <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg">
                     <div class="flex items-center justify-between mb-4">
@@ -464,35 +479,8 @@ try {
                     </div>
                 </div>
 
-                <!-- Active Programs Card -->
-                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.3s">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                                </svg>
-                            </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-programs">0</p>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <p class="text-sm font-semibold text-gray-700">Active Programs</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-green-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500">Running programs</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Secondary KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Approval Rate Card -->
-                <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.4s">
+                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.3s">
                     <div class="flex items-center justify-between mb-4">
                         <div class="relative">
                             <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg">
@@ -503,7 +491,7 @@ try {
                             <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
                         </div>
                         <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-approval">0%</p>
+                            <p class="text-3xl font-bold text-gray-900" id="stat-approval"><?php echo number_format($approvalRate, 1); ?>%</p>
                         </div>
                     </div>
                     <div class="space-y-2">
@@ -511,78 +499,6 @@ try {
                         <div class="flex items-center space-x-2">
                             <div class="w-2 h-2 bg-green-400 rounded-full"></div>
                             <span class="text-xs text-gray-500"><?php echo number_format($approvedRequests); ?> of <?php echo number_format($totalRequests); ?> requests</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Stock Outs Card -->
-                <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.5s">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3l-6.93-12a2 2 0 00-3.48 0l-6.93 12a2 2 0 001.74 3z"></path>
-                                </svg>
-                            </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-red-400 rounded-full animate-pulse"></div>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-stockouts">0</p>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <p class="text-sm font-semibold text-gray-700">Medicines Out of Stock</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-red-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500">Need restocking</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Low Stock Card -->
-                <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.6s">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path>
-                                </svg>
-                            </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full animate-pulse"></div>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-lowstock">0</p>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <p class="text-sm font-semibold text-gray-700">Low-stock Medicines</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500"><?php echo number_format($lowStockBatches); ?> batches</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Total Dispensed Card -->
-                <div class="kpi-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.7s">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="relative">
-                            <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                </svg>
-                            </div>
-                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-indigo-400 rounded-full animate-pulse"></div>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-3xl font-bold text-gray-900" id="stat-dispensed">0</p>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <p class="text-sm font-semibold text-gray-700">Total Dispensed</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
-                            <span class="text-xs text-gray-500"><?php echo number_format($todayDispensed); ?> today</span>
                         </div>
                     </div>
                 </div>
@@ -666,12 +582,34 @@ try {
         </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Animate stat cards with real data
-        const statValues = [<?php echo $totalMeds; ?>, <?php echo $expiringSoon; ?>, <?php echo $pendingRequests; ?>, <?php echo $activePrograms; ?>];
-            const statIds = ['stat-total-meds','stat-expiring','stat-pending','stat-programs'];
+        // Ensure Chart.js is loaded before initializing analytics charts
+        function ensureChartJsLoaded(callback) {
+            if (window.Chart) {
+                callback();
+                return;
+            }
+
+            const existing = document.querySelector('script[data-chartjs-global]');
+            if (existing) {
+                existing.addEventListener('load', () => callback(), { once: true });
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            script.async = true;
+            script.setAttribute('data-chartjs-global', '1');
+            script.onload = () => callback();
+            script.onerror = () => console.error('Failed to load Chart.js for analytics page');
+            document.head.appendChild(script);
+        }
+
+        // Initialize analytics page logic and charts (works for full load and AJAX shell)
+        function initAnalyticsPage() {
+            // Animate primary stat cards with real data
+            const statValues = [<?php echo $totalMeds; ?>, <?php echo $expiringSoon; ?>, <?php echo $pendingRequests; ?>];
+            const statIds = ['stat-total-meds','stat-expiring','stat-pending'];
             
             statIds.forEach((id, i) => {
                 const el = document.getElementById(id);
@@ -688,60 +626,6 @@ try {
                     el.textContent = Math.floor(current);
                 }, 30);
             });
-
-            // Animate secondary KPIs
-            const approvalRate = <?php echo $approvalRate; ?>;
-            const stockOuts = <?php echo $stockOuts; ?>;
-            const lowStockMedicines = <?php echo $lowStockMedicines; ?>;
-            const totalDispensed = <?php echo $totalDispensed; ?>;
-
-            // Animate approval rate
-            let currentRate = 0;
-            const rateIncrement = approvalRate / 50;
-            const rateTimer = setInterval(() => {
-                currentRate += rateIncrement;
-                if (currentRate >= approvalRate) {
-                    currentRate = approvalRate;
-                    clearInterval(rateTimer);
-                }
-                document.getElementById('stat-approval').textContent = Math.floor(currentRate) + '%';
-            }, 30);
-
-            // Animate stock outs
-            let currentStockOuts = 0;
-            const stockOutsIncrement = stockOuts / 50;
-            const stockOutsTimer = setInterval(() => {
-                currentStockOuts += stockOutsIncrement;
-                if (currentStockOuts >= stockOuts) {
-                    currentStockOuts = stockOuts;
-                    clearInterval(stockOutsTimer);
-                }
-                document.getElementById('stat-stockouts').textContent = Math.floor(currentStockOuts);
-            }, 30);
-
-            // Animate low stock medicines
-            let currentLowStock = 0;
-            const lowStockIncrement = lowStockMedicines / 50;
-            const lowStockTimer = setInterval(() => {
-                currentLowStock += lowStockIncrement;
-                if (currentLowStock >= lowStockMedicines) {
-                    currentLowStock = lowStockMedicines;
-                    clearInterval(lowStockTimer);
-                }
-                document.getElementById('stat-lowstock').textContent = Math.floor(currentLowStock);
-            }, 30);
-
-            // Animate total dispensed
-            let currentDispensed = 0;
-            const dispensedIncrement = totalDispensed / 50;
-            const dispensedTimer = setInterval(() => {
-                currentDispensed += dispensedIncrement;
-                if (currentDispensed >= totalDispensed) {
-                    currentDispensed = totalDispensed;
-                    clearInterval(dispensedTimer);
-                }
-                document.getElementById('stat-dispensed').textContent = Math.floor(currentDispensed).toLocaleString();
-            }, 30);
 
             // Real-time clock update
             function updateClock() {
@@ -791,8 +675,13 @@ try {
                 });
             });
 
-            // Add ripple effect to buttons (excluding sidebar links)
-            document.querySelectorAll('a:not(.sidebar-nav a), button').forEach(element => {
+            // Add ripple effect to buttons (excluding sidebar and all its children)
+            document.querySelectorAll('a, button').forEach(element => {
+                // Skip if element is inside sidebar
+                if (element.closest('#sidebar, .sidebar, aside')) {
+                    return;
+                }
+                
                 element.addEventListener('click', function(e) {
                     const ripple = document.createElement('span');
                     const rect = this.getBoundingClientRect();
@@ -813,171 +702,237 @@ try {
                 });
             });
 
-            // Enhanced Chart.js configurations
-            Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
-            Chart.defaults.color = '#6b7280';
-            Chart.defaults.plugins.legend.labels.usePointStyle = true;
-            Chart.defaults.plugins.legend.labels.padding = 20;
+            // Enhanced Chart.js configurations and charts – only after Chart.js is ready
+            ensureChartJsLoaded(function () {
+                if (!window.Chart) {
+                    return;
+                }
 
-            // Requests last 7 days chart (enhanced with status breakdown)
-        const reqData = <?php echo json_encode(db()->query('SELECT DATE(created_at) d, COUNT(*) c FROM requests WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(created_at) ORDER BY d')->fetchAll() ?: []); ?>;
-            const days = [];
-            const counts = [];
-            
-            for (let i = 6; i >= 0; i--) {
-                const dt = new Date();
-                dt.setDate(dt.getDate() - i);
-                const iso = dt.toISOString().slice(0, 10);
-                days.push(dt.toLocaleDateString('en-US', { weekday: 'short' }));
-                const f = reqData.find(r => r.d === iso);
-                counts.push(f ? parseInt(f.c) : 0);
-            }
+                Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+                Chart.defaults.color = '#6b7280';
+                Chart.defaults.plugins.legend.labels.usePointStyle = true;
+                Chart.defaults.plugins.legend.labels.padding = 20;
 
-            new Chart(document.getElementById('reqChart').getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: days,
-                    datasets: [{
-                        label: 'Requests',
-                        data: counts,
-                        borderColor: 'rgb(59, 130, 246)',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: 'rgb(59, 130, 246)',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 6,
-                        pointHoverRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
+                // Requests last 14 days chart with status breakdown (advanced funnel view)
+                const trendRows = <?php echo json_encode($requestTrendRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+                const days = [];
+                const submittedCounts = [];
+                const approvedCounts = [];
+                const claimedCounts = [];
+                const rejectedCounts = [];
+                
+                function countForStatus(rows, date, statusList) {
+                    return rows
+                        .filter(r => r.d === date && statusList.includes(r.status))
+                        .reduce((sum, r) => sum + (parseInt(r.c, 10) || 0), 0);
+                }
+                
+                for (let i = 13; i >= 0; i--) {
+                    const dt = new Date();
+                    dt.setDate(dt.getDate() - i);
+                    const iso = dt.toISOString().slice(0, 10);
+                    days.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                    submittedCounts.push(countForStatus(trendRows, iso, ['submitted']));
+                    approvedCounts.push(countForStatus(trendRows, iso, ['approved', 'ready_to_claim']));
+                    claimedCounts.push(countForStatus(trendRows, iso, ['claimed']));
+                    rejectedCounts.push(countForStatus(trendRows, iso, ['rejected', 'cancelled']));
+                }
+
+                new Chart(document.getElementById('reqChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: days,
+                        datasets: [
+                            {
+                                label: 'Submitted',
+                                data: submittedCounts,
+                                backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                                borderColor: 'rgba(59, 130, 246, 1)',
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                stack: 'requests'
                             },
-                            ticks: {
-                                precision: 0
+                            {
+                                label: 'Approved / Ready',
+                                data: approvedCounts,
+                                backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                                borderColor: 'rgba(16, 185, 129, 1)',
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                stack: 'requests'
+                            },
+                            {
+                                label: 'Claimed',
+                                data: claimedCounts,
+                                type: 'line',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(37, 99, 235, 0.15)',
+                                borderWidth: 3,
+                                tension: 0.4,
+                                yAxisID: 'y',
+                                fill: false,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Rejected / Cancelled',
+                                data: rejectedCounts,
+                                backgroundColor: 'rgba(239, 68, 68, 0.5)',
+                                borderColor: 'rgba(239, 68, 68, 1)',
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                stack: 'requests'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 16
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
                             }
                         },
-                        x: {
-                            grid: {
-                                display: false
-                            }
-                        }
-                    },
-                    animation: {
-                        duration: 2000,
-                        easing: 'easeOutQuart'
-                    }
-                }
-            });
-
-            // Top requested medicines chart (enhanced - active medicines only)
-            const topMed = <?php echo json_encode(db()->query('SELECT m.name n, COUNT(r.id) c FROM medicines m LEFT JOIN requests r ON r.medicine_id=m.id WHERE m.is_active = 1 GROUP BY m.id, m.name ORDER BY c DESC LIMIT 5')->fetchAll() ?: []); ?>;
-            
-            new Chart(document.getElementById('topMedChart').getContext('2d'), {
-                type: 'doughnut',
-                data: {
-                    labels: topMed.map(x => x.n),
-                    datasets: [{
-                        data: topMed.map(x => parseInt(x.c)),
-                        backgroundColor: [
-                            'rgba(59, 130, 246, 0.8)',
-                            'rgba(16, 185, 129, 0.8)',
-                            'rgba(245, 158, 11, 0.8)',
-                            'rgba(239, 68, 68, 0.8)',
-                            'rgba(107, 114, 128, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgba(59, 130, 246, 1)',
-                            'rgba(16, 185, 129, 1)',
-                            'rgba(245, 158, 11, 1)',
-                            'rgba(239, 68, 68, 1)',
-                            'rgba(107, 114, 128, 1)'
-                        ],
-                        borderWidth: 2,
-                        hoverOffset: 10
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 20,
-                                usePointStyle: true
-                            }
-                        }
-                    },
-                    cutout: '60%',
-                    animation: {
-                        animateRotate: true,
-                        animateScale: true,
-                        duration: 2000,
-                        easing: 'easeOutQuart'
-                    }
-                }
-            });
-
-            // Requests by barangay chart
-        const barangayData = <?php echo json_encode(db()->query('SELECT b.name n, COUNT(r.id) c FROM barangays b LEFT JOIN residents res ON res.barangay_id=b.id LEFT JOIN requests r ON r.resident_id=res.id GROUP BY b.id, b.name ORDER BY c DESC LIMIT 8')->fetchAll() ?: []); ?>;
-            
-            new Chart(document.getElementById('barangayChart').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: barangayData.map(x => x.n),
-                    datasets: [{
-                        label: 'Requests',
-                        data: barangayData.map(x => parseInt(x.c)),
-                        backgroundColor: 'rgba(147, 51, 234, 0.6)',
-                        borderColor: 'rgba(147, 51, 234, 1)',
-                        borderWidth: 2,
-                        borderRadius: 8,
-                        borderSkipped: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            precision: 0,
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                stacked: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    precision: 0
+                                }
+                            },
+                            x: {
+                                stacked: true,
+                                grid: {
+                                    display: false
+                                }
                             }
                         },
-                        x: {
-                            grid: {
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        animation: {
+                            duration: 2200,
+                            easing: 'easeOutQuart'
+                        }
+                    }
+                });
+
+                // Top requested medicines chart (enhanced - active medicines only)
+                const topMed = <?php echo json_encode(db()->query('SELECT m.name n, COUNT(r.id) c FROM medicines m LEFT JOIN requests r ON r.medicine_id=m.id WHERE m.is_active = 1 GROUP BY m.id, m.name ORDER BY c DESC LIMIT 5')->fetchAll() ?: []); ?>;
+                
+                new Chart(document.getElementById('topMedChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: topMed.map(x => x.n),
+                        datasets: [{
+                            data: topMed.map(x => parseInt(x.c)),
+                            backgroundColor: [
+                                'rgba(59, 130, 246, 0.8)',
+                                'rgba(16, 185, 129, 0.8)',
+                                'rgba(245, 158, 11, 0.8)',
+                                'rgba(239, 68, 68, 0.8)',
+                                'rgba(107, 114, 128, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgba(59, 130, 246, 1)',
+                                'rgba(16, 185, 129, 1)',
+                                'rgba(245, 158, 11, 1)',
+                                'rgba(239, 68, 68, 1)',
+                                'rgba(107, 114, 128, 1)'
+                            ],
+                            borderWidth: 2,
+                            hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    padding: 20,
+                                    usePointStyle: true
+                                }
+                            }
+                        },
+                        cutout: '60%',
+                        animation: {
+                            animateRotate: true,
+                            animateScale: true,
+                            duration: 2000,
+                            easing: 'easeOutQuart'
+                        }
+                    }
+                });
+
+                // Requests by barangay chart
+                const barangayData = <?php echo json_encode(db()->query('SELECT b.name n, COUNT(r.id) c FROM barangays b LEFT JOIN residents res ON res.barangay_id=b.id LEFT JOIN requests r ON r.resident_id=res.id GROUP BY b.id, b.name ORDER BY c DESC LIMIT 8')->fetchAll() ?: []); ?>;
+                
+                new Chart(document.getElementById('barangayChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: barangayData.map(x => x.n),
+                        datasets: [{
+                            label: 'Requests',
+                            data: barangayData.map(x => parseInt(x.c)),
+                            backgroundColor: 'rgba(147, 51, 234, 0.6)',
+                            borderColor: 'rgba(147, 51, 234, 1)',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
                                 display: false
                             }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                precision: 0,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 2000,
+                            easing: 'easeOutQuart'
                         }
-                    },
-                    animation: {
-                        duration: 2000,
-                        easing: 'easeOutQuart'
                     }
-                }
+                });
             });
-        });
+        }
+
+        // Run init depending on document state (full load vs. AJAX-loaded shell)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAnalyticsPage);
+        } else {
+            initAnalyticsPage();
+        }
         
         // Time update functionality
         function updateTime() {

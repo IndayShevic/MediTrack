@@ -162,7 +162,7 @@ $logs = $stmt->fetchAll();
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="content-header">
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Email Logs</h1>

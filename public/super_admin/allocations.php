@@ -269,8 +269,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             </script>
         <?php endif; ?>
         
-        <!-- Header -->
-        <div class="content-header">
+        <!-- Header (hidden, using global shell header instead) -->
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Allocation Programs</h1>

@@ -341,8 +341,8 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
     </aside>
 
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
+        <!-- Header (hidden, using global shell header instead) -->
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Barangays & Puroks</h1>

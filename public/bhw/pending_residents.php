@@ -160,6 +160,44 @@ try {
 } catch (Throwable $e) {
     $pending_residents = [];
 }
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
+
+// Fetch pending requests for notifications
+try {
+    $stmt = db()->prepare('SELECT r.id, r.status, r.created_at, m.name as medicine_name, CONCAT(IFNULL(res.first_name,"")," ",IFNULL(res.last_name,"")) as resident_name FROM requests r LEFT JOIN medicines m ON r.medicine_id = m.id LEFT JOIN residents res ON r.resident_id = res.id WHERE r.status = "submitted" AND res.purok_id = ? ORDER BY r.created_at DESC LIMIT 5');
+    $stmt->execute([$bhw_purok_id]);
+    $pending_requests_list = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $pending_requests_list = [];
+}
+
+// Fetch pending registrations for notifications
+try {
+    $stmt = db()->prepare('SELECT id, first_name, last_name, created_at FROM pending_residents WHERE purok_id = ? AND status = "pending" ORDER BY created_at DESC LIMIT 5');
+    $stmt->execute([$bhw_purok_id]);
+    $pending_registrations_list = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $pending_registrations_list = [];
+}
+
+// Fetch pending family additions for notifications
+try {
+    $stmt = db()->prepare('SELECT rfa.id, rfa.first_name, rfa.last_name, rfa.created_at FROM resident_family_additions rfa JOIN residents res ON res.id = rfa.resident_id WHERE res.purok_id = ? AND rfa.status = "pending" ORDER BY rfa.created_at DESC LIMIT 5');
+    $stmt->execute([$bhw_purok_id]);
+    $pending_family_additions_list = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $pending_family_additions_list = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -176,6 +214,7 @@ try {
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
@@ -493,8 +532,41 @@ try {
         
         <!-- Sidebar Footer -->
         <div class="sidebar-footer">
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex items-center mb-3">
+                <div class="flex-shrink-0">
+                    <?php if (!empty($user_data['profile_image'])): ?>
+                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                             alt="Profile" 
+                             class="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
+                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500 hidden">
+                            <?php 
+                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                            echo strtoupper($firstInitial . $lastInitial); 
+                            ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
+                            <?php 
+                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
+                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
+                            echo strtoupper($firstInitial . $lastInitial); 
+                            ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <div class="ml-3 flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">
+                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'Worker'))); ?>
+                    </p>
+                    <p class="text-xs text-gray-600 truncate">
+                        <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
+                    </p>
+                </div>
+            </div>
+            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center justify-center w-full px-4 py-2 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
                 Logout
@@ -504,120 +576,20 @@ try {
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Pending Resident Registrations</h1>
-                    <p class="text-gray-600 mt-1">Review and approve resident registration requests for your purok</p>
-                </div>
-                <div class="flex items-center space-x-6">
-                    <!-- Current Time Display -->
-                    <div class="text-right">
-                        <div class="text-sm text-gray-500">Current Time</div>
-                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
-                    </div>
-                    
-                    <!-- Night Mode Toggle -->
-                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- Notifications -->
-                    <div class="relative">
-                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
-                            </svg>
-                            <?php 
-                            $total_notifications = ($notification_counts['pending_requests'] ?? 0) + ($notification_counts['pending_registrations'] ?? 0) + ($notification_counts['pending_family_additions'] ?? 0);
-                            if ($total_notifications > 0): ?>
-                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"><?php echo $total_notifications; ?></span>
-                            <?php endif; ?>
-                        </button>
-                    </div>
-                    
-                    <!-- Profile Section -->
-                    <div class="relative" id="profile-dropdown">
-                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
-                            <?php if (!empty($user_data['profile_image'])): ?>
-                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile Picture" 
-                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
-                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                            <div class="text-left">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'BHW'); ?>
-                                </div>
-                                <div class="text-xs text-gray-500">Barangay Health Worker</div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
-                        
-                        <!-- Profile Dropdown Menu -->
-                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
-                            <!-- User Info Section -->
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="text-sm font-semibold text-gray-900">
-                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'User'))); ?>
-                                </div>
-                                <div class="text-sm text-gray-500">
-                                    <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
-                                </div>
-                            </div>
-                            
-                            <!-- Menu Items -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('bhw/profile.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                    </svg>
-                                    Edit Profile
-                                </a>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Support
-                                </a>
-                            </div>
-                            
-                            <!-- Separator -->
-                            <div class="border-t border-gray-100 my-1"></div>
-                            
-                            <!-- Sign Out -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                    </svg>
-                                    Sign Out
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <?php 
+        require_once __DIR__ . '/includes/header.php';
+        render_bhw_header([
+            'user_data' => $user_data,
+            'notification_counts' => $notification_counts,
+            'pending_requests' => $pending_requests_list,
+            'pending_registrations' => $pending_registrations_list,
+            'pending_family_additions' => $pending_family_additions_list
+        ]);
+        ?>
+        
+        <div class="p-6">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Pending Resident Registrations</h1>
+            <p class="text-gray-600">Review and approve resident registration requests for your purok</p>
         </div>
 
         <!-- Flash Messages -->
@@ -1197,113 +1169,7 @@ try {
         });
 
         // Header Functions
-        // Real-time clock update
-        function updateClock() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('en-US', { 
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            const timeElement = document.getElementById('current-time');
-            if (timeElement) {
-                timeElement.textContent = timeString;
-            }
-        }
-
-        // Update clock every second
-        updateClock();
-        setInterval(updateClock, 1000);
-
-        // Night mode functionality
-        function initNightMode() {
-            const toggle = document.getElementById('night-mode-toggle');
-            const body = document.body;
-            
-            if (!toggle) return;
-            
-            // Check for saved theme preference or default to light mode
-            const currentTheme = localStorage.getItem('theme') || 'light';
-            if (currentTheme === 'dark') {
-                body.classList.add('dark');
-                toggle.innerHTML = `
-                    <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
-                    </svg>
-                `;
-            }
-            
-            toggle.addEventListener('click', function() {
-                body.classList.toggle('dark');
-                
-                if (body.classList.contains('dark')) {
-                    localStorage.setItem('theme', 'dark');
-                    toggle.innerHTML = `
-                        <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"></path>
-                        </svg>
-                    `;
-                } else {
-                    localStorage.setItem('theme', 'light');
-                    toggle.innerHTML = `
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    `;
-                }
-            });
-        }
-
-        // Profile dropdown functionality
-        function initProfileDropdown() {
-            const toggle = document.getElementById('profile-toggle');
-            const menu = document.getElementById('profile-menu');
-            const arrow = document.getElementById('profile-arrow');
-            
-            if (!toggle || !menu || !arrow) return;
-            
-            toggle.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (menu.classList.contains('hidden')) {
-                    menu.classList.remove('hidden');
-                    arrow.classList.add('rotate-180');
-                } else {
-                    menu.classList.add('hidden');
-                    arrow.classList.remove('rotate-180');
-                }
-            };
-            
-            // Close dropdown when clicking outside
-            if (!window.bhwPendingResidentsProfileDropdownClickHandler) {
-                window.bhwPendingResidentsProfileDropdownClickHandler = function(e) {
-                    const toggle = document.getElementById('profile-toggle');
-                    const menu = document.getElementById('profile-menu');
-                    if (menu && !toggle.contains(e.target) && !menu.contains(e.target)) {
-                        menu.classList.add('hidden');
-                        const arrow = document.getElementById('profile-arrow');
-                        if (arrow) arrow.classList.remove('rotate-180');
-                    }
-                };
-                document.addEventListener('click', window.bhwPendingResidentsProfileDropdownClickHandler);
-            }
-            
-            // Close dropdown when pressing Escape
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    const menu = document.getElementById('profile-menu');
-                    const arrow = document.getElementById('profile-arrow');
-                    if (menu) menu.classList.add('hidden');
-                    if (arrow) arrow.classList.remove('rotate-180');
-                }
-            });
-        }
-
-        // Initialize night mode and profile dropdown
-        initNightMode();
-        initProfileDropdown();
+        // Old time update, night mode, and profile dropdown code removed - now handled by header include
     </script>
 </body>
 </html>

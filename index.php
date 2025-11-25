@@ -34,7 +34,7 @@ require_once __DIR__ . '/config/email_notifications.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $user = current_user();
     if ($user) {
-        if ($user['role'] === 'super_admin') { header('Location: public/super_admin/dashboard.php'); exit; }
+        if ($user['role'] === 'super_admin') { header('Location: public/super_admin/dashboardnew.php'); exit; }
         if ($user['role'] === 'bhw') { header('Location: public/bhw/dashboard.php'); exit; }
         if ($user['role'] === 'resident') { header('Location: public/resident/dashboard.php'); exit; }
     }

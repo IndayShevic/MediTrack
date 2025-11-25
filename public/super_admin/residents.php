@@ -33,9 +33,11 @@ if (!isset($user_data['profile_image'])) {
 }
 
 // Fetch all residents with their family members and location info
+// Note: Family members are stored in the family_members table (separate from residents)
+// This query only shows actual residents, not family members
 $residents = db()->query('
     SELECT r.id, r.first_name, r.last_name, r.middle_initial, r.phone, r.address, r.created_at, r.date_of_birth,
-           COUNT(fm.id) as family_count,
+           COUNT(DISTINCT fm.id) as family_count,
            p.name as purok_name,
            b.name as barangay_name,
            CASE 
@@ -49,6 +51,25 @@ $residents = db()->query('
     GROUP BY r.id 
     ORDER BY r.last_name = "Walk-in", b.name, p.name, r.last_name, r.first_name
 ')->fetchAll();
+
+// Fetch family members for each resident
+$family_members_by_resident = [];
+foreach ($residents as $resident) {
+    $resident_id = (int)$resident['id'];
+    try {
+        // Check if date_of_birth column exists in family_members table
+        $family_members = db()->prepare('
+            SELECT id, full_name, relationship, age, created_at
+            FROM family_members
+            WHERE resident_id = ?
+            ORDER BY relationship, full_name
+        ');
+        $family_members->execute([$resident_id]);
+        $family_members_by_resident[$resident_id] = $family_members->fetchAll() ?: [];
+    } catch (Exception $e) {
+        $family_members_by_resident[$resident_id] = [];
+    }
+}
 
 // Calculate age for each resident
 foreach ($residents as &$resident) {
@@ -184,6 +205,21 @@ foreach ($residents as $resident) {
         .btn-gradient {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+        /* Family Members Section Styles */
+        [id^="family-members-"] {
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, opacity 0.4s ease-out, padding 0.4s ease-out;
+        }
+        
+        .family-member-item {
+            transition: all 0.2s ease;
+        }
+        
+        .family-member-item:hover {
+            transform: translateX(4px);
+            border-color: #3b82f6 !important;
+        }
+        
         .ripple-effect {
             position: relative;
             overflow: hidden;
@@ -285,8 +321,8 @@ foreach ($residents as $resident) {
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
+        <!-- Header (hidden, using global shell header instead) -->
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Residents Management</h1>
@@ -594,6 +630,75 @@ foreach ($residents as $resident) {
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Family Members Section -->
+                        <?php 
+                        $resident_id = (int)$r['id'];
+                        $family_members = $family_members_by_resident[$resident_id] ?? [];
+                        if (!empty($family_members)): 
+                        ?>
+                            <div class="border-t border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+                                <button onclick="toggleFamilyMembers(<?php echo $resident_id; ?>)" 
+                                        class="w-full px-8 py-4 flex items-center justify-between hover:bg-blue-100/50 transition-colors group"
+                                        aria-expanded="false"
+                                        aria-controls="family-members-<?php echo $resident_id; ?>">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                            </svg>
+                                        </div>
+                                        <div class="text-left">
+                                            <h4 class="font-semibold text-gray-900">Family Members</h4>
+                                            <p class="text-sm text-gray-600"><?php echo count($family_members); ?> member<?php echo count($family_members) !== 1 ? 's' : ''; ?> registered</p>
+                                        </div>
+                                    </div>
+                                    <svg id="family-toggle-<?php echo $resident_id; ?>" class="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <div id="family-members-<?php echo $resident_id; ?>" class="hidden px-8 pb-6">
+                                    <div class="space-y-3 mt-4">
+                                        <?php foreach ($family_members as $fm): ?>
+                                            <div class="family-member-item bg-white rounded-xl p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center space-x-4 flex-1">
+                                                        <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="flex-1 min-w-0">
+                                                            <div class="flex items-center space-x-2 mb-1">
+                                                                <h5 class="font-semibold text-gray-900 truncate"><?php echo htmlspecialchars($fm['full_name']); ?></h5>
+                                                                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                                                    Family Member
+                                                                </span>
+                                                            </div>
+                                                            <div class="flex items-center space-x-4 text-sm text-gray-600">
+                                                                <span class="flex items-center space-x-1">
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                                                    </svg>
+                                                                    <span><?php echo htmlspecialchars($fm['relationship']); ?></span>
+                                                                </span>
+                                                                <span class="flex items-center space-x-1">
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                                    </svg>
+                                                                    <span>Age: <?php echo (int)$fm['age']; ?></span>
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -656,6 +761,52 @@ foreach ($residents as $resident) {
             el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
             observer.observe(el);
         });
+        
+        // Toggle family members section
+        function toggleFamilyMembers(residentId) {
+            const familySection = document.getElementById('family-members-' + residentId);
+            const toggleIcon = document.getElementById('family-toggle-' + residentId);
+            const button = toggleIcon?.closest('button');
+            
+            if (!familySection || !toggleIcon) return;
+            
+            const isHidden = familySection.classList.contains('hidden');
+            
+            if (isHidden) {
+                // Show family members
+                familySection.classList.remove('hidden');
+                familySection.style.maxHeight = '0';
+                familySection.style.opacity = '0';
+                
+                // Animate in
+                requestAnimationFrame(() => {
+                    familySection.style.transition = 'max-height 0.4s ease-out, opacity 0.4s ease-out, padding 0.4s ease-out';
+                    familySection.style.maxHeight = familySection.scrollHeight + 'px';
+                    familySection.style.opacity = '1';
+                });
+                
+                // Rotate icon
+                toggleIcon.style.transform = 'rotate(180deg)';
+                if (button) {
+                    button.setAttribute('aria-expanded', 'true');
+                }
+            } else {
+                // Hide family members
+                familySection.style.transition = 'max-height 0.3s ease-in, opacity 0.3s ease-in, padding 0.3s ease-in';
+                familySection.style.maxHeight = '0';
+                familySection.style.opacity = '0';
+                
+                setTimeout(() => {
+                    familySection.classList.add('hidden');
+                }, 300);
+                
+                // Rotate icon back
+                toggleIcon.style.transform = 'rotate(0deg)';
+                if (button) {
+                    button.setAttribute('aria-expanded', 'false');
+                }
+            }
+        }
         
         // Time update functionality
         function updateTime() {

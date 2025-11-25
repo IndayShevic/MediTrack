@@ -596,6 +596,14 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             transform: scale(0);
             animation: ripple-animation 0.6s linear;
             pointer-events: none;
+            z-index: 1;
+            overflow: hidden;
+        }
+        
+        /* Ensure buttons with ripple have relative positioning */
+        .btn-primary {
+            position: relative;
+            overflow: hidden;
         }
 
         @keyframes ripple-animation {
@@ -921,8 +929,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
+        <!-- Header (hidden, using global shell header instead) -->
+        <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Announcements Management</h1>
@@ -1067,10 +1075,10 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         <?php endif; ?>
 
         <!-- Dashboard Content -->
-        <div class="content-body">
+        <div class="content-body" style="position: relative; z-index: 1; background: transparent;">
             <!-- Full Calendar View -->
             <div class="mb-8">
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" style="position: relative; z-index: 2;">
                         <div class="flex items-center justify-between mb-6">
                             <div>
                             <h3 class="text-2xl font-bold text-gray-900 mb-2">Announcement Calendar</h3>
@@ -1096,16 +1104,16 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                     </button>
                                 </div>
                                                 </div>
-                    <div id="calendar" class="rounded-lg overflow-hidden"></div>
+                    <div id="calendar" class="rounded-lg overflow-hidden" style="min-height: 600px; position: relative; z-index: 1;"></div>
                 </div>
             </div>
         </div>
     </main>
 
     <!-- Create/Edit Modal -->
-    <div id="announcementModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 backdrop-blur-sm">
+    <div id="announcementModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[9998]" style="backdrop-filter: blur(4px);">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-95 opacity-0" id="modalContent">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-95 opacity-0 relative z-[9999]" id="modalContent" onclick="event.stopPropagation();">
                 <div class="p-8">
                     <div class="flex items-center justify-between mb-8">
                         <div class="flex items-center space-x-3">
@@ -1240,20 +1248,20 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     </div>
 
     <!-- View Modal -->
-    <div id="viewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div id="viewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[9999]" style="backdrop-filter: blur(4px);">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div id="viewModalContent" class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative z-[10000] opacity-0 transform scale-95 transition-all duration-200" onclick="event.stopPropagation();">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-xl font-semibold text-gray-900">Announcement Details</h3>
-                        <button onclick="closeViewModal()" class="text-gray-400 hover:text-gray-600">
+                        <button onclick="closeViewModal()" class="text-gray-400 hover:text-gray-600 transition-colors" type="button">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
                     </div>
                     
-                    <div id="viewContent" class="space-y-4">
+                    <div id="viewContent" class="space-y-4" style="display: none;">
                         <!-- Content will be populated by JavaScript -->
                     </div>
                 </div>
@@ -1279,10 +1287,37 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             }
         }
         
-        // Initialize FullCalendar
-        document.addEventListener('DOMContentLoaded', function() {
+        // Ensure FullCalendar library is available (works both in full page and AJAX shell)
+        function ensureFullCalendarLoaded(callback) {
+            if (window.FullCalendar) {
+                callback();
+                return;
+            }
+
+            const existing = document.querySelector('script[data-fullcalendar-global]');
+            if (existing) {
+                existing.addEventListener('load', () => callback(), { once: true });
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
+            script.async = true;
+            script.setAttribute('data-fullcalendar-global', '1');
+            script.onload = () => callback();
+            script.onerror = () => console.error('Failed to load FullCalendar for announcements page');
+            document.head.appendChild(script);
+        }
+
+        // Initialize FullCalendar (works for both full page load and AJAX shell load)
+        function initAnnouncementCalendar() {
             const calendarEl = document.getElementById('calendar');
-            const calendar = new FullCalendar.Calendar(calendarEl, {
+            if (!calendarEl) {
+                return;
+            }
+
+            ensureFullCalendarLoaded(function () {
+                const calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 height: 'auto',
                 contentHeight: 'auto',
@@ -1333,12 +1368,56 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                     omitZeroMinute: true,
                     meridiem: 'short'
                 }
+                });
+                calendar.render();
+                
+                // Store calendar instance globally for potential future use
+                window.announcementCalendar = calendar;
             });
-            calendar.render();
-            
-            // Store calendar instance globally for potential future use
-            window.announcementCalendar = calendar;
-        });
+        }
+
+        // Initialize calendar - works for both full page load and AJAX shell load
+        // Use a more robust approach that waits for the element to exist
+        function waitForCalendarAndInit() {
+            const calendarEl = document.getElementById('calendar');
+            if (calendarEl && calendarEl.offsetParent !== null) {
+                // Element exists and is visible, initialize
+                initAnnouncementCalendar();
+            } else if (calendarEl) {
+                // Element exists but might not be visible yet, try again
+                setTimeout(waitForCalendarAndInit, 50);
+            } else {
+                // Element doesn't exist yet, wait a bit and try again
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', waitForCalendarAndInit);
+                } else {
+                    // For AJAX loads, check periodically
+                    let attempts = 0;
+                    const checkInterval = setInterval(() => {
+                        attempts++;
+                        const el = document.getElementById('calendar');
+                        if (el) {
+                            clearInterval(checkInterval);
+                            initAnnouncementCalendar();
+                        } else if (attempts > 20) {
+                            // Give up after 1 second (20 * 50ms)
+                            clearInterval(checkInterval);
+                            console.warn('Calendar element not found after waiting');
+                        }
+                    }, 50);
+                }
+            }
+        }
+
+        // Start initialization
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', waitForCalendarAndInit);
+        } else {
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+                waitForCalendarAndInit();
+            });
+        }
 
         // Modal functions
         function openCreateModal(selectedDate = null) {
@@ -1543,6 +1622,21 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         }
 
         function viewAnnouncement(announcement) {
+            // Close any other open modals first
+            const announcementModal = document.getElementById('announcementModal');
+            if (announcementModal && !announcementModal.classList.contains('hidden')) {
+                closeModal();
+            }
+            
+            const viewContent = document.getElementById('viewContent');
+            const viewModal = document.getElementById('viewModal');
+            const viewModalContent = document.getElementById('viewModalContent');
+            
+            if (!viewContent || !viewModal || !viewModalContent) {
+                return;
+            }
+            
+            // Prepare content
             const content = `
                 <div class="space-y-4">
                     <div class="flex items-center space-x-3">
@@ -1605,19 +1699,71 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                     </div>
                     
                     <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-                        <button onclick="closeViewModal(); editAnnouncementById(${announcement.id});" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        <button onclick="closeViewModal(); editAnnouncementById(${announcement.id});" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" type="button">
                             Edit Announcement
                         </button>
                     </div>
                 </div>
             `;
             
-            document.getElementById('viewContent').innerHTML = content;
-            document.getElementById('viewModal').classList.remove('hidden');
+            // Reset modal state - completely hide content initially
+            viewModalContent.classList.add('opacity-0', 'scale-95');
+            viewContent.style.display = 'none';
+            viewContent.style.opacity = '0';
+            
+            // Set content while completely hidden
+            viewContent.innerHTML = content;
+            
+            // Show modal backdrop (but keep content hidden)
+            viewModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            
+            // Wait for next frame to ensure modal is rendered
+            requestAnimationFrame(() => {
+                // Force a reflow to ensure styles are applied to the content
+                // Temporarily show content off-screen to trigger style calculation
+                viewContent.style.position = 'absolute';
+                viewContent.style.left = '-9999px';
+                viewContent.style.display = 'block';
+                void viewContent.offsetHeight; // Force reflow
+                
+                // Now move it back and make it visible with fade-in
+                requestAnimationFrame(() => {
+                    viewContent.style.position = '';
+                    viewContent.style.left = '';
+                    viewContent.style.display = 'block';
+                    
+                    // Small delay to ensure display is set, then fade in
+                    setTimeout(() => {
+                        viewModalContent.classList.remove('opacity-0', 'scale-95');
+                        viewContent.style.opacity = '1';
+                        viewContent.style.transition = 'opacity 0.2s ease-in';
+                    }, 10);
+                });
+            });
         }
 
         function closeViewModal() {
-            document.getElementById('viewModal').classList.add('hidden');
+            const viewModal = document.getElementById('viewModal');
+            const viewModalContent = document.getElementById('viewModalContent');
+            const viewContent = document.getElementById('viewContent');
+            
+            if (viewModal && viewModalContent && viewContent) {
+                // Fade out first
+                viewModalContent.classList.add('opacity-0', 'scale-95');
+                viewContent.style.opacity = '0';
+                viewContent.style.transition = 'opacity 0.2s ease-out';
+                
+                // Hide modal after transition
+                setTimeout(() => {
+                    viewModal.classList.add('hidden');
+                    viewContent.style.display = 'none';
+                    viewContent.style.opacity = '0';
+                    viewContent.style.transition = '';
+                    // Restore body scroll
+                    document.body.style.overflow = '';
+                }, 200);
+            }
         }
 
         function toggleStatus(id) {
@@ -1693,24 +1839,38 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             });
         });
 
-        // Add ripple effect to buttons
-        document.querySelectorAll('.btn-primary, button').forEach(button => {
+        // Add ripple effect to buttons (exclude modal buttons, action buttons, and calendar buttons)
+        document.querySelectorAll('.btn-primary:not(#viewModal .btn-primary):not(.action-btn):not(.fc-button):not([onclick*="viewAnnouncement"]):not([onclick*="closeViewModal"]):not([onclick*="closeModal"])').forEach(button => {
+            // Ensure button has relative positioning
+            if (getComputedStyle(button).position === 'static') {
+                button.style.position = 'relative';
+            }
+            button.style.overflow = 'hidden';
+            
             button.addEventListener('click', function(e) {
+                // Don't add ripple if clicking inside a modal or on action buttons
+                if (this.closest('#viewModal, #announcementModal') || this.classList.contains('action-btn')) {
+                    return;
+                }
+                
                 const ripple = document.createElement('span');
                 const rect = this.getBoundingClientRect();
-                const size = Math.max(rect.width, rect.height);
+                const size = Math.max(rect.width, rect.height) * 2;
                 const x = e.clientX - rect.left - size / 2;
                 const y = e.clientY - rect.top - size / 2;
                 
                 ripple.style.width = ripple.style.height = size + 'px';
                 ripple.style.left = x + 'px';
                 ripple.style.top = y + 'px';
+                ripple.style.position = 'absolute';
                 ripple.classList.add('ripple');
                 
                 this.appendChild(ripple);
                 
                 setTimeout(() => {
-                    ripple.remove();
+                    if (ripple.parentNode) {
+                        ripple.remove();
+                    }
                 }, 600);
             });
         });

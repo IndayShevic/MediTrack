@@ -45,7 +45,7 @@ if ($bhw_barangay_id == 0 && $bhw_purok_id > 0) {
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Fetch allocation programs for this BHW's area
 // BHW should see programs if:

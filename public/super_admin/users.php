@@ -500,6 +500,30 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             }
         }
         
+        /* Fix search bar overlapping */
+        #searchInput {
+            padding-left: 2.75rem !important;
+            padding-right: 1rem !important;
+        }
+        
+        .search-icon-wrapper {
+            position: absolute;
+            left: 0.875rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Ensure input text doesn't overlap */
+        #searchInput::placeholder {
+            padding-left: 0;
+            padding-right: 0;
+        }
+        
         .hover-lift {
             transition: all 0.3s ease;
         }
@@ -678,13 +702,13 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <!-- Search Bar -->
                     <div class="relative flex-1 max-w-md">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <input type="text" id="searchInput" placeholder="Search users..." 
+                               class="block w-full py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm">
+                        <div class="search-icon-wrapper">
                             <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
                         </div>
-                        <input type="text" id="searchInput" placeholder="Search users..." 
-                               class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm">
                     </div>
                     
                     <!-- Filter Dropdowns -->

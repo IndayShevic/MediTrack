@@ -40,7 +40,7 @@ if (!isset($user_data['profile_image'])) {
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Fetch pending requests for notifications
 try {

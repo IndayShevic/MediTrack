@@ -38,7 +38,7 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Handle approve/reject
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -219,6 +219,30 @@ redirect_to_dashboard_shell($isAjax);
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
             margin-bottom: 2rem !important;
         }
+        
+        /* Fix search bar overlapping */
+        #searchInput {
+            padding-left: 2.75rem !important;
+            padding-right: 1rem !important;
+        }
+        
+        .search-icon-wrapper {
+            position: absolute;
+            left: 0.875rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Ensure input text doesn't overlap */
+        #searchInput::placeholder {
+            padding-left: 0;
+            padding-right: 0;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -266,10 +290,12 @@ redirect_to_dashboard_shell($isAjax);
                         <!-- Search Bar -->
                         <div class="relative flex-1 max-w-md">
                             <input type="text" id="searchInput" placeholder="Search medicines..." 
-                                   class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
-                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                            </svg>
+                                   class="w-full py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+                            <div class="search-icon-wrapper">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </div>
                         </div>
                         
                         <!-- Category Filter -->

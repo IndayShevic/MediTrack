@@ -13,7 +13,7 @@ unset($_SESSION[$cache_key]);
 unset($_SESSION[$cache_key . '_time']);
 
 // Get fresh notification counts
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Return JSON response
 header('Content-Type: application/json');

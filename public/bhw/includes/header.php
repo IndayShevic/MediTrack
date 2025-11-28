@@ -270,24 +270,37 @@ if (!function_exists('render_bhw_header')) {
                                     <p class="text-xs text-gray-500 leading-tight">Barangay Health Worker</p>
                                 </div>
                             </div>
-                            <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0 cursor-pointer border-2 border-gray-300">
+                            <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0 cursor-pointer border-2 border-gray-300 relative">
                                 <?php 
                                 $profile_image = $user['profile_image'] ?? $user_data['profile_image'] ?? null;
                                 if (!empty($profile_image)): 
-                                    // Fix for uploads directory being in root, not public
-                                    $img_url = base_url($profile_image);
-                                    if (strpos($profile_image, 'uploads/') === 0) {
-                                        $img_url = base_url('../' . $profile_image);
+                                    // Helper function to get upload URL (uploads are at project root, not in public/)
+                                    $clean_path = ltrim($profile_image, '/');
+                                    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+                                    $pos = strpos($script, '/public/');
+                                    if ($pos !== false) {
+                                        $base = substr($script, 0, $pos);
+                                    } else {
+                                        $base = dirname($script);
+                                        if ($base === '.' || $base === '/') {
+                                            $base = '';
+                                        }
                                     }
+                                    $img_url = rtrim($base, '/') . '/' . $clean_path;
                                 ?>
                                     <img src="<?php echo htmlspecialchars($img_url); ?>" 
                                          alt="Profile" 
                                          class="w-10 h-10 rounded-full object-cover"
-                                         onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                         style="display: block;"
+                                         onerror="this.style.display='none'; const fallback = this.nextElementSibling; if (fallback) fallback.style.display='flex';">
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-300" style="display: none; position: absolute; top: 0; left: 0;">
+                                        <?php echo $initials; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-300">
+                                        <?php echo $initials; ?>
+                                    </div>
                                 <?php endif; ?>
-                                <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-700 font-semibold text-sm border-2 border-gray-300 <?php echo !empty($profile_image) ? 'hidden' : ''; ?>">
-                                    <?php echo $initials; ?>
-                                </div>
                             </div>
                         </button>
                         

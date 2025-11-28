@@ -36,7 +36,7 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Fetch pending requests for notifications
 try {
@@ -435,6 +435,44 @@ foreach ($family_members as $family) {
             background: rgba(255, 255, 255, 0.9);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
+        
+        /* Fix search bar overlapping */
+        #searchInput {
+            padding-left: 3.75rem !important;
+            padding-right: 3rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+        }
+        
+        .search-icon-wrapper {
+            position: absolute;
+            left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .search-indicator-wrapper {
+            position: absolute;
+            right: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Ensure input text doesn't overlap */
+        #searchInput::placeholder {
+            padding-left: 0;
+            padding-right: 0;
+        }
 
         .btn-gradient {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -660,11 +698,13 @@ foreach ($family_members as $family) {
                 <div class="mb-8">
                     <div class="relative max-w-lg">
                         <input type="text" id="searchInput" placeholder="Search residents..." 
-                               class="search-input w-full px-6 py-4 pl-14 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-transparent transition-all duration-300 text-lg">
-                        <svg class="absolute left-5 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                        <div class="absolute right-4 top-1/2 transform -translate-y-1/2">
+                               class="search-input w-full py-4 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-transparent transition-all duration-300 text-lg border border-gray-300">
+                        <div class="search-icon-wrapper">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="search-indicator-wrapper">
                             <div class="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                         </div>
                     </div>

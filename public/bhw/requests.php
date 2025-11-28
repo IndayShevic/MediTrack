@@ -37,7 +37,7 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Approve or reject logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -290,6 +290,30 @@ try {
         .filter-chip:hover:not(.active) {
             background-color: #f9fafb;
         }
+        
+        /* Fix search bar overlapping */
+        #searchInput {
+            padding-left: 2.5rem !important;
+            padding-right: 1rem !important;
+        }
+        
+        .search-icon-wrapper {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Ensure input text doesn't overlap */
+        #searchInput::placeholder {
+            padding-left: 0;
+            padding-right: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-50 bhw-theme">
@@ -373,8 +397,10 @@ try {
                     </div>
                     <div class="relative w-full sm:w-64">
                         <input type="text" id="searchInput" placeholder="Search resident or medicine..." 
-                               class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
-                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                               class="w-full py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                        <div class="search-icon-wrapper">
+                            <i class="fas fa-search text-gray-400 text-sm"></i>
+                        </div>
                     </div>
                 </div>
 

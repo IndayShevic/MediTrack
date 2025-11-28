@@ -24,10 +24,15 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 $is_duty_today = false;
 $today = date('Y-m-d');
 try {
+    // Check if there's a schedule for today
+    // If a schedule exists for today, allow dispensing regardless of is_active status
+    // (is_active might be used for future/past schedule management)
     $dutyCheck = db()->prepare('
-        SELECT id, shift_start, shift_end 
+        SELECT id, shift_start, shift_end, is_active
         FROM bhw_duty_schedules 
-        WHERE bhw_id = ? AND duty_date = ? AND is_active = 1
+        WHERE bhw_id = ? AND duty_date = ?
+        ORDER BY is_active DESC
+        LIMIT 1
     ');
     $dutyCheck->execute([$user['id'], $today]);
     $duty_schedule = $dutyCheck->fetch();
@@ -38,7 +43,7 @@ try {
 
 // Get notification counts for sidebar
 require_once __DIR__ . '/includes/sidebar_counts.php';
-$notification_counts = get_bhw_notification_counts($bhw_purok_id);
+$notification_counts = get_bhw_notification_counts($bhw_purok_id, $user['id']);
 
 // Handle dispensing
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -250,6 +255,82 @@ try {
         .batch-card.selected {
             border-color: #3b82f6;
             background-color: #eff6ff;
+        }
+        
+        /* Toast Notification Styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            min-width: 320px;
+            max-width: 420px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            transform: translateX(120%);
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .toast.show {
+            transform: translateX(0);
+        }
+        .toast.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+        .toast.error {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+        .toast.warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+        .toast.info {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+        .toast-icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            font-size: 20px;
+        }
+        .toast-message {
+            flex: 1;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .toast-close {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toast-close:hover {
+            opacity: 1;
+        }
+        .toast-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 0 0 12px 12px;
+            animation: toastProgress 5s linear forwards;
+        }
+        @keyframes toastProgress {
+            from { width: 100%; }
+            to { width: 0%; }
         }
     </style>
 </head>
@@ -486,7 +567,83 @@ try {
         </div>
     </main>
 
+    <!-- Toast Container -->
+    <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 10000;"></div>
+
     <script>
+        // Toast Notification Manager
+        class ToastManager {
+            constructor() {
+                this.container = document.getElementById('toast-container');
+                this.toasts = [];
+            }
+            
+            show(type, message, duration = 5000) {
+                const toast = this.createToast(type, message);
+                this.container.appendChild(toast);
+                this.toasts.push(toast);
+                
+                // Trigger animation
+                setTimeout(() => toast.classList.add('show'), 100);
+                
+                // Auto remove
+                setTimeout(() => this.remove(toast), duration);
+            }
+            
+            createToast(type, message) {
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                
+                const icons = {
+                    success: '<i class="fas fa-check-circle"></i>',
+                    error: '<i class="fas fa-exclamation-circle"></i>',
+                    warning: '<i class="fas fa-exclamation-triangle"></i>',
+                    info: '<i class="fas fa-info-circle"></i>'
+                };
+                
+                toast.innerHTML = `
+                    <div class="toast-icon">${icons[type] || icons.info}</div>
+                    <div class="toast-message">${message}</div>
+                    <div class="toast-close" onclick="toastManager.remove(this.parentElement)">
+                        <i class="fas fa-times"></i>
+                    </div>
+                    <div class="toast-progress"></div>
+                `;
+                
+                return toast;
+            }
+            
+            remove(toast) {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                    const index = this.toasts.indexOf(toast);
+                    if (index > -1) {
+                        this.toasts.splice(index, 1);
+                    }
+                }, 300);
+            }
+        }
+        
+        // Initialize toast manager
+        const toastManager = new ToastManager();
+        
+        // Show flash messages as toasts
+        <?php 
+        [$flash, $flashType] = get_flash(); 
+        if ($flash): 
+        ?>
+            toastManager.show('<?php echo $flashType === 'success' ? 'success' : ($flashType === 'error' ? 'error' : 'info'); ?>', '<?php echo addslashes($flash); ?>');
+        <?php endif; ?>
+        
+        // Show toast on page load if there's a flash message
+        document.addEventListener('DOMContentLoaded', function() {
+            // Flash messages are already handled above in PHP
+        });
+        
+        // Original script
         // Handle batch selection
         document.querySelectorAll('.batch-radio').forEach(radio => {
             radio.addEventListener('change', function() {
@@ -554,8 +711,24 @@ try {
                 confirmButtonColor: '#3b82f6',
                 cancelButtonColor: '#6b7280',
                 confirmButtonText: 'Yes, Dispense',
-                cancelButtonText: 'Cancel'
+                cancelButtonText: 'Cancel',
+                allowOutsideClick: false,
+                allowEscapeKey: false
             }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading toast
+                    Swal.fire({
+                        title: 'Processing...',
+                        text: 'Dispensing medicine, please wait.',
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                }
                 return result.isConfirmed;
             });
         }

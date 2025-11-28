@@ -653,11 +653,22 @@ $meds = db()->query('
                         
                         <!-- Medicine Image -->
                         <div class="relative mb-6">
-                            <?php if (!empty($m['image_path'])): ?>
-                                <div class="relative overflow-hidden rounded-xl">
-                                    <img src="<?php echo htmlspecialchars(base_url($m['image_path'])); ?>" 
+                            <?php 
+                            $image_url = '';
+                            if (!empty($m['image_path'])) {
+                                // Medicine images are stored in public/uploads/medicines/
+                                // Database has path as uploads/medicines/
+                                // base_url() already includes /public/ in its base path
+                                // So we can use base_url directly with the uploads path
+                                $image_url = base_url($m['image_path']);
+                            }
+                            ?>
+                            <?php if (!empty($image_url)): ?>
+                                <div class="relative overflow-hidden rounded-xl" id="medicine-image-<?php echo $m['id']; ?>">
+                                    <img src="<?php echo htmlspecialchars($image_url); ?>" 
                                          class="h-48 w-full object-cover transition-transform duration-300 hover:scale-105" 
-                                         alt="<?php echo htmlspecialchars($m['name']); ?>" />
+                                         alt="<?php echo htmlspecialchars($m['name']); ?>"
+                                         onerror="this.onerror=null; const container = this.closest('.relative'); if (container) { container.innerHTML='<div class=\'h-48 bg-gradient-to-br from-blue-100 via-purple-100 to-cyan-100 rounded-xl flex items-center justify-center relative overflow-hidden\'><svg class=\'w-16 h-16 text-blue-500\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z\'></path></svg><div class=\'absolute inset-0 bg-gradient-to-t from-blue-500/20 to-transparent\'></div></div>'; }" />
                                     <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                                 </div>
                             <?php else: ?>
@@ -769,7 +780,7 @@ $meds = db()->query('
                         <!-- Action Button -->
                             <div class="flex justify-end">
                             <?php if ($isAvailable): ?>
-                                <button onclick="openRequestModal(<?php echo (int)$m['id']; ?>, '<?php echo htmlspecialchars($m['name']); ?>', '<?php echo htmlspecialchars($m['image_path'] ? base_url($m['image_path']) : ''); ?>')" 
+                                <button onclick="openRequestModal(<?php echo (int)$m['id']; ?>, '<?php echo htmlspecialchars($m['name']); ?>', '<?php echo htmlspecialchars(!empty($m['image_path']) ? base_url($m['image_path']) : ''); ?>')" 
                                         class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -1445,7 +1456,7 @@ $meds = db()->query('
             
             // Set medicine image
             if (medicineImage && medicineImage.trim() !== '') {
-                medicineImageElement.innerHTML = `<img src="${medicineImage}" alt="${medicineName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" />`;
+                medicineImageElement.innerHTML = `<img src="${medicineImage}" alt="${medicineName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" onerror="this.onerror=null; this.parentElement.innerHTML='<svg style=\\'width: 24px; height: 24px; color: #9ca3af;\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z\\'></path></svg>';" />`;
             } else {
                 medicineImageElement.innerHTML = `<svg style="width: 24px; height: 24px; color: #9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>

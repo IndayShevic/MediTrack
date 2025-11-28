@@ -5,6 +5,88 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
+$user = current_user();
+
+// Get updated user data with profile image
+$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+$userStmt->execute([$user['id']]);
+$user_data = $userStmt->fetch() ?: [];
+if (!empty($user_data)) {
+    $user = array_merge($user, $user_data);
+}
+if (!isset($user_data['profile_image'])) {
+    $user_data['profile_image'] = null;
+}
+
+$medicines = db()->query('SELECT id, name FROM medicines WHERE is_active=1 ORDER BY name')->fetchAll();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? 'add';
+    
+    if ($action === 'delete') {
+        $batch_id = (int)($_POST['batch_id'] ?? 0);
+        if ($batch_id > 0) {
+            try {
+                $stmt = db()->prepare('DELETE FROM medicine_batches WHERE id = ?');
+                $stmt->execute([$batch_id]);
+                set_flash('Batch deleted successfully', 'success');
+            } catch (Throwable $e) {
+                set_flash('Failed to delete batch: ' . $e->getMessage(), 'error');
+            }
+        }
+        redirect_to('super_admin/batches.php');
+    }
+
+    $medicine_id = (int)($_POST['medicine_id'] ?? 0);
+    $batch_code = trim($_POST['batch_code'] ?? '');
+    $quantity = (int)($_POST['quantity'] ?? 0);
+    $expiry_date = $_POST['expiry_date'] ?? '';
+    $received_at = $_POST['received_at'] ?? date('Y-m-d');
+    $today = date('Y-m-d');
+
+    if ($action === 'add' || $action === 'update') {
+        if ($medicine_id <= 0) { set_flash('Select a medicine','error'); redirect_to('super_admin/batches.php'); }
+        if ($batch_code === '') { set_flash('Batch code is required','error'); redirect_to('super_admin/batches.php'); }
+        if ($quantity <= 0) { set_flash('Quantity must be greater than zero','error'); redirect_to('super_admin/batches.php'); }
+        if ($expiry_date === '') { set_flash('Expiry date is required','error'); redirect_to('super_admin/batches.php'); }
+    }
+
+    if ($action === 'add') {
+        $stmt = db()->prepare('INSERT INTO medicine_batches (medicine_id, batch_code, quantity, quantity_available, expiry_date, received_at) VALUES (?,?,?,?,?,?)');
+        try { 
+            $stmt->execute([$medicine_id, $batch_code, $quantity, $quantity, $expiry_date, $received_at]); 
+            set_flash('Batch added successfully','success'); 
+        } catch (Throwable $e) { 
+            set_flash('Failed to add batch: ' . $e->getMessage(),'error'); 
+        }
+    } elseif ($action === 'update') {
+        $batch_id = (int)($_POST['batch_id'] ?? 0);
+        if ($batch_id > 0) {
+            try {
+                $old_batch = db()->prepare('SELECT quantity, quantity_available FROM medicine_batches WHERE id = ?');
+                $old_batch->execute([$batch_id]);
+                $current = $old_batch->fetch();
+                
+                if ($current) {
+                    $quantity_diff = $quantity - $current['quantity'];
+                    $new_available = $current['quantity_available'] + $quantity_diff;
+                    
+                    if ($new_available < 0) {
+                        set_flash('Cannot reduce quantity below dispensed amount', 'error');
+                    } else {
+                        $stmt = db()->prepare('UPDATE medicine_batches SET medicine_id=?, batch_code=?, quantity=?, quantity_available=?, expiry_date=?, received_at=? WHERE id=?');
+                        $stmt->execute([$medicine_id, $batch_code, $quantity, $new_available, $expiry_date, $received_at, $batch_id]);
+                        set_flash('Batch updated successfully', 'success');
+                    }
+                }
+            } catch (Throwable $e) {
+                set_flash('Failed to update batch: ' . $e->getMessage(), 'error');
+            }
+        }
+    }
+    redirect_to('super_admin/batches.php');
+}
+
 $isAjax = setup_dashboard_ajax_capture();
 redirect_to_dashboard_shell($isAjax);
 
@@ -24,39 +106,7 @@ function upload_url(string $path): string {
     return rtrim($base, '/') . '/' . $clean_path;
 }
 
-$user = current_user();
-
-// Get updated user data with profile image
-$userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
-$userStmt->execute([$user['id']]);
-$user_data = $userStmt->fetch() ?: [];
-if (!empty($user_data)) {
-    $user = array_merge($user, $user_data);
-}
-if (!isset($user_data['profile_image'])) {
-    $user_data['profile_image'] = null;
-}
-
-$medicines = db()->query('SELECT id, name FROM medicines WHERE is_active=1 ORDER BY name')->fetchAll();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $medicine_id = (int)($_POST['medicine_id'] ?? 0);
-    $batch_code = trim($_POST['batch_code'] ?? '');
-    $quantity = (int)($_POST['quantity'] ?? 0);
-    $expiry_date = $_POST['expiry_date'] ?? '';
-    $received_at = $_POST['received_at'] ?? date('Y-m-d');
-    $today = date('Y-m-d');
-    if ($medicine_id <= 0) { set_flash('Select a medicine','error'); redirect_to('super_admin/batches.php'); }
-    if ($batch_code === '') { set_flash('Batch code is required','error'); redirect_to('super_admin/batches.php'); }
-    if ($quantity <= 0) { set_flash('Quantity must be greater than zero','error'); redirect_to('super_admin/batches.php'); }
-    if ($expiry_date === '' || $expiry_date <= $today) { set_flash('Expiry date must be in the future','error'); redirect_to('super_admin/batches.php'); }
-
-    $stmt = db()->prepare('INSERT INTO medicine_batches (medicine_id, batch_code, quantity, quantity_available, expiry_date, received_at) VALUES (?,?,?,?,?,?)');
-    try { $stmt->execute([$medicine_id, $batch_code, $quantity, $quantity, $expiry_date, $received_at]); set_flash('Batch added','success'); } catch (Throwable $e) { set_flash('Failed to add batch','error'); }
-    redirect_to('super_admin/batches.php');
-}
-
-$batches = db()->query('SELECT b.id, m.name AS medicine, m.image_path, b.batch_code, b.quantity, b.quantity_available, b.expiry_date, b.received_at FROM medicine_batches b JOIN medicines m ON m.id=b.medicine_id ORDER BY b.expiry_date ASC')->fetchAll();
+$batches = db()->query('SELECT b.id, b.medicine_id, m.name AS medicine, m.image_path, b.batch_code, b.quantity, b.quantity_available, b.expiry_date, b.received_at FROM medicine_batches b JOIN medicines m ON m.id=b.medicine_id ORDER BY b.expiry_date ASC')->fetchAll();
 
 // Calculate statistics
 $total_batches = count($batches);
@@ -132,112 +182,118 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     ]); ?>
 
     <!-- Main Content -->
+    <!-- Main Content -->
     <main class="main-content">
-        <!-- Statistics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <!-- Total Batches Card -->
-            <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.1s">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="relative">
-                        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                            </svg>
-                        </div>
-                        <div class="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-3xl font-bold text-gray-900" id="stat-total-batches">0</p>
-                        <p class="text-sm text-gray-500">Total</p>
-                    </div>
-                </div>
-                <div class="space-y-2">
-                    <p class="text-sm font-semibold text-gray-700">Medicine Batches</p>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
-                        <span class="text-xs text-gray-500">All inventory batches</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Good Batches Card -->
-            <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.2s">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="relative">
-                        <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-3xl font-bold text-gray-900" id="stat-good-batches">0</p>
-                        <p class="text-sm text-gray-500">Good</p>
-                    </div>
-                </div>
-                <div class="space-y-2">
-                    <p class="text-sm font-semibold text-gray-700">Healthy Batches</p>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-green-400 rounded-full"></div>
-                        <span class="text-xs text-gray-500">No issues detected</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Expiring Soon Card -->
-            <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.3s">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="relative">
-                        <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <div class="absolute -top-1 -right-1 w-4 h-4 bg-orange-400 rounded-full animate-pulse"></div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-3xl font-bold text-gray-900" id="stat-expiring-batches">0</p>
-                        <p class="text-sm text-gray-500">Expiring</p>
-                    </div>
-                </div>
-                <div class="space-y-2">
-                    <p class="text-sm font-semibold text-gray-700">Expiring Soon</p>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
-                        <span class="text-xs text-gray-500">Within 30 days</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Expired Batches Card -->
-            <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.4s">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="relative">
-                        <div class="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </div>
-                        <div class="absolute -top-1 -right-1 w-4 h-4 bg-red-400 rounded-full animate-pulse"></div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-3xl font-bold text-gray-900" id="stat-expired-batches">0</p>
-                        <p class="text-sm text-gray-500">Expired</p>
-                    </div>
-                </div>
-                <div class="space-y-2">
-                    <p class="text-sm font-semibold text-gray-700">Expired Batches</p>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-red-400 rounded-full"></div>
-                        <span class="text-xs text-gray-500">Requires attention</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Content -->
         <div class="content-body">
+            <!-- Page Title -->
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">Batches</h1>
+                <p class="text-sm text-gray-500">Manage medicine batches and expiration</p>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- Total Batches Card -->
+                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.1s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="relative">
+                            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold text-gray-900" id="stat-total-batches">0</p>
+                            <p class="text-sm text-gray-500">Total</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-sm font-semibold text-gray-700">Medicine Batches</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
+                            <span class="text-xs text-gray-500">All inventory batches</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Good Batches Card -->
+                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.2s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="relative">
+                            <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold text-gray-900" id="stat-good-batches">0</p>
+                            <p class="text-sm text-gray-500">Good</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-sm font-semibold text-gray-700">Healthy Batches</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                            <span class="text-xs text-gray-500">No issues detected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expiring Soon Card -->
+                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.3s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="relative">
+                            <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-orange-400 rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold text-gray-900" id="stat-expiring-batches">0</p>
+                            <p class="text-sm text-gray-500">Expiring</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-sm font-semibold text-gray-700">Expiring Soon</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
+                            <span class="text-xs text-gray-500">Within 30 days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expired Batches Card -->
+                <div class="stat-card hover-lift animate-fade-in-up p-6 rounded-2xl shadow-lg" style="animation-delay: 0.4s">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="relative">
+                            <div class="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </div>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-red-400 rounded-full animate-pulse"></div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold text-gray-900" id="stat-expired-batches">0</p>
+                            <p class="text-sm text-gray-500">Expired</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-sm font-semibold text-gray-700">Expired Batches</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-red-400 rounded-full"></div>
+                            <span class="text-xs text-gray-500">Requires attention</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <?php [$flash, $ft] = get_flash(); if ($flash): ?>
                 <div class="mb-6 p-4 rounded-lg <?php echo $ft==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'; ?> animate-fade-in">
                     <div class="flex items-center">
@@ -344,6 +400,12 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                  data-medicine="<?php echo strtolower(htmlspecialchars($b['medicine'])); ?>"
                                  data-batch="<?php echo strtolower(htmlspecialchars($b['batch_code'])); ?>"
                                  data-status="<?php echo $status; ?>"
+                                 data-batch-id="<?php echo $b['id']; ?>"
+                                 data-medicine-id="<?php echo $b['medicine_id']; ?>"
+                                 data-batch-code="<?php echo htmlspecialchars($b['batch_code']); ?>"
+                                 data-quantity="<?php echo $b['quantity']; ?>"
+                                 data-expiry-date="<?php echo $b['expiry_date']; ?>"
+                                 data-received-at="<?php echo $b['received_at']; ?>"
                                  style="animation-delay: <?php echo $index * 0.1; ?>s">
                                 
                                 <!-- Batch Header -->
@@ -351,20 +413,20 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                     <div class="flex items-center space-x-3">
                                         <?php 
                                         $image_url = '';
-                                        $image_exists = false;
                                         if (!empty($b['image_path'])) {
                                             $image_url = base_url($b['image_path']);
-                                            $full_path = __DIR__ . '/../' . $b['image_path'];
-                                            $image_exists = file_exists($full_path);
                                         }
                                         ?>
-                                        <?php if (!empty($b['image_path']) && $image_exists): ?>
-                                            <div class="w-10 h-10 rounded-xl overflow-hidden bg-white shadow-sm flex-shrink-0 border border-gray-200">
+                                        <?php if (!empty($image_url)): ?>
+                                            <!-- Simplified Image Display -->
+                                            <div class="flex-shrink-0">
                                                 <img src="<?php echo htmlspecialchars($image_url); ?>" 
                                                      alt="<?php echo htmlspecialchars($b['medicine']); ?>"
-                                                     class="w-full h-full object-cover"
+                                                     class="w-10 h-10 rounded-xl border border-gray-200"
+                                                     style="display: block; object-fit: cover;"
                                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                                <div class="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold" style="display: none;">
+                                                <!-- Fallback -->
+                                                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-xs font-bold" style="display: none;">
                                                     <?php echo strtoupper(substr($b['medicine'], 0, 2)); ?>
                                                 </div>
                                             </div>
@@ -481,13 +543,13 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
                                 <!-- Actions -->
                                 <div class="flex items-center space-x-2">
-                                    <button class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium rounded-lg hover:from-blue-100 hover:to-blue-200 transition-all duration-200">
+                                    <button onclick="editBatch(this)" class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium rounded-lg hover:from-blue-100 hover:to-blue-200 transition-all duration-200">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
                                         Edit
                                     </button>
-                                    <button class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 text-red-700 font-medium rounded-lg hover:from-red-100 hover:to-red-200 transition-all duration-200">
+                                    <button onclick="deleteBatch(<?php echo $b['id']; ?>)" class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 text-red-700 font-medium rounded-lg hover:from-red-100 hover:to-red-200 transition-all duration-200">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                         </svg>
@@ -516,82 +578,92 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         </div>
     </main>
 
-    <!-- Add Batch Modal -->
-    <div id="addBatchModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 2rem; border-radius: 1rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
-            <div class="p-8">
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-2xl font-bold text-gray-900">Add New Batch</h3>
-                            <p class="text-gray-600">Add a new medicine batch to your inventory</p>
-                        </div>
-                    </div>
-                    <button onclick="closeAddBatchModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+    <!-- Add/Edit Batch Modal -->
+    <div id="addBatchModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm opacity-0 invisible transition-all duration-300">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl transform scale-95 transition-all duration-300 m-4" id="modalContent">
+            <!-- Header -->
+            <div class="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-t-2xl">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                         </svg>
-                    </button>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900" id="modalTitle">Add New Batch</h3>
+                        <p class="text-sm text-gray-500" id="modalSubtitle">Add a new medicine batch to your inventory</p>
+                    </div>
                 </div>
-                
-                <form method="post" class="space-y-6">
+                <button onclick="closeAddBatchModal()" class="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-8">
+                <form action="<?php echo htmlspecialchars(base_url('super_admin/batches.php')); ?>" method="post" class="space-y-6" id="batchForm">
+                    <input type="hidden" name="action" id="formAction" value="add">
+                    <input type="hidden" name="batch_id" id="formBatchId" value="">
+                    
+                    <!-- Medicine Select -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">Medicine</label>
+                        <select name="medicine_id" id="medicineId" required 
+                                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white">
+                            <option value="">Select Medicine</option>
+                            <?php foreach ($medicines as $med): ?>
+                                <option value="<?php echo (int)$med['id']; ?>"><?php echo htmlspecialchars($med['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Medicine</label>
-                            <select name="medicine_id" required 
-                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                                <option value="">Select Medicine</option>
-                                <?php foreach ($medicines as $med): ?>
-                                    <option value="<?php echo (int)$med['id']; ?>"><?php echo htmlspecialchars($med['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
+                        <!-- Batch Code -->
                         <div class="space-y-2">
                             <label class="block text-sm font-semibold text-gray-700">Batch Code</label>
-                            <input name="batch_code" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
+                            <input name="batch_code" id="batchCode" required 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white" 
                                    placeholder="Enter batch code" />
+                        </div>
+
+                        <!-- Quantity -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Quantity</label>
+                            <input name="quantity" id="quantity" type="number" min="1" required 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white" 
+                                   placeholder="Enter quantity" />
                         </div>
                     </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Quantity</label>
-                            <input name="quantity" type="number" min="1" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter quantity" />
-                        </div>
-                        
+                        <!-- Expiry Date -->
                         <div class="space-y-2">
                             <label class="block text-sm font-semibold text-gray-700">Expiry Date</label>
-                            <input name="expiry_date" type="date" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" />
+                            <input name="expiry_date" id="expiryDate" type="date" required 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white" />
+                        </div>
+
+                        <!-- Received Date -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Received Date</label>
+                            <input name="received_at" id="receivedAt" type="date" value="<?php echo date('Y-m-d'); ?>" 
+                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50/50 hover:bg-white" />
                         </div>
                     </div>
                     
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Received Date</label>
-                        <input name="received_at" type="date" value="<?php echo date('Y-m-d'); ?>" 
-                               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" />
-                    </div>
-                    
-                    <div class="flex justify-end space-x-3 pt-4">
+                    <div class="flex justify-end space-x-3 pt-6 border-t border-gray-100">
                         <button type="button" onclick="closeAddBatchModal()" 
-                                class="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all duration-200">
+                                class="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200">
                             Cancel
                         </button>
                         <button type="submit" 
-                                class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl">
+                                class="inline-flex items-center px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-blue-500/30">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
-                            Add Batch
+                            <span id="submitButtonText">Save Batch</span>
                         </button>
                     </div>
                 </form>
@@ -601,20 +673,86 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
     <script>
         function openAddBatchModal() {
+            // Reset form for adding
+            document.getElementById('batchForm').reset();
+            document.getElementById('formAction').value = 'add';
+            document.getElementById('formBatchId').value = '';
+            document.getElementById('modalTitle').textContent = 'Add New Batch';
+            document.getElementById('modalSubtitle').textContent = 'Add a new medicine batch to your inventory';
+            document.getElementById('submitButtonText').textContent = 'Add Batch';
+            document.getElementById('receivedAt').value = '<?php echo date('Y-m-d'); ?>';
+            
             const modal = document.getElementById('addBatchModal');
+            const content = document.getElementById('modalContent');
             if (modal) {
-                modal.style.display = 'flex';
-                modal.style.visibility = 'visible';
-                modal.style.opacity = '1';
+                modal.classList.remove('invisible', 'opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
             }
+        }
+
+        function editBatch(button) {
+            const card = button.closest('.batch-card');
+            if (!card) return;
+
+            // Populate form
+            document.getElementById('formAction').value = 'update';
+            document.getElementById('formBatchId').value = card.dataset.batchId;
+            document.getElementById('medicineId').value = card.dataset.medicineId;
+            document.getElementById('batchCode').value = card.dataset.batchCode;
+            document.getElementById('quantity').value = card.dataset.quantity;
+            document.getElementById('expiryDate').value = card.dataset.expiryDate;
+            document.getElementById('receivedAt').value = card.dataset.receivedAt;
+
+            // Update modal UI
+            document.getElementById('modalTitle').textContent = 'Edit Batch';
+            document.getElementById('modalSubtitle').textContent = 'Update batch details';
+            document.getElementById('submitButtonText').textContent = 'Update Batch';
+
+            const modal = document.getElementById('addBatchModal');
+            const content = document.getElementById('modalContent');
+            if (modal) {
+                modal.classList.remove('invisible', 'opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }
+        }
+
+        function deleteBatch(id) {
+            Swal.fire({
+                title: 'Delete Batch?',
+                text: "Are you sure you want to delete this batch? This action cannot be undone.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="batch_id" value="${id}">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
         }
 
         function closeAddBatchModal() {
             const modal = document.getElementById('addBatchModal');
+            const content = document.getElementById('modalContent');
             if (modal) {
-                modal.style.display = 'none';
-                modal.style.visibility = 'hidden';
-                modal.style.opacity = '0';
+                modal.classList.add('opacity-0');
+                content.classList.remove('scale-100');
+                content.classList.add('scale-95');
+                
+                // Wait for transition to finish before hiding
+                setTimeout(() => {
+                    modal.classList.add('invisible');
+                }, 300);
             }
         }
 

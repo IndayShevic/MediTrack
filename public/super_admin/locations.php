@@ -5,8 +5,7 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
-$isAjax = setup_dashboard_ajax_capture();
-redirect_to_dashboard_shell($isAjax);
+// Redirect logic moved to after POST handling
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -43,8 +42,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $success = false;
     $error = '';
     
+    // Sanitize input data - remove banned characters and prevent HTML/script injection
+    function sanitizeInputBackend($value, $pattern = null) {
+        if (empty($value)) return '';
+        
+        // Remove script tags and HTML tags (prevent XSS)
+        $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+        $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+        
+        // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+        $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+        $sanitized = preg_replace($banned, '', $sanitized);
+        
+        // Remove control characters and emojis
+        $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+        $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+        
+        // Trim leading/trailing spaces
+        $sanitized = trim($sanitized);
+        
+        // Apply pattern if provided
+        if ($pattern && $sanitized) {
+            $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+        }
+        
+        return $sanitized;
+    }
+    
     if ($action === 'add_barangay') {
         $name = trim($_POST['barangay_name'] ?? '');
+        
+        // Validate barangay name (letters, numbers, spaces, hyphens, apostrophes, periods, commas)
+        if (empty($name) || strlen($name) < 2) {
+            $error = 'Barangay name must be at least 2 characters long.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ0-9\s\-\'.,]+$/', $name)) {
+            $error = 'Barangay name: Only letters, numbers, spaces, hyphens, apostrophes, periods, and commas are allowed.';
+        } else {
+            $name = sanitizeInputBackend($name, 'A-Za-zÀ-ÿ0-9\s\-\'.,');
+            
         if ($name !== '') {
             try {
                 $stmt = db()->prepare('INSERT INTO barangays (name) VALUES (?)');
@@ -56,12 +91,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $error = 'Barangay name is required.';
+            }
         }
     }
     
     if ($action === 'add_purok') {
         $barangay_id = (int)($_POST['barangay_id'] ?? 0);
         $name = trim($_POST['purok_name'] ?? '');
+        
+        // Validate purok name (letters, numbers, spaces, hyphens, apostrophes, periods, commas)
+        if (empty($name) || strlen($name) < 2) {
+            $error = 'Purok name must be at least 2 characters long.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ0-9\s\-\'.,]+$/', $name)) {
+            $error = 'Purok name: Only letters, numbers, spaces, hyphens, apostrophes, periods, and commas are allowed.';
+        } else {
+            $name = sanitizeInputBackend($name, 'A-Za-zÀ-ÿ0-9\s\-\'.,');
+            
         if ($barangay_id > 0 && $name !== '') {
             try {
                 $stmt = db()->prepare('INSERT INTO puroks (barangay_id, name) VALUES (?, ?)');
@@ -73,12 +118,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $error = 'Barangay and Purok name are required.';
+            }
         }
     }
     
     if ($action === 'update_barangay') {
         $id = (int)($_POST['barangay_id'] ?? 0);
         $name = trim($_POST['barangay_name'] ?? '');
+        
+        // Validate barangay name
+        if (empty($name) || strlen($name) < 2) {
+            $error = 'Barangay name must be at least 2 characters long.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ0-9\s\-\'.,]+$/', $name)) {
+            $error = 'Barangay name: Only letters, numbers, spaces, hyphens, apostrophes, periods, and commas are allowed.';
+        } else {
+            $name = sanitizeInputBackend($name, 'A-Za-zÀ-ÿ0-9\s\-\'.,');
+            
         if ($id > 0 && $name !== '') {
             try {
                 $stmt = db()->prepare('UPDATE barangays SET name = ? WHERE id = ?');
@@ -90,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $error = 'Barangay ID and name are required.';
+            }
         }
     }
     
@@ -97,6 +153,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['purok_id'] ?? 0);
         $barangay_id = (int)($_POST['barangay_id'] ?? 0);
         $name = trim($_POST['purok_name'] ?? '');
+        
+        // Validate purok name
+        if (empty($name) || strlen($name) < 2) {
+            $error = 'Purok name must be at least 2 characters long.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ0-9\s\-\'.,]+$/', $name)) {
+            $error = 'Purok name: Only letters, numbers, spaces, hyphens, apostrophes, periods, and commas are allowed.';
+        } else {
+            $name = sanitizeInputBackend($name, 'A-Za-zÀ-ÿ0-9\s\-\'.,');
+            
         if ($id > 0 && $barangay_id > 0 && $name !== '') {
             try {
                 $stmt = db()->prepare('UPDATE puroks SET barangay_id = ?, name = ? WHERE id = ?');
@@ -108,6 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $error = 'Purok ID, Barangay, and name are required.';
+            }
         }
     }
     
@@ -154,12 +220,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Redirect with success/error message
     if ($success) {
-        redirect_to('super_admin/locations.php?success=1&action=' . urlencode($action));
+        $msg = match($action) {
+            'add_barangay' => 'Barangay added successfully!',
+            'add_purok' => 'Purok added successfully!',
+            'update_barangay' => 'Barangay updated successfully!',
+            'update_purok' => 'Purok updated successfully!',
+            'delete_barangay' => 'Barangay deleted successfully!',
+            'delete_purok' => 'Purok deleted successfully!',
+            default => 'Operation completed successfully!'
+        };
+        set_flash($msg, 'success');
     } else {
-        redirect_to('super_admin/locations.php?error=' . urlencode($error) . '&action=' . urlencode($action));
+        set_flash($error, 'error');
     }
+    redirect_to('super_admin/locations.php');
     exit;
 }
+
+$isAjax = setup_dashboard_ajax_capture();
+redirect_to_dashboard_shell($isAjax);
 
 $barangays = db()->query('SELECT b.id, b.name, (SELECT COUNT(*) FROM puroks p WHERE p.barangay_id = b.id) AS purok_count FROM barangays b ORDER BY b.name')->fetchAll();
 $puroks = db()->query('SELECT p.id, p.name, b.name AS barangay, p.barangay_id FROM puroks p JOIN barangays b ON b.id=p.barangay_id ORDER BY b.name, p.name')->fetchAll();
@@ -462,59 +541,24 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
 
         <!-- Content -->
         <div class="content-body">
-            <!-- Success/Error Messages -->
-            <?php if (isset($_GET['success']) && $_GET['success'] == '1'): ?>
-                <div class="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-xl flex items-center justify-between animate-fade-in-up">
-                    <div class="flex items-center space-x-3">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span class="font-semibold">
-                            <?php 
-                            if (isset($_GET['action'])) {
-                                $action = $_GET['action'];
-                                if ($action === 'add_barangay') {
-                                    echo 'Barangay added successfully!';
-                                } elseif ($action === 'add_purok') {
-                                    echo 'Purok added successfully!';
-                                } elseif ($action === 'update_barangay') {
-                                    echo 'Barangay updated successfully!';
-                                } elseif ($action === 'update_purok') {
-                                    echo 'Purok updated successfully!';
-                                } elseif ($action === 'delete_barangay') {
-                                    echo 'Barangay deleted successfully!';
-                                } elseif ($action === 'delete_purok') {
-                                    echo 'Purok deleted successfully!';
-                                } else {
-                                    echo 'Operation completed successfully!';
-                                }
-                            } else {
-                                echo 'Operation completed successfully!';
-                            }
-                            ?>
-                        </span>
+            <!-- Flash Message -->
+            <?php
+            $flash = get_flash();
+            if ($flash && !empty($flash[0])): 
+                list($flash_msg, $flash_type) = $flash;
+            ?>
+                <div class="mb-6 p-4 rounded-lg <?php echo $flash_type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : ($flash_type === 'warning' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-red-100 text-red-700 border border-red-200'); ?> flex items-center justify-between animate-fade-in-up">
+                    <div class="flex items-center">
+                        <?php if ($flash_type === 'success'): ?>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <?php elseif ($flash_type === 'warning'): ?>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        <?php else: ?>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <?php endif; ?>
+                        <span><?php echo htmlspecialchars($flash_msg); ?></span>
                     </div>
-                    <button onclick="this.parentElement.remove()" class="text-green-700 hover:text-green-900">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_GET['error'])): ?>
-                <div class="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-xl flex items-center justify-between animate-fade-in-up">
-                    <div class="flex items-center space-x-3">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span class="font-semibold"><?php echo htmlspecialchars($_GET['error']); ?></span>
-                    </div>
-                    <button onclick="this.parentElement.remove()" class="text-red-700 hover:text-red-900">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
+                    <button onclick="this.parentElement.remove()" class="text-sm font-semibold hover:underline">Dismiss</button>
                 </div>
             <?php endif; ?>
             
@@ -1270,8 +1314,65 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
             document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
             filterLocations();
         }
+        
+        // Real-time input filtering to prevent invalid characters
+        function filterInput(input, pattern, maxLength = null) {
+            const originalValue = input.value;
+            // Remove invalid characters based on pattern
+            let filtered = originalValue.replace(new RegExp('[^' + pattern + ']', 'g'), '');
+            
+            // Apply max length if specified
+            if (maxLength && filtered.length > maxLength) {
+                filtered = filtered.substring(0, maxLength);
+            }
+            
+            // Update value if it changed
+            if (filtered !== originalValue) {
+                const cursorPos = input.selectionStart;
+                input.value = filtered;
+                // Restore cursor position (adjust for removed characters)
+                const newPos = Math.min(cursorPos - (originalValue.length - filtered.length), filtered.length);
+                input.setSelectionRange(newPos, newPos);
+            }
+        }
+        
+        // Setup input filtering for location name fields (barangay/purok)
+        function setupLocationNameValidation(input) {
+            if (!input) return;
+            
+            // Location names: letters, numbers, spaces, hyphens, apostrophes, periods, commas
+            input.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ0-9\\s\\-\'.,');
+            });
+            
+            input.addEventListener('keypress', function(e) {
+                // Allow: letters, numbers, space, hyphen, apostrophe, period, comma, backspace, delete, tab, arrow keys
+                const char = String.fromCharCode(e.which || e.keyCode);
+                if (!/[A-Za-zÀ-ÿ0-9\s\-\'.,]/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                    e.preventDefault();
+                }
+            });
+            
+            input.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ0-9\s\-\'.,]/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Setup validation for location name fields
+            const barangayNameInputs = document.querySelectorAll('input[name="barangay_name"]');
+            const purokNameInputs = document.querySelectorAll('input[name="purok_name"]');
+            barangayNameInputs.forEach(input => setupLocationNameValidation(input));
+            purokNameInputs.forEach(input => setupLocationNameValidation(input));
+            
             const searchInput = document.getElementById('searchInput');
             const filterChips = document.querySelectorAll('.filter-chip');
             const locationCards = document.querySelectorAll('.location-card');
@@ -1486,9 +1587,7 @@ $avg_puroks_per_barangay = $total_barangays > 0 ? round($total_puroks / $total_b
             }
 
             // Initialize profile dropdown when page loads
-            document.addEventListener('DOMContentLoaded', function() {
-                initProfileDropdown();
-            });
+            initProfileDropdown();
 
             // Add click outside to close modals
             document.addEventListener('click', function(e) {

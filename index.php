@@ -141,6 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $first = trim($_POST['first_name'] ?? '');
     $last = trim($_POST['last_name'] ?? '');
     $middle = trim($_POST['middle_initial'] ?? '');
+    $suffix = trim($_POST['suffix'] ?? '');
     $dob = $_POST['date_of_birth'] ?? '';
     $barangay_id = (int)($_POST['barangay_id'] ?? 0);
     $purok_id = (int)($_POST['purok_id'] ?? 0);
@@ -210,6 +211,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Middle initial can only be 1 character.';
         } elseif (!preg_match('/^[A-Za-zÀ-ÿ]+$/', $middle)) {
             $errors[] = 'Middle initial can only contain letters.';
+        }
+    }
+    
+    // Suffix validation
+    if (!empty($suffix)) {
+        $allowed_suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+        if (!in_array($suffix, $allowed_suffixes)) {
+            $errors[] = 'Invalid suffix selected.';
         }
     }
     
@@ -297,6 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $first_name = trim($member['first_name'] ?? '');
             $middle_initial = trim($member['middle_initial'] ?? '');
             $last_name = trim($member['last_name'] ?? '');
+            $suffix_family = trim($member['suffix'] ?? '');
             $relationship = trim($member['relationship'] ?? '');
             $relationship_other = trim($member['relationship_other'] ?? '');
             $date_of_birth = $member['date_of_birth'] ?? '';
@@ -340,6 +350,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 
+                // Suffix validation for family members
+                if (!empty($suffix_family)) {
+                    $allowed_suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+                    if (!in_array($suffix_family, $allowed_suffixes)) {
+                        $errors[] = "Family member " . ($index + 1) . ": Invalid suffix selected.";
+                    }
+                }
+                
                 // Date of birth validation
                 if (!empty($date_of_birth)) {
                     $birthDate = new DateTime($date_of_birth);
@@ -364,6 +382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'first_name' => $first_name,
                         'middle_initial' => $middle_initial,
                         'last_name' => $last_name,
+                        'suffix' => $suffix_family,
                         'relationship' => $relationship,
                         'date_of_birth' => $date_of_birth
                     ];
@@ -401,8 +420,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $address = $purokName && $barangayName ? "$purokName, $barangayName" : '';
             
             // Insert into pending_residents table (email is already verified at this point)
-            $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, date_of_birth, phone, address, barangay_id, purok_id, email_verified) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
-            $result = $insPending->execute([$email, $hash, $first, $last, $middle, $dob, $phone, $address, $barangay_id, $purok_id, 1]);
+            $insPending = $pdo->prepare('INSERT INTO pending_residents(email, password_hash, first_name, last_name, middle_initial, suffix, date_of_birth, phone, address, barangay_id, purok_id, email_verified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+            $result = $insPending->execute([$email, $hash, $first, $last, $middle, $suffix ?: null, $dob, $phone, $address, $barangay_id, $purok_id, 1]);
             
             if (!$result) {
                 throw new Exception('Failed to insert pending resident: ' . implode(', ', $insPending->errorInfo()));
@@ -413,9 +432,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Insert family members
             if (!empty($family_members)) {
-                $insFamily = $pdo->prepare('INSERT INTO pending_family_members(pending_resident_id, first_name, middle_initial, last_name, relationship, date_of_birth) VALUES(?,?,?,?,?,?)');
+                $insFamily = $pdo->prepare('INSERT INTO pending_family_members(pending_resident_id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth) VALUES(?,?,?,?,?,?,?)');
                 foreach ($family_members as $member) {
-                    $result = $insFamily->execute([$pendingId, $member['first_name'], $member['middle_initial'], $member['last_name'], $member['relationship'], $member['date_of_birth']]);
+                    $result = $insFamily->execute([$pendingId, $member['first_name'], $member['middle_initial'], $member['last_name'], $member['suffix'] ?: null, $member['relationship'], $member['date_of_birth']]);
                     if (!$result) {
                         throw new Exception('Failed to insert family member: ' . implode(', ', $insFamily->errorInfo()));
                     }
@@ -435,7 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($bhw) {
                     error_log('BHW found: ' . $bhw['email']);
                     $bhwName = format_full_name($bhw['first_name'] ?? '', $bhw['last_name'] ?? '', $bhw['middle_initial'] ?? null);
-                    $residentName = format_full_name($first, $last, $middle);
+                    $residentName = format_full_name($first, $last, $middle, $suffix ?: null);
                     $success = send_new_registration_notification_to_bhw($bhw['email'], $bhwName, $residentName, $bhw['purok_name']);
                     error_log('Email sent successfully: ' . ($success ? 'Yes' : 'No'));
                     log_email_notification(0, 'new_registration', 'New Registration', 'New resident registration notification sent to BHW', $success);
@@ -3342,7 +3361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .family-member-fields {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 1rem;
             margin-bottom: 1rem;
         }
@@ -4279,7 +4298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <span>Personal Details</span>
                             </div>
                         
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                             <!-- First Name -->
                                 <div>
                                 <input name="first_name" required 
@@ -4302,6 +4321,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                            class="register-input-field" 
                                            placeholder="Last Name" />
                             </div>
+                            
+                            <!-- Suffix -->
+                                <div>
+                                    <select name="suffix" class="register-input-field appearance-none" style="padding-right: 3.5rem !important;">
+                                        <option value="">Suffix (optional)</option>
+                                        <option value="Jr.">Jr. (Junior)</option>
+                                        <option value="Sr.">Sr. (Senior)</option>
+                                        <option value="II">II</option>
+                                        <option value="III">III</option>
+                                        <option value="IV">IV</option>
+                                        <option value="V">V</option>
+                                    </select>
+                                    <div class="register-dropdown-arrow">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
+                                </div>
                         </div>
                         
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -4523,7 +4560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         </div>
                                     </div>
                                     <div class="family-member-content">
-                                        <!-- Row 1: First Name, Middle Initial, Last Name -->
+                                        <!-- Row 1: First Name, Middle Initial, Last Name, Suffix -->
                                         <div class="family-member-fields">
                                             <div>
                                         <input type="text" name="family_members[0][first_name]" 
@@ -4540,6 +4577,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <input type="text" name="family_members[0][last_name]" 
                                                        class="register-input-field" 
                                                        placeholder="Last Name" />
+                                            </div>
+                                            <div>
+                                                <select name="family_members[0][suffix]" class="register-input-field appearance-none" style="padding-right: 3.5rem !important;">
+                                                    <option value="">Suffix (optional)</option>
+                                                    <option value="Jr.">Jr. (Junior)</option>
+                                                    <option value="Sr.">Sr. (Senior)</option>
+                                                    <option value="II">II</option>
+                                                    <option value="III">III</option>
+                                                    <option value="IV">IV</option>
+                                                    <option value="V">V</option>
+                                                </select>
+                                                <div class="register-dropdown-arrow">
+                                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                                    </svg>
+                                                </div>
                                             </div>
                                     </div>
                                     
@@ -4966,15 +5019,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             return '';
         }
-        
-        // ============================================
-        // COMPREHENSIVE INPUT VALIDATION SYSTEM
-        // ============================================
-        
-        // Global banned characters (excluding @ which is needed for emails)
-        const BANNED_CHARS = /[!$%^&*()={}\[\]:;"<>?\/\\|~`]/g;
-        const BANNED_CHARS_STR = '!$%^&*()={}[]:;"<>?/\\|~`';
-        
         // Banned characters for names (includes _)
         const BANNED_CHARS_NAMES = /[!@#$%^&*()={}\[\]:;"<>?\/\\|~`_]/g;
         
@@ -6354,9 +6398,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const purokSelect = document.querySelector('select[name="purok_id"]');
             const purok = purokSelect ? purokSelect.options[purokSelect.selectedIndex].text : '';
             
+            const suffix = document.querySelector('select[name="suffix"]')?.value || '';
             let fullName = firstName;
             if (middleInitial) fullName += ' ' + middleInitial + '.';
             if (lastName) fullName += ' ' + lastName;
+            if (suffix) fullName += ' ' + suffix;
             
             personalInfo.innerHTML = `
                 <div class="review-info-item">
@@ -6397,12 +6443,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     const firstName = member.querySelector('input[name*="[first_name]"]')?.value || '';
                     const middleInitial = member.querySelector('input[name*="[middle_initial]"]')?.value || '';
                     const lastName = member.querySelector('input[name*="[last_name]"]')?.value || '';
+                    const suffix = member.querySelector('select[name*="[suffix]"]')?.value || '';
                     const relationship = member.querySelector('select[name*="[relationship]"]')?.value || '';
                     const dob = member.querySelector('input[name*="[date_of_birth]"]')?.value || '';
                     
                     let fullName = firstName;
                     if (middleInitial) fullName += ' ' + middleInitial + '.';
                     if (lastName) fullName += ' ' + lastName;
+                    if (suffix) fullName += ' ' + suffix;
                     
                     if (firstName || lastName || relationship) {
                         familyHTML += `
@@ -7299,7 +7347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     </div>
                 <div class="family-member-content">
-                    <!-- Row 1: First Name, Middle Initial, Last Name -->
+                    <!-- Row 1: First Name, Middle Initial, Last Name, Suffix -->
                     <div class="family-member-fields">
                         <div>
                             <input type="text" name="family_members[${familyMemberCount}][first_name]" 
@@ -7316,6 +7364,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="text" name="family_members[${familyMemberCount}][last_name]" 
                                    class="register-input-field" 
                                    placeholder="Last Name" />
+                        </div>
+                        <div>
+                            <select name="family_members[${familyMemberCount}][suffix]" class="register-input-field appearance-none" style="padding-right: 3.5rem !important;">
+                                <option value="">Suffix (optional)</option>
+                                <option value="Jr.">Jr. (Junior)</option>
+                                <option value="Sr.">Sr. (Senior)</option>
+                                <option value="II">II</option>
+                                <option value="III">III</option>
+                                <option value="IV">IV</option>
+                                <option value="V">V</option>
+                            </select>
+                            <div class="register-dropdown-arrow">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
                         </div>
                     </div>
                     
@@ -8244,9 +8308,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
             });
         }
+        // Real-time input sanitization
+        function setupRealTimeSanitization() {
+            // Name fields (First, Last) - Allow letters, spaces, hyphens, apostrophes
+            const nameFields = ['first_name', 'last_name'];
+            nameFields.forEach(fieldName => {
+                const input = document.querySelector(`input[name="${fieldName}"]`);
+                if (input) {
+                    input.addEventListener('input', function(e) {
+                        // Replace any character that is NOT a letter, space, hyphen, or apostrophe
+                        // Also remove multiple spaces
+                        let sanitized = this.value.replace(/[^a-zA-Z\s'-]/g, '');
+                        sanitized = sanitized.replace(/\s+/g, ' ');
+                        if (this.value !== sanitized) {
+                            this.value = sanitized;
+                        }
+                    });
+                }
+            });
+
+            // Middle Initial - Allow letters only, max 1 char
+            const middleInitialInput = document.querySelector('input[name="middle_initial"]');
+            if (middleInitialInput) {
+                middleInitialInput.addEventListener('input', function(e) {
+                    // Replace any character that is NOT a letter
+                    let sanitized = this.value.replace(/[^a-zA-Z]/g, '');
+                    if (this.value !== sanitized) {
+                        this.value = sanitized;
+                    }
+                });
+            }
+
+            // Phone Number - Allow digits, spaces, plus sign
+            const phoneInput = document.querySelector('input[name="phone"]');
+            if (phoneInput) {
+                phoneInput.addEventListener('input', function(e) {
+                    // Replace any character that is NOT a digit, space, or plus
+                    let sanitized = this.value.replace(/[^0-9+\s]/g, '');
+                    // Also remove multiple spaces
+                    sanitized = sanitized.replace(/\s+/g, ' ');
+                    if (this.value !== sanitized) {
+                        this.value = sanitized;
+                    }
+                });
+            }
+        }
+
+        // Initialize sanitization
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupRealTimeSanitization);
+        } else {
+            setupRealTimeSanitization();
+        }
     </script>
 </body>
 </html>
-
-
-

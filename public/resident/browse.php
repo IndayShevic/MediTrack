@@ -587,26 +587,26 @@ $meds = db()->query('
                         <div class="flex-1">
                             <div class="relative">
                                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                     </svg>
                                 </div>
-                                <input type="text" id="searchInput" placeholder="Search medicines..." class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300">
+                                <input type="text" id="searchInput" placeholder="Search medicines..." class="block w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300">
                             </div>
                         </div>
                         
                         <!-- Filter Chips -->
                         <div class="flex flex-wrap gap-2">
-                            <button class="filter-chip active px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50" data-filter="all">
+                            <button class="filter-chip active px-3 py-1.5 bg-white border border-gray-300 rounded-full text-xs font-medium text-gray-700 hover:bg-gray-50" data-filter="all">
                                 All Medicines
                             </button>
-                            <button class="filter-chip px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50" data-filter="available">
+                            <button class="filter-chip px-3 py-1.5 bg-white border border-gray-300 rounded-full text-xs font-medium text-gray-700 hover:bg-gray-50" data-filter="available">
                                 Available
                             </button>
-                            <button class="filter-chip px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50" data-filter="low-stock">
+                            <button class="filter-chip px-3 py-1.5 bg-white border border-gray-300 rounded-full text-xs font-medium text-gray-700 hover:bg-gray-50" data-filter="low-stock">
                                 Low Stock
                             </button>
-                            <button class="filter-chip px-4 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50" data-filter="expiring">
+                            <button class="filter-chip px-3 py-1.5 bg-white border border-gray-300 rounded-full text-xs font-medium text-gray-700 hover:bg-gray-50" data-filter="expiring">
                                 Expiring Soon
                             </button>
                         </div>
@@ -1655,45 +1655,37 @@ $meds = db()->query('
 
         // Enhanced file upload with drag and drop
         document.addEventListener('DOMContentLoaded', function() {
-            const fileUploadArea = document.querySelector('#requestModal [style*="border: 3px dashed"]');
-            const fileInput = document.getElementById('proofFile');
+            const fileUploadArea = document.getElementById('proofUploadAreaModal');
+            const fileInput = document.getElementById('proofFileModal');
             
             if (fileUploadArea && fileInput) {
                 // Drag and drop functionality
                 fileUploadArea.addEventListener('dragover', function(e) {
                     e.preventDefault();
-                    fileUploadArea.classList.add('dragover');
                     fileUploadArea.style.borderColor = '#3b82f6';
                     fileUploadArea.style.backgroundColor = '#f0f9ff';
-                    fileUploadArea.style.transform = 'scale(1.05)';
+                    fileUploadArea.style.transform = 'scale(1.02)';
                 });
                 
                 fileUploadArea.addEventListener('dragleave', function(e) {
                     e.preventDefault();
-                    fileUploadArea.classList.remove('dragover');
-                    fileUploadArea.style.borderColor = '#f87171';
-                    fileUploadArea.style.backgroundColor = 'white';
+                    fileUploadArea.style.borderColor = '#d1d5db';
+                    fileUploadArea.style.backgroundColor = '#f9fafb';
                     fileUploadArea.style.transform = 'scale(1)';
                 });
                 
                 fileUploadArea.addEventListener('drop', function(e) {
                     e.preventDefault();
-                    fileUploadArea.classList.remove('dragover');
-                    fileUploadArea.style.borderColor = '#f87171';
-                    fileUploadArea.style.backgroundColor = 'white';
+                    fileUploadArea.style.borderColor = '#d1d5db';
+                    fileUploadArea.style.backgroundColor = '#f9fafb';
                     fileUploadArea.style.transform = 'scale(1)';
                     
                     const files = e.dataTransfer.files;
                     if (files.length > 0) {
                         fileInput.files = files;
-                        updateFileDisplay(files[0]);
-                    }
-                });
-                
-                // File input change handler
-                fileInput.addEventListener('change', function(e) {
-                    if (e.target.files.length > 0) {
-                        updateFileDisplay(e.target.files[0]);
+                        // Trigger change event to update preview
+                        const event = new Event('change');
+                        fileInput.dispatchEvent(event);
                     }
                 });
             }
@@ -1785,10 +1777,10 @@ $meds = db()->query('
             });
 
             // Validate file upload
-            const fileInput = document.getElementById('proofFile');
+            const fileInput = document.getElementById('proofFileModal');
             if (fileInput && !fileInput.files.length) {
                 isValid = false;
-                const fileUploadArea = document.querySelector('#requestModal [style*="border: 3px dashed"]');
+                const fileUploadArea = document.getElementById('proofUploadAreaModal');
                 if (fileUploadArea) {
                     fileUploadArea.style.borderColor = '#ef4444';
                     fileUploadArea.style.backgroundColor = '#fef2f2';
@@ -1888,6 +1880,17 @@ $meds = db()->query('
         document.getElementById('requestForm').addEventListener('submit', function(e) {
             e.preventDefault();
             e.stopPropagation();
+            
+            // Validate form first
+            const validation = validateForm();
+            if (!validation.isValid) {
+                // Focus on first error field
+                if (validation.firstErrorField) {
+                    validation.firstErrorField.focus();
+                }
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
             
             console.log('Form submission started');
             

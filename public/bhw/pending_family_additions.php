@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['bhw']);
+require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../config/mail.php';
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -55,15 +57,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $addition = $verify->fetch();
         
         if ($addition) {
+            // Construct full name for email notifications
+            $full_name = $addition['first_name'];
+            if (!empty($addition['middle_initial'])) {
+                $full_name .= ' ' . $addition['middle_initial'] . '.';
+            }
+            $full_name .= ' ' . $addition['last_name'];
+            if (!empty($addition['suffix'])) {
+                $full_name .= ' ' . $addition['suffix'];
+            }
+
             if ($action === 'approve') {
                 try {
                     $pdo = db();
                     $pdo->beginTransaction();
                     
-                    // Move to approved family_members table (include profile_image if exists)
+                    // Move to approved family_members table
                     $insert = $pdo->prepare('
-                        INSERT INTO family_members (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image)
-                        SELECT resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image
+                        INSERT INTO family_members (resident_id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth)
+                        SELECT resident_id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth
                         FROM resident_family_additions
                         WHERE id = ?
                     ');
@@ -77,6 +89,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ');
                     $update->execute([$user['id'], $id]);
                     
+                    // Notify Resident via email
+                    try {
+                        $userStmt = db()->prepare('SELECT email, first_name FROM users WHERE id = ?');
+                        $userStmt->execute([$addition['user_id']]);
+                        $user = $userStmt->fetch();
+
+                        if ($user && !empty($user['email'])) {
+                            $subject = 'Family Member Request Approved';
+                            $html = email_template(
+                                'Request Approved',
+                                'Your request to add a family member has been approved.',
+                                "<p><strong>Family Member:</strong> {$full_name}</p>
+                                 <p>They have been added to your family profile.</p>",
+                                'View Family Members',
+                                base_url('resident/family_members.php')
+                            );
+                            send_email($user['email'], $user['first_name'], $subject, $html);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('Failed to send resident notification email: ' . $e->getMessage());
+                    }
+
                     $pdo->commit();
                     $_SESSION['flash'] = 'Family member approved successfully!';
                     $_SESSION['flash_type'] = 'success';
@@ -100,12 +134,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ');
                     $stmt->execute([$user['id'], $reason, $id]);
                     
-                    $_SESSION['flash'] = 'Family member addition rejected.';
+
+                    
+                    $_SESSION['flash'] = 'Family member request rejected.';
                     $_SESSION['flash_type'] = 'success';
                     
-                    // Clear BHW sidebar notification cache so counts update immediately
+                    // Clear BHW sidebar notification cache
                     $cache_key = 'bhw_notification_counts_' . $bhw_purok_id;
                     unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
+
+                    // Notify Resident via email
+                    try {
+                        $userStmt = db()->prepare('SELECT email, first_name FROM users WHERE id = ?');
+                        $userStmt->execute([$addition['user_id']]);
+                        $user = $userStmt->fetch();
+
+                        if ($user && !empty($user['email'])) {
+                            $subject = 'Family Member Request Rejected';
+                            $html = email_template(
+                                'Request Rejected',
+                                'Your request to add a family member has been rejected.',
+                                "<p><strong>Family Member:</strong> {$full_name}</p>
+                                 <p><strong>Reason:</strong> " . htmlspecialchars($reason) . "</p>
+                                 <p>Please contact your BHW for more information.</p>",
+                                'View Requests',
+                                base_url('resident/family_members.php')
+                            );
+                            send_email($user['email'], $user['first_name'], $subject, $html);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('Failed to send resident notification email: ' . $e->getMessage());
+                    }
                     
                 } catch (Throwable $e) {
                     $_SESSION['flash'] = 'Failed to reject. Please try again.';
@@ -505,135 +564,8 @@ function calculateAge($dob) {
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50 bhw-theme">
     <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
-            <?php else: ?>
-                <div class="h-8 w-8 bg-white/20 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                    </svg>
-                </div>
-            <?php endif; ?>
-            <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
-                </svg>
-                Dashboard
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/requests.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                </svg>
-                <span style="flex: 1;">Medicine Requests</span>
-                <?php if ($notification_counts['pending_requests'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/walkin_dispensing.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Walk-in Dispensing
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                </svg>
-                Residents & Family
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/allocations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                </svg>
-                Allocations
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Registrations</span>
-                <?php if ($notification_counts['pending_registrations'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_registrations']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('bhw/pending_family_additions.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Family Additions</span>
-                <?php if ($notification_counts['pending_family_additions'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_family_additions']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
-                Statistics
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/announcements.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
-                </svg>
-                Announcements
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                </svg>
-                Profile
-            </a>
-        </nav>
-        
-        <!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <div class="flex items-center mb-3">
-                <div class="flex-shrink-0">
-                    <?php if (!empty($user_data['profile_image'])): ?>
-                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                             alt="Profile" 
-                             class="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
-                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500 hidden">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div class="ml-3 flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">
-                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'Worker'))); ?>
-                    </p>
-                    <p class="text-xs text-gray-600 truncate">
-                        <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
-                    </p>
-                </div>
-            </div>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center justify-center w-full px-4 py-2 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
-                Logout
-            </a>
-        </div>
-    </aside>
+    <!-- Sidebar -->
+    <?php require_once __DIR__ . '/includes/sidebar.php'; ?>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -685,13 +617,37 @@ function calculateAge($dob) {
         <?php else: ?>
             <div class="grid gap-3">
                 <?php foreach ($pending_additions as $index => $addition): ?>
+                    <?php
+                    // Construct full name from components to ensure it displays correctly
+                    $fullName = trim(($addition['first_name'] ?? '') . ' ' . 
+                                    ($addition['middle_initial'] ? $addition['middle_initial'] . '. ' : '') . 
+                                    ($addition['last_name'] ?? '') . 
+                                    ($addition['suffix'] ? ' ' . $addition['suffix'] : ''));
+                    
+                    // Fallback to existing full_name if construction fails (though it shouldn't)
+                    if (empty($fullName)) {
+                        $fullName = $addition['full_name'] ?? 'Unknown Name';
+                    }
+                    
+                    // Update the addition array so it propagates to json_encode for the modal
+                    $addition['full_name'] = $fullName;
+                    ?>
                     <div class="card animate-fade-in-up" style="animation-delay: <?php echo ($index * 0.05) + 0.6; ?>s;">
                         <div class="card-body p-4">
                             <div class="flex items-center justify-between">
                                 <!-- Left: Avatar and Info -->
                                 <div class="flex items-center space-x-4 flex-1">
-                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                        <?php echo strtoupper(substr($addition['full_name'], 0, 1)); ?>
+                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                                        <?php if (!empty($addition['profile_image'])): 
+                                            $img_url = base_url($addition['profile_image']);
+                                            if (strpos($addition['profile_image'], 'uploads/') === 0) {
+                                                $img_url = base_url('../' . $addition['profile_image']);
+                                            }
+                                        ?>
+                                            <img src="<?php echo htmlspecialchars($img_url); ?>" alt="Profile" class="w-full h-full object-cover">
+                                        <?php else: ?>
+                                            <?php echo strtoupper(substr($addition['full_name'], 0, 1)); ?>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="flex-1">
                                         <div class="flex items-center space-x-2 mb-1">
@@ -704,36 +660,32 @@ function calculateAge($dob) {
                                             <span><?php echo htmlspecialchars($addition['relationship']); ?></span>
                                             <span>•</span>
                                             <span><?php echo calculateAge($addition['date_of_birth']); ?> years</span>
-                                            <span>•</span>
-                                            <span><?php echo $addition['existing_family_count']; ?> family members</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Right: Date and Actions -->
                                 <div class="flex items-center space-x-4">
-                                    <div class="text-right text-sm text-gray-500">
+                                    <div class="text-right text-sm text-gray-500 hidden sm:block">
                                         <div><?php echo date('M d, Y', strtotime($addition['created_at'])); ?></div>
                                         <div class="text-xs"><?php echo date('g:i A', strtotime($addition['created_at'])); ?></div>
                                     </div>
                                     
                                     <div class="flex space-x-2">
-                                        <form method="POST" onsubmit="return confirm('Approve this family member addition?')">
+                                        <button onclick='showDetailsModal(<?php echo json_encode($addition); ?>)' 
+                                                class="btn bg-blue-50 text-blue-600 hover:bg-blue-100 ripple-effect px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+                                            <i class="fas fa-eye mr-1"></i> View
+                                        </button>
+                                        <form method="POST" id="approveForm_<?php echo $addition['id']; ?>">
                                             <input type="hidden" name="action" value="approve">
                                             <input type="hidden" name="id" value="<?php echo $addition['id']; ?>">
-                                            <button type="submit" class="btn btn-success ripple-effect px-4 py-2 text-sm font-medium">
-                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                </svg>
-                                                Approve
+                                            <button type="button" onclick="confirmApprove('approveForm_<?php echo $addition['id']; ?>')" class="btn btn-success ripple-effect px-4 py-2 text-sm font-medium rounded-lg">
+                                                <i class="fas fa-check mr-1"></i> Approve
                                             </button>
                                         </form>
                                         <button onclick="showRejectModal(<?php echo $addition['id']; ?>, '<?php echo htmlspecialchars(addslashes($addition['full_name'])); ?>')" 
-                                                class="btn btn-danger ripple-effect px-4 py-2 text-sm font-medium">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                            </svg>
-                                            Reject
+                                                class="btn btn-danger ripple-effect px-4 py-2 text-sm font-medium rounded-lg">
+                                            <i class="fas fa-times mr-1"></i> Reject
                                         </button>
                                     </div>
                                 </div>
@@ -744,6 +696,86 @@ function calculateAge($dob) {
             </div>
         <?php endif; ?>
     </main>
+
+    <!-- Details Modal -->
+    <div id="detailsModal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="modal-content bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden">
+            <div class="relative h-32 bg-gradient-to-r from-blue-500 to-purple-600">
+                <button onclick="closeDetailsModal()" class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="px-8 pb-8">
+                <div class="relative -mt-16 mb-6 flex justify-between items-end">
+                    <div class="w-32 h-32 rounded-full border-4 border-white bg-white shadow-lg overflow-hidden flex items-center justify-center">
+                        <img id="detailsImage" src="" alt="Profile" class="w-full h-full object-cover hidden">
+                        <div id="detailsInitial" class="w-full h-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center text-4xl font-bold text-blue-600"></div>
+                    </div>
+                    <div class="flex space-x-3 mb-2">
+                        <form method="POST" id="detailsApproveForm">
+                            <input type="hidden" name="action" value="approve">
+                            <input type="hidden" name="id" id="detailsApproveId">
+                            <button type="button" onclick="confirmApprove('detailsApproveForm')" class="btn btn-success ripple-effect px-6 py-2.5 text-sm font-medium rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                                <i class="fas fa-check mr-2"></i> Approve Request
+                            </button>
+                        </form>
+                        <button onclick="transferToReject()" 
+                                class="btn btn-danger ripple-effect px-6 py-2.5 text-sm font-medium rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                            <i class="fas fa-times mr-2"></i> Reject
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-8">
+                    <h2 id="detailsName" class="text-3xl font-bold text-gray-900 mb-1"></h2>
+                    <p class="text-blue-600 font-medium flex items-center">
+                        <span class="bg-blue-50 px-3 py-1 rounded-full text-sm">
+                            <i class="fas fa-user-plus mr-2"></i>Pending Addition
+                        </span>
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Personal Information</h4>
+                            <div class="bg-gray-50 rounded-xl p-4 space-y-3">
+                                <div>
+                                    <span class="text-sm text-gray-500 block">Relationship</span>
+                                    <span id="detailsRelationship" class="font-medium text-gray-900"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-500 block">Date of Birth</span>
+                                    <span id="detailsDob" class="font-medium text-gray-900"></span>
+                                    <span id="detailsAge" class="text-sm text-gray-500 ml-2"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Request Information</h4>
+                            <div class="bg-gray-50 rounded-xl p-4 space-y-3">
+                                <div>
+                                    <span class="text-sm text-gray-500 block">Requested By</span>
+                                    <span id="detailsRequester" class="font-medium text-gray-900"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-500 block">Date Requested</span>
+                                    <span id="detailsDate" class="font-medium text-gray-900"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-500 block">Current Family Size</span>
+                                    <span id="detailsFamilyCount" class="font-medium text-gray-900"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Reject Modal -->
     <div id="rejectModal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
@@ -771,9 +803,9 @@ function calculateAge($dob) {
                           placeholder="Please provide a specific reason for rejecting this family member addition..."></textarea>
                 
                 <div class="flex space-x-3 mt-6">
-                    <button type="button" onclick="document.getElementById('rejectModal').classList.add('hidden')" 
-                            class="flex-1 btn btn-secondary py-3 font-semibold">Cancel</button>
-                    <button type="submit" class="flex-1 btn btn-danger py-3 font-semibold">Confirm Rejection</button>
+                    <button type="button" onclick="closeRejectModal()" 
+                            class="flex-1 btn btn-secondary py-3 font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 btn btn-danger py-3 font-semibold rounded-lg">Confirm Rejection</button>
                 </div>
             </form>
         </div>
@@ -811,6 +843,81 @@ function calculateAge($dob) {
     </div>
 
     <script>
+        // Helper to calculate age
+        function calculateAge(dob) {
+            const birthDate = new Date(dob);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
+        // Details Modal Functions
+        function showDetailsModal(data) {
+            const modal = document.getElementById('detailsModal');
+            
+            // Populate Data
+            document.getElementById('detailsApproveId').value = data.id;
+            document.getElementById('detailsName').textContent = data.full_name;
+            document.getElementById('detailsRelationship').textContent = data.relationship;
+            document.getElementById('detailsDob').textContent = new Date(data.date_of_birth).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            document.getElementById('detailsAge').textContent = `(${calculateAge(data.date_of_birth)} years old)`;
+            document.getElementById('detailsRequester').textContent = `${data.resident_first} ${data.resident_last}`;
+            document.getElementById('detailsDate').textContent = new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            document.getElementById('detailsFamilyCount').textContent = data.existing_family_count;
+
+            // Handle Image
+            const img = document.getElementById('detailsImage');
+            const initial = document.getElementById('detailsInitial');
+            
+            if (data.profile_image) {
+                let imgUrl = '<?php echo base_url(); ?>' + data.profile_image;
+                // Fix for root uploads
+                if (data.profile_image.startsWith('uploads/')) {
+                    imgUrl = '<?php echo base_url('../'); ?>' + data.profile_image;
+                }
+                img.src = imgUrl;
+                img.classList.remove('hidden');
+                initial.classList.add('hidden');
+            } else {
+                img.classList.add('hidden');
+                initial.classList.remove('hidden');
+                initial.textContent = data.full_name.charAt(0).toUpperCase();
+            }
+
+            // Show Modal
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                modal.querySelector('.modal-content').style.transform = 'scale(1)';
+                modal.querySelector('.modal-content').style.opacity = '1';
+            }, 10);
+        }
+
+        function closeDetailsModal() {
+            const modal = document.getElementById('detailsModal');
+            const content = modal.querySelector('.modal-content');
+            content.style.transform = 'scale(0.95)';
+            content.style.opacity = '0';
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 200);
+        }
+
+        function transferToReject() {
+            const id = document.getElementById('detailsApproveId').value;
+            const name = document.getElementById('detailsName').textContent;
+            closeDetailsModal();
+            setTimeout(() => {
+                showRejectModal(id, name);
+            }, 200);
+        }
+
+        // Reject Modal Functions
         function showRejectModal(id, name) {
             document.getElementById('rejectId').value = id;
             document.getElementById('rejectName').textContent = 'Rejecting: ' + name;
@@ -818,39 +925,38 @@ function calculateAge($dob) {
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             
-            // Add entrance animation
             setTimeout(() => {
                 modal.querySelector('.modal-content').style.transform = 'scale(1)';
+                modal.querySelector('.modal-content').style.opacity = '1';
             }, 10);
         }
 
-        // Close modal on click outside
-        document.getElementById('rejectModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
-        });
-
-        function closeModal() {
+        function closeRejectModal() {
             const modal = document.getElementById('rejectModal');
             const content = modal.querySelector('.modal-content');
-            
-            // Add exit animation
-            content.style.transform = 'scale(0.9)';
+            content.style.transform = 'scale(0.95)';
             content.style.opacity = '0';
-            
             setTimeout(() => {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
-                content.style.transform = 'scale(1)';
-                content.style.opacity = '1';
             }, 200);
         }
 
+        // Close on click outside
+        document.querySelectorAll('.modal-backdrop').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    if (this.id === 'detailsModal') closeDetailsModal();
+                    if (this.id === 'rejectModal') closeRejectModal();
+                    if (this.id === 'bulkRejectModal') this.classList.add('hidden');
+                }
+            });
+        });
+
         // Add ripple effect to buttons
         document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('ripple-effect')) {
-                const button = e.target;
+            if (e.target.closest('.ripple-effect')) {
+                const button = e.target.closest('.ripple-effect');
                 const ripple = document.createElement('span');
                 const rect = button.getBoundingClientRect();
                 const size = Math.max(rect.width, rect.height);
@@ -915,6 +1021,23 @@ function calculateAge($dob) {
             }
         }
 
+        // Confirm Approve with SweetAlert2
+        function confirmApprove(formId) {
+            Swal.fire({
+                title: 'Approve Request?',
+                text: "This will add the family member to the resident's profile.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, approve it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById(formId).submit();
+                }
+            });
+        }
+
         // Add CSS for ripple effect
         const style = document.createElement('style');
         style.textContent = `
@@ -926,82 +1049,19 @@ function calculateAge($dob) {
                 animation: ripple-animation 0.6s linear;
                 pointer-events: none;
             }
-            
             @keyframes ripple-animation {
                 to {
                     transform: scale(4);
                     opacity: 0;
                 }
             }
+            .modal-content {
+                transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+                transform: scale(0.95);
+                opacity: 0;
+            }
         `;
         document.head.appendChild(style);
-        
-        // Function to update notification badges
-        function updateNotificationBadges() {
-            fetch('<?php echo base_url('bhw/get_notification_counts.php'); ?>')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const counts = data.counts;
-                        
-                        // Update Pending Family Additions badge
-                        const pendingFamilyBadge = document.querySelector('a[href*="pending_family_additions.php"] .notification-badge');
-                        if (counts.pending_family_additions > 0) {
-                            if (pendingFamilyBadge) {
-                                pendingFamilyBadge.textContent = counts.pending_family_additions;
-                            } else {
-                                // Create badge if it doesn't exist
-                                const pendingFamilyLink = document.querySelector('a[href*="pending_family_additions.php"]');
-                                if (pendingFamilyLink) {
-                                    const badge = document.createElement('span');
-                                    badge.className = 'notification-badge';
-                                    badge.textContent = counts.pending_family_additions;
-                                    pendingFamilyLink.appendChild(badge);
-                                }
-                            }
-                        } else {
-                            // Remove badge if count is 0
-                            if (pendingFamilyBadge) {
-                                pendingFamilyBadge.remove();
-                            }
-                        }
-                        
-                        // Add visual feedback for badge updates
-                        const updatedBadges = document.querySelectorAll('.notification-badge');
-                        updatedBadges.forEach(badge => {
-                            badge.style.transform = 'scale(1.2)';
-                            badge.style.transition = 'transform 0.3s ease';
-                            setTimeout(() => {
-                                badge.style.transform = 'scale(1)';
-                            }, 300);
-                        });
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating notification badges:', error);
-                });
-        }
-        
-        // Update badges after approve/reject actions
-        document.addEventListener('DOMContentLoaded', function() {
-            const approveButtons = document.querySelectorAll('button[onclick*="approveFamilyAddition"]');
-            const rejectButtons = document.querySelectorAll('button[onclick*="showRejectModal"]');
-            
-            approveButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    setTimeout(updateNotificationBadges, 1000);
-                });
-            });
-            
-            rejectButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    setTimeout(updateNotificationBadges, 1000);
-                });
-            });
-        });
-
-        // Old time update, night mode, and profile dropdown code removed - now handled by header include
     </script>
 </body>
 </html>
-

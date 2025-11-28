@@ -95,6 +95,12 @@ if (!function_exists('redirect_to_dashboard_shell')) {
         }
 
         $targetPath = 'super_admin/' . $self;
+        
+        // Append query string if it exists
+        if (!empty($_SERVER['QUERY_STRING'])) {
+            $targetPath .= '?' . $_SERVER['QUERY_STRING'];
+        }
+        
         $fullTarget = base_url($targetPath);
         $shellUrl = base_url('super_admin/dashboardnew.php') . '?target=' . rawurlencode($fullTarget);
 

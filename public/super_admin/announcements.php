@@ -6,8 +6,7 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
-$isAjax = setup_dashboard_ajax_capture();
-redirect_to_dashboard_shell($isAjax);
+// Redirect logic moved to after POST handling
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -237,6 +236,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     redirect_to('super_admin/announcements.php');
 }
+
+$isAjax = setup_dashboard_ajax_capture();
+redirect_to_dashboard_shell($isAjax);
 
 // Fetch announcements
 try {
@@ -1049,28 +1051,21 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         </div>
 
         <!-- Flash Message -->
-        <?php if ($flash_msg): ?>
-            <div class="mb-6 p-4 rounded-lg <?php 
-                echo $flash_type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
-                    ($flash_type === 'warning' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                    'bg-red-100 text-red-800 border border-red-200'); 
-            ?>">
-                <div class="flex items-center space-x-2">
+        <?php
+        // Use standard flash message display
+        if ($flash_msg): ?>
+            <div class="mb-6 p-4 rounded-lg <?php echo $flash_type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : ($flash_type === 'warning' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-red-100 text-red-700 border border-red-200'); ?> flex items-center justify-between animate-fade-in-up">
+                <div class="flex items-center">
                     <?php if ($flash_type === 'success'): ?>
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <?php elseif ($flash_type === 'warning'): ?>
-                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                     <?php else: ?>
-                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <?php endif; ?>
                     <span><?php echo htmlspecialchars($flash_msg); ?></span>
                 </div>
+                <button onclick="this.parentElement.remove()" class="text-sm font-semibold hover:underline">Dismiss</button>
             </div>
         <?php endif; ?>
 
@@ -1619,6 +1614,15 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             setTimeout(() => {
                 modal.classList.add('hidden');
             }, 300);
+        }
+
+        function formatTime(timeString) {
+            if (!timeString) return '';
+            const [hours, minutes] = timeString.split(':');
+            const date = new Date();
+            date.setHours(parseInt(hours));
+            date.setMinutes(parseInt(minutes));
+            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         }
 
         function viewAnnouncement(announcement) {
@@ -2315,59 +2319,12 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     </div>
     
     <script>
-        // Profile dropdown functionality
-        function initProfileDropdown() {
-            const toggle = document.getElementById('profile-toggle');
-            const menu = document.getElementById('profile-menu');
-            const arrow = document.getElementById('profile-arrow');
-            
-            if (!toggle || !menu || !arrow) return;
-            
-            toggle.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (menu.classList.contains('hidden')) {
-                    menu.classList.remove('hidden');
-                    arrow.classList.add('rotate-180');
-                } else {
-                    menu.classList.add('hidden');
-                    arrow.classList.remove('rotate-180');
-                }
-            };
-            
-            // Close dropdown when clicking outside
-            if (!window.superAdminProfileDropdownClickHandler) {
-                window.superAdminProfileDropdownClickHandler = function(e) {
-                    const toggle = document.getElementById('profile-toggle');
-                    const menu = document.getElementById('profile-menu');
-                    if (menu && toggle && !toggle.contains(e.target) && !menu.contains(e.target)) {
-                        menu.classList.add('hidden');
-                        const arrow = document.getElementById('profile-arrow');
-                        if (arrow) arrow.classList.remove('rotate-180');
-                    }
-                };
-                document.addEventListener('click', window.superAdminProfileDropdownClickHandler);
-            }
-            
-            // Close dropdown when pressing Escape
-            if (!window.superAdminProfileDropdownKeyHandler) {
-                window.superAdminProfileDropdownKeyHandler = function(e) {
-                    if (e.key === 'Escape') {
-                        const menu = document.getElementById('profile-menu');
-                        const arrow = document.getElementById('profile-arrow');
-                        if (menu) menu.classList.add('hidden');
-                        if (arrow) arrow.classList.remove('rotate-180');
-                    }
-                };
-                document.addEventListener('keydown', window.superAdminProfileDropdownKeyHandler);
-            }
-        }
-        
         // Initialize functions when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize profile dropdown
-            initProfileDropdown();
+            if (typeof initProfileDropdown === 'function') {
+                initProfileDropdown();
+            }
             // Logout confirmation is now handled by logout-confirmation.js
         });
     </script>

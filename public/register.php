@@ -21,7 +21,7 @@ require_once __DIR__ . '/../config/email_notifications.php';
 // If already logged in, send to their dashboard
 $u = current_user();
 if ($u) {
-    if ($u['role'] === 'super_admin') redirect_to('super_admin/dashboard.php');
+    if ($u['role'] === 'super_admin') redirect_to('super_admin/dashboardnew.php');
     if ($u['role'] === 'bhw') redirect_to('bhw/dashboard.php');
     redirect_to('resident/dashboard.php');
 }

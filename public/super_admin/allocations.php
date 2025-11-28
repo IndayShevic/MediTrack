@@ -5,8 +5,7 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
-$isAjax = setup_dashboard_ajax_capture();
-redirect_to_dashboard_shell($isAjax);
+
 
 // Helper function to get upload URL
 function upload_url(string $path): string {
@@ -131,24 +130,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = db()->prepare('UPDATE allocation_programs SET program_name=?, medicine_id=?, quantity_per_senior=?, frequency=?, scope_type=?, barangay_id=?, purok_id=?, claim_window_days=? WHERE id=?');
             try { 
                 $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days, $program_id]);
-                $success_message = 'Allocation program updated successfully!';
+                set_flash('Allocation program updated successfully!', 'success');
             } catch (Throwable $e) {
-                $error_message = 'Failed to update program. Please try again.';
+                set_flash('Failed to update program. Please try again.', 'error');
             }
         } else {
             // CREATE new program
         $stmt = db()->prepare('INSERT INTO allocation_programs (program_name, medicine_id, quantity_per_senior, frequency, scope_type, barangay_id, purok_id, claim_window_days) VALUES (?,?,?,?,?,?,?,?)');
             try { 
                 $stmt->execute([$program_name, $medicine_id, $quantity_per_senior, $frequency, $scope_type, $barangay_id, $purok_id, $claim_window_days]);
-                $success_message = 'Allocation program created successfully!';
+                set_flash('Allocation program created successfully!', 'success');
             } catch (Throwable $e) {
-                $error_message = 'Failed to create program. Please try again.';
+                set_flash('Failed to create program. Please try again.', 'error');
             }
         }
+        redirect_to('super_admin/allocations.php');
+        exit;
     } else {
-        $error_message = 'Please fill in all required fields correctly.';
+        set_flash('Please fill in all required fields correctly.', 'error');
+        redirect_to('super_admin/allocations.php');
+        exit;
     }
 }
+
+$isAjax = setup_dashboard_ajax_capture();
+redirect_to_dashboard_shell($isAjax);
 
 $programs = db()->query('SELECT ap.id, ap.program_name, ap.medicine_id, m.name AS medicine, ap.frequency, ap.scope_type, ap.barangay_id, ap.purok_id, ap.quantity_per_senior, ap.claim_window_days FROM allocation_programs ap JOIN medicines m ON m.id=ap.medicine_id ORDER BY ap.id DESC')->fetchAll();
 
@@ -222,53 +228,22 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Success/Error Notifications -->
-        <?php if ($success_message): ?>
-            <div id="successNotification" class="fixed top-4 right-4 z-[60] bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 animate-slide-in-right">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span class="font-semibold"><?php echo htmlspecialchars($success_message); ?></span>
-                <button onclick="this.parentElement.remove()" class="ml-4 hover:bg-white/20 p-1 rounded-lg transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+        <?php
+        list($msg, $type) = get_flash();
+        if ($msg): ?>
+            <div class="mb-6 p-4 rounded-lg <?php echo $type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'; ?> flex items-center justify-between animate-fade-in-up">
+                <div class="flex items-center">
+                    <?php if ($type === 'success'): ?>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <?php else: ?>
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <?php endif; ?>
+                    <span><?php echo htmlspecialchars($msg); ?></span>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-sm font-semibold hover:underline">Dismiss</button>
             </div>
-            <script>
-                setTimeout(() => {
-                    const notification = document.getElementById('successNotification');
-                    if (notification) {
-                        notification.style.animation = 'slideOutRight 0.3s ease-out';
-                        setTimeout(() => notification.remove(), 300);
-                    }
-                }, 5000);
-            </script>
         <?php endif; ?>
-        
-        <?php if ($error_message): ?>
-            <div id="errorNotification" class="fixed top-4 right-4 z-[60] bg-gradient-to-r from-red-500 to-pink-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 animate-slide-in-right">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span class="font-semibold"><?php echo htmlspecialchars($error_message); ?></span>
-                <button onclick="this.parentElement.remove()" class="ml-4 hover:bg-white/20 p-1 rounded-lg transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <script>
-                setTimeout(() => {
-                    const notification = document.getElementById('errorNotification');
-                    if (notification) {
-                        notification.style.animation = 'slideOutRight 0.3s ease-out';
-                        setTimeout(() => notification.remove(), 5000);
-                    }
-                }, 5000);
-            </script>
-        <?php endif; ?>
-        
+
         <!-- Header (hidden, using global shell header instead) -->
         <div class="content-header" style="display: none;">
             <div class="flex items-center justify-between">
@@ -796,8 +771,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                 </label>
                             <select name="frequency" 
                                         class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
-                                    <option value="monthly">ðŸ“… Monthly Distribution</option>
-                                    <option value="quarterly">ðŸ“Š Quarterly Distribution</option>
+                                    <option value="monthly">Monthly Distribution</option>
+                                    <option value="quarterly">Quarterly Distribution</option>
                             </select>
                         </div>
                         
@@ -811,8 +786,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                 </label>
                                 <select name="scope_type" id="scopeSelect"
                                         class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
-                                    <option value="barangay">ðŸ˜ï¸ Barangay-wide</option>
-                                    <option value="purok">ðŸ  Specific Purok</option>
+                                    <option value="barangay">Barangay-wide</option>
+                                    <option value="purok">Specific Purok</option>
                             </select>
                         </div>
                     </div>
@@ -828,9 +803,9 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                             </label>
                         <select name="barangay_id" 
                                     class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white">
-                                <option value="">ðŸŒ All Barangays</option>
+                                <option value="">All Barangays</option>
                             <?php foreach ($barangays as $b): ?>
-                                    <option value="<?php echo (int)$b['id']; ?>">ðŸ“ <?php echo htmlspecialchars($b['name']); ?></option>
+                                    <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                             <p class="text-xs text-gray-500">Leave empty to apply to all barangays</p>
@@ -965,24 +940,24 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 let html = '';
                 
                 if (programName) {
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">ðŸ“‹ Program:</span><span class="text-gray-800">${programName}</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Program:</span><span class="text-gray-800">${programName}</span></div>`;
                 }
                 if (medicineName && medicineName !== 'Select a medicine to allocate') {
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">ðŸ’Š Medicine:</span><span class="text-gray-800">${medicineName}</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Medicine:</span><span class="text-gray-800">${medicineName}</span></div>`;
                 }
                 if (quantity) {
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">ðŸ“¦ Quantity:</span><span class="text-gray-800">${quantity} units per senior</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Quantity:</span><span class="text-gray-800">${quantity} units per senior</span></div>`;
                 }
                 if (frequency) {
                     const freqText = frequency === 'monthly' ? 'Monthly' : 'Quarterly';
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">ðŸ“… Frequency:</span><span class="text-gray-800">${freqText}</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Frequency:</span><span class="text-gray-800">${freqText}</span></div>`;
                 }
                 if (scope) {
                     const scopeText = scope === 'barangay' ? 'Barangay-wide' : 'Specific Purok';
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">ðŸ˜ï¸ Scope:</span><span class="text-gray-800">${scopeText}</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Scope:</span><span class="text-gray-800">${scopeText}</span></div>`;
                 }
                 if (claimWindow) {
-                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">â° Claim Window:</span><span class="text-gray-800">${claimWindow} days</span></div>`;
+                    html += `<div class="flex items-start"><span class="font-semibold min-w-[120px]">Claim Window:</span><span class="text-gray-800">${claimWindow} days</span></div>`;
                 }
                 
                 summaryContent.innerHTML = html;

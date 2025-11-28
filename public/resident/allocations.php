@@ -511,46 +511,46 @@ if ($is_senior) {
         <div class="sidebar-footer">
             <div class="flex items-center mb-3">
                 <div class="flex-shrink-0">
-                    <?php if (!empty($user_data['profile_image'])): ?>
-                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
                              alt="Profile" 
                              class="w-10 h-10 rounded-full object-cover border-2 border-green-500"
-                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
                         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500 hidden">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php else: ?>
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php else: ?>
                         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                                </div>
                 <div class="ml-3 flex-1 min-w-0">
                     <p class="text-sm font-medium text-gray-900 truncate">
-                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
                     </p>
                     <p class="text-xs text-gray-600 truncate">
-                        <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
+                                    <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
                     </p>
-                </div>
-            </div>
+                                </div>
+                                    </div>
             <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
+                                    </svg>
                 Logout
-            </a>
-        </div>
+                                </a>
+                            </div>
     </aside>
-
+                            
     <!-- Main Content -->
     <main class="main-content">
         <?php render_resident_header([
@@ -559,13 +559,13 @@ if ($is_senior) {
             'pending_requests' => $pending_requests,
             'recent_requests' => $recent_requests
         ]); ?>
-        
+                            
         <!-- Page Title -->
         <div class="p-4 sm:p-6 lg:p-8">
             <div class="mb-6">
                 <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 mb-1">My Allocations</h1>
                 <p class="text-gray-600"><?php echo $is_senior ? 'Senior citizen medicine allocations and programs' : 'View your medicine allocations and benefits'; ?></p>
-            </div>
+        </div>
 
         <!-- Content -->
         <div class="content-body">

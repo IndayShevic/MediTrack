@@ -112,12 +112,18 @@ function getAssignedBhwIdForResident(int $residentId): ?int {
 }
 
 // Format full name with middle initial
-function format_full_name(string $first_name, string $last_name, ?string $middle_initial = null): string {
+function format_full_name(string $first_name, string $last_name, ?string $middle_initial = null, ?string $suffix = null): string {
     $name = trim($first_name . ' ' . $last_name);
     if (!empty($middle_initial)) {
         $middle_initial = trim($middle_initial);
         if (!empty($middle_initial)) {
             $name = trim($first_name . ' ' . $middle_initial . ' ' . $last_name);
+        }
+    }
+    if (!empty($suffix)) {
+        $suffix = trim($suffix);
+        if (!empty($suffix)) {
+            $name = $name . ' ' . $suffix;
         }
     }
     return $name;

@@ -5,25 +5,6 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
-$isAjax = setup_dashboard_ajax_capture();
-redirect_to_dashboard_shell($isAjax);
-
-// Helper function to get upload URL
-function upload_url(string $path): string {
-    $clean_path = ltrim($path, '/');
-    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
-    $pos = strpos($script, '/public/');
-    if ($pos !== false) {
-        $base = substr($script, 0, $pos);
-    } else {
-        $base = dirname($script);
-        if ($base === '.' || $base === '/') {
-            $base = '';
-        }
-    }
-    return rtrim($base, '/') . '/' . $clean_path;
-}
-
 $user = current_user();
 
 // Get updated user data with profile image
@@ -96,8 +77,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('super_admin/categories.php');
 }
 
+$isAjax = setup_dashboard_ajax_capture();
+redirect_to_dashboard_shell($isAjax);
+
+// Helper function to get upload URL
+function upload_url(string $path): string {
+    $clean_path = ltrim($path, '/');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/';
+    $pos = strpos($script, '/public/');
+    if ($pos !== false) {
+        $base = substr($script, 0, $pos);
+    } else {
+        $base = dirname($script);
+        if ($base === '.' || $base === '/') {
+            $base = '';
+        }
+    }
+    return rtrim($base, '/') . '/' . $clean_path;
+}
+
 // Fetch categories
 $categories = db()->query('SELECT c.*, COUNT(m.id) as medicine_count FROM categories c LEFT JOIN medicines m ON c.id = m.category_id GROUP BY c.id ORDER BY c.name')->fetchAll();
+
+// Fetch notification data
+try {
+    $pending_requests = db()->query('SELECT COUNT(*) as count FROM requests WHERE status = "submitted"')->fetch()['count'];
+} catch (Exception $e) {
+    $pending_requests = 0;
+}
+
+try {
+    $inventory_alerts = db()->query('
+        SELECT ia.id, ia.severity, ia.message, ia.created_at,
+               m.name as medicine_name,
+               DATE_FORMAT(ia.created_at, "%b %d, %Y") as formatted_date
+        FROM inventory_alerts ia
+        JOIN medicines m ON ia.medicine_id = m.id
+        WHERE ia.is_acknowledged = FALSE
+        ORDER BY 
+            CASE ia.severity
+                WHEN "critical" THEN 1
+                WHEN "high" THEN 2
+                WHEN "medium" THEN 3
+                ELSE 4
+            END,
+            ia.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+    $alerts_count = count($inventory_alerts);
+} catch (Exception $e) {
+    $inventory_alerts = [];
+    $alerts_count = 0;
+}
+
+try {
+    $recent_pending_requests = db()->query('
+        SELECT r.id, r.status, r.created_at,
+               CONCAT(IFNULL(u.first_name,"")," ",IFNULL(u.last_name,"")) as requester_name,
+               DATE_FORMAT(r.created_at, "%b %d, %Y") as formatted_date
+        FROM requests r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.status = "submitted"
+        ORDER BY r.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+} catch (Exception $e) {
+    $recent_pending_requests = [];
+}
+
+$total_notifications = $pending_requests + $alerts_count;
+
 $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 ?>
 <!DOCTYPE html>
@@ -150,6 +199,11 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     <main class="main-content">
         <!-- Content -->
         <div class="content-body">
+            <!-- Page Title -->
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">Categories</h1>
+                <p class="text-sm text-gray-500">Manage medicine categories</p>
+            </div>
             <?php [$flash, $ft] = get_flash(); if ($flash): ?>
                 <div class="mb-6 p-4 rounded-lg <?php echo $ft==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'; ?> animate-fade-in">
                     <div class="flex items-center">
@@ -247,7 +301,7 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                     </button>
                 </div>
                 
-                <form id="categoryForm" method="post" class="space-y-6">
+                <form id="categoryForm" action="<?php echo htmlspecialchars(base_url('super_admin/categories.php')); ?>" method="post" class="space-y-6">
                     <input type="hidden" name="action" id="formAction" value="create">
                     <input type="hidden" name="category_id" id="categoryId">
                     
@@ -281,6 +335,90 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     </div>
 
     <script>
+        // Header Interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mobile Menu Toggle
+            const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+            const sidebar = document.getElementById('sidebar-aside');
+            
+            if (mobileMenuToggle && sidebar) {
+                mobileMenuToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('hidden');
+                    sidebar.classList.toggle('show'); // Ensure 'show' class is used for CSS transitions if any
+                    
+                    // If using the 'hidden' class to toggle visibility
+                    if (!sidebar.classList.contains('hidden')) {
+                        // Add overlay if needed, or just rely on sidebar styles
+                        // For this design system, usually sidebar slides in
+                        sidebar.style.left = '0';
+                    } else {
+                        sidebar.style.left = '-16rem';
+                    }
+                });
+                
+                // Close sidebar when clicking outside on mobile
+                document.addEventListener('click', function(e) {
+                    if (window.innerWidth < 768 && !sidebar.classList.contains('hidden') && !sidebar.contains(e.target) && !mobileMenuToggle.contains(e.target)) {
+                        sidebar.classList.add('hidden');
+                        sidebar.style.left = '-16rem';
+                    }
+                });
+            }
+
+            // Notification Dropdown
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('hidden');
+                    // Close profile dropdown if open
+                    const profileDropdown = document.getElementById('profileDropdown');
+                    if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                });
+            }
+
+            // Profile Dropdown
+            const profileBtn = document.getElementById('profileBtn');
+            const profileDropdown = document.getElementById('profileDropdown');
+            
+            if (profileBtn && profileDropdown) {
+                profileBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    profileDropdown.classList.toggle('hidden');
+                    // Close notification dropdown if open
+                    const notificationDropdown = document.getElementById('notificationDropdown');
+                    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                });
+            }
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                const notificationDropdown = document.getElementById('notificationDropdown');
+                const profileDropdown = document.getElementById('profileDropdown');
+                const notificationBtn = document.getElementById('notificationBtn');
+                const profileBtn = document.getElementById('profileBtn');
+
+                if (notificationDropdown && !notificationDropdown.classList.contains('hidden') && !notificationDropdown.contains(e.target) && (!notificationBtn || !notificationBtn.contains(e.target))) {
+                    notificationDropdown.classList.add('hidden');
+                }
+
+                if (profileDropdown && !profileDropdown.classList.contains('hidden') && !profileDropdown.contains(e.target) && (!profileBtn || !profileBtn.contains(e.target))) {
+                    profileDropdown.classList.add('hidden');
+                }
+            });
+            
+            // Logout confirmation
+            // Handled by logout-confirmation.js
+        });
+
+        // Modal Functions
         function openAddModal() {
             document.getElementById('modalTitle').textContent = 'Add Category';
             document.getElementById('formAction').value = 'create';
@@ -316,13 +454,23 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         }
 
         function deleteCategory(id, name) {
-            if (confirm('Are you sure you want to delete the category "' + name + '"? This action cannot be undone.')) {
-                const form = document.createElement('form');
-                form.method = 'post';
-                form.innerHTML = '<input type="hidden" name="action" value="delete"><input type="hidden" name="category_id" value="' + id + '">';
-                document.body.appendChild(form);
-                form.submit();
-            }
+            Swal.fire({
+                title: 'Delete Category?',
+                text: 'Are you sure you want to delete the category "' + name + '"? This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.createElement('form');
+                    form.method = 'post';
+                    form.innerHTML = '<input type="hidden" name="action" value="delete"><input type="hidden" name="category_id" value="' + id + '">';
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
         }
 
         // Close modal when clicking outside
@@ -337,65 +485,6 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             if (e.key === 'Escape') {
                 closeModal();
             }
-        });
-        
-        // Initialize functions when DOM is ready
-        document.addEventListener('DOMContentLoaded', function() {
-            // Logout confirmation is now handled by logout-confirmation.js
-        });
-
-        // Profile dropdown functionality
-        function initProfileDropdown() {
-            const toggle = document.getElementById('profile-toggle');
-            const menu = document.getElementById('profile-menu');
-            const arrow = document.getElementById('profile-arrow');
-            
-            if (!toggle || !menu || !arrow) return;
-            
-            toggle.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (menu.classList.contains('hidden')) {
-                    menu.classList.remove('hidden');
-                    arrow.classList.add('rotate-180');
-                } else {
-                    menu.classList.add('hidden');
-                    arrow.classList.remove('rotate-180');
-                }
-            };
-            
-            // Close dropdown when clicking outside
-            if (!window.superAdminProfileDropdownClickHandler) {
-                window.superAdminProfileDropdownClickHandler = function(e) {
-                    const toggle = document.getElementById('profile-toggle');
-                    const menu = document.getElementById('profile-menu');
-                    if (menu && toggle && !toggle.contains(e.target) && !menu.contains(e.target)) {
-                        menu.classList.add('hidden');
-                        const arrow = document.getElementById('profile-arrow');
-                        if (arrow) arrow.classList.remove('rotate-180');
-                    }
-                };
-                document.addEventListener('click', window.superAdminProfileDropdownClickHandler);
-            }
-            
-            // Close dropdown when pressing Escape
-            if (!window.superAdminProfileDropdownKeyHandler) {
-                window.superAdminProfileDropdownKeyHandler = function(e) {
-                    if (e.key === 'Escape') {
-                        const menu = document.getElementById('profile-menu');
-                        const arrow = document.getElementById('profile-arrow');
-                        if (menu) menu.classList.add('hidden');
-                        if (arrow) arrow.classList.remove('rotate-180');
-                    }
-                };
-                document.addEventListener('keydown', window.superAdminProfileDropdownKeyHandler);
-            }
-        }
-
-        // Initialize profile dropdown when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            initProfileDropdown();
         });
     </script>
 </body>

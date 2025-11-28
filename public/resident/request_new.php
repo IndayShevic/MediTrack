@@ -136,12 +136,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // Validate resident belongs to a purok and get assigned BHW
+    $residentCheck = db()->prepare('SELECT r.purok_id, r.user_id FROM residents r WHERE r.id = ?');
+    $residentCheck->execute([$residentId]);
+    $residentData = $residentCheck->fetch();
+    
+    if (!$residentData || !$residentData['purok_id']) {
+        set_flash('Error: Your account is not properly assigned to a purok. Please contact support.', 'error');
+        redirect_to('request_new.php' . ($medicine_id > 0 ? '?medicine_id=' . $medicine_id : ''));
+        exit;
+    }
+    
+    // Get assigned BHW for this purok (for approval)
     $bhwId = getAssignedBhwIdForResident($residentId);
-    error_log("BHW ID: $bhwId, Resident ID: $residentId");
+    
+    if (!$bhwId) {
+        set_flash('Error: No BHW is assigned to your purok. Please contact support.', 'error');
+        redirect_to('request_new.php' . ($medicine_id > 0 ? '?medicine_id=' . $medicine_id : ''));
+        exit;
+    }
+    
+    error_log("BHW ID: $bhwId, Resident ID: $residentId, Purok ID: " . $residentData['purok_id']);
     
     try {
-        $stmt = db()->prepare('INSERT INTO requests (resident_id, medicine_id, requested_for, family_member_id, patient_name, patient_date_of_birth, relationship, reason, proof_image_path, status, bhw_id) VALUES (?,?,?,?,?,?,?,?,?,"submitted",?)');
-        $result = $stmt->execute([$residentId, $medicine_id, $requested_for, $family_member_id, $patient_name, $patient_date_of_birth, $relationship, $reason, $proof_path, $bhwId]);
+        // Use assigned_bhw_id for the BHW who will approve (same as bhw_id for now, but separated for clarity)
+        $stmt = db()->prepare('INSERT INTO requests (resident_id, medicine_id, requested_for, family_member_id, patient_name, patient_date_of_birth, relationship, reason, proof_image_path, status, bhw_id, assigned_bhw_id) VALUES (?,?,?,?,?,?,?,?,?,"submitted",?,?)');
+        $result = $stmt->execute([$residentId, $medicine_id, $requested_for, $family_member_id, $patient_name, $patient_date_of_birth, $relationship, $reason, $proof_path, $bhwId, $bhwId]);
         
         if ($result) {
             $requestId = db()->lastInsertId();

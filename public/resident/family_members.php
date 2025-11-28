@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_auth(['resident']);
 require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../../config/mail.php';
 
 // Helper function to get upload URL (uploads are at project root, not in public/)
 function upload_url(string $path): string {
@@ -98,50 +99,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
     if ($action === 'add_family_member') {
+        // Sanitize input data - remove banned characters and prevent HTML/script injection
+        function sanitizeInputBackend($value, $pattern = null) {
+            if (empty($value)) return '';
+            
+            // Remove script tags and HTML tags (prevent XSS)
+            $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+            $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+            
+            // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+            $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+            $sanitized = preg_replace($banned, '', $sanitized);
+            
+            // Remove control characters and emojis
+            $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+            $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+            
+            // Trim leading/trailing spaces
+            $sanitized = trim($sanitized);
+            
+            // Apply pattern if provided
+            if ($pattern && $sanitized) {
+                $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+            }
+            
+            return $sanitized;
+        }
+        
         $first_name = trim($_POST['first_name'] ?? '');
         $middle_initial = trim($_POST['middle_initial'] ?? '');
         $last_name = trim($_POST['last_name'] ?? '');
+        $suffix = trim($_POST['suffix'] ?? '');
         $relationship = trim($_POST['relationship'] ?? '');
         $relationship_other = trim($_POST['relationship_other'] ?? '');
         $dob = $_POST['date_of_birth'] ?? '';
         
         // If "Other" is selected, use the custom relationship text
         if ($relationship === 'Other' && !empty($relationship_other)) {
-            $relationship = preg_replace('/[^A-Za-zÀ-ÿ\' -]/', '', $relationship_other);
+            $relationship = sanitizeInputBackend($relationship_other, 'A-Za-zÀ-ÿ\' -');
         }
         
         $errors = [];
         
+        // Validate first name (letters only, no digits)
         if (empty($first_name) || strlen($first_name) < 2) {
-            $errors[] = 'First name must be at least 2 characters.';
+            $errors[] = 'First name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $first_name)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first_name)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $first_name = sanitizeInputBackend($first_name, 'A-Za-zÀ-ÿ\' -');
         }
         
+        // Validate last name (letters only, no digits)
         if (empty($last_name) || strlen($last_name) < 2) {
-            $errors[] = 'Last name must be at least 2 characters.';
+            $errors[] = 'Last name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $last_name)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last_name)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $last_name = sanitizeInputBackend($last_name, 'A-Za-zÀ-ÿ\' -');
         }
         
-        if (strlen($middle_initial) > 5) {
-            $errors[] = 'Middle initial must be 5 characters or less.';
+        // Middle initial validation (only 1 character, only letters)
+        if (!empty($middle_initial)) {
+            $middle_initial = sanitizeInputBackend($middle_initial, 'A-Za-zÀ-ÿ');
+            if (strlen($middle_initial) > 1) {
+                $errors[] = 'Middle initial can only be 1 character.';
+            } elseif (!preg_match('/^[A-Za-zÀ-ÿ]+$/', $middle_initial)) {
+                $errors[] = 'Middle initial can only contain letters.';
+        }
         }
         
+        // Suffix validation (only allowed values)
+        if (!empty($suffix)) {
+            $allowed_suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+            if (!in_array($suffix, $allowed_suffixes)) {
+                $errors[] = 'Invalid suffix selected.';
+        }
+        }
+        
+        // Relationship validation
         if (empty($relationship)) {
             $errors[] = 'Please select a relationship.';
         } elseif ($relationship === 'Other' && empty($relationship_other)) {
             $errors[] = 'Please specify the relationship when "Other" is selected.';
         }
         
+        // Date of birth validation
         if (empty($dob)) {
             $errors[] = 'Please provide date of birth.';
         } else {
             $birthDate = new DateTime($dob);
             $today = new DateTime();
+            
+            if ($birthDate > $today) {
+                $errors[] = 'Date of birth cannot be in the future.';
+            } else {
             $age = $today->diff($birthDate)->y;
             if ($age < 0 || $age > 120) {
                 $errors[] = 'Please enter a valid date of birth.';
+                }
             }
         }
         
         if (empty($errors)) {
+            // Define full_name here for the queries
+            $full_name = format_full_name($first_name, $last_name, $middle_initial, $suffix ?: null);
+
             // First check for exact duplicates (same name AND date of birth)
             $exact_duplicate_check = db()->prepare('
                 -- Check approved family members in same account (exact match)
@@ -256,6 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     fm.first_name as fm_first_name,
                     fm.middle_initial as fm_middle_initial,
                     fm.last_name as fm_last_name,
+                    fm.suffix as fm_suffix,
                     fm.date_of_birth,
                     fm.relationship
                 FROM family_members fm
@@ -263,6 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE LOWER(TRIM(fm.first_name)) = LOWER(TRIM(?)) 
                 AND LOWER(TRIM(fm.last_name)) = LOWER(TRIM(?))
                 AND LOWER(TRIM(COALESCE(fm.middle_initial, ""))) = LOWER(TRIM(COALESCE(?, "")))
+                AND LOWER(TRIM(COALESCE(fm.suffix, ""))) = LOWER(TRIM(COALESCE(?, "")))
                 AND fm.resident_id = ?
                 
                 UNION ALL
@@ -277,6 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     rfa.first_name as fm_first_name,
                     rfa.middle_initial as fm_middle_initial,
                     rfa.last_name as fm_last_name,
+                    rfa.suffix as fm_suffix,
                     rfa.date_of_birth,
                     rfa.relationship
                 FROM resident_family_additions rfa
@@ -284,18 +354,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE LOWER(TRIM(rfa.first_name)) = LOWER(TRIM(?)) 
                 AND LOWER(TRIM(rfa.last_name)) = LOWER(TRIM(?))
                 AND LOWER(TRIM(COALESCE(rfa.middle_initial, ""))) = LOWER(TRIM(COALESCE(?, "")))
+                AND LOWER(TRIM(COALESCE(rfa.suffix, ""))) = LOWER(TRIM(COALESCE(?, "")))
                 AND rfa.resident_id = ?
                 AND rfa.status = "pending"
             ');
             $name_duplicate_check->execute([
-                $first_name, $last_name, $middle_initial, $resident_id,  // approved_same_name
-                $first_name, $last_name, $middle_initial, $resident_id   // pending_same_name
+                $first_name, $last_name, $middle_initial, $suffix, $resident_id,  // approved_same_name
+                $first_name, $last_name, $middle_initial, $suffix, $resident_id   // pending_same_name
             ]);
-            $duplicate = $name_duplicate_check->fetch();
+            $name_duplicate = $name_duplicate_check->fetch();
+            
+            // Prioritize exact duplicate if found, otherwise use name duplicate
+            $duplicate = $exact_duplicate ?: $name_duplicate;
             
             if ($duplicate) {
-                $account_name = format_full_name($duplicate['first_name'], $duplicate['last_name'], $duplicate['middle_initial']);
-                $full_name = format_full_name($first_name, $last_name, $middle_initial);
+                $account_name = format_full_name($duplicate['first_name'], $duplicate['last_name'], $duplicate['middle_initial'], $duplicate['suffix'] ?? null);
+                $full_name = format_full_name($first_name, $last_name, $middle_initial, $suffix ?: null);
                 
                 if ($duplicate['status'] === 'approved_same') {
                     $errors[] = "❌ <strong>{$full_name}</strong> is already approved in your account.";
@@ -359,21 +433,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // Insert as pending - try with profile_image first, fallback if column doesn't exist
                 try {
-                    $stmt = db()->prepare('
-                        INSERT INTO resident_family_additions 
-                        (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, "pending")
-                    ');
-                    $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob, $profile_image_path]);
+                $stmt = db()->prepare('
+                    INSERT INTO resident_family_additions 
+                    (resident_id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth, profile_image, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, "pending")
+                ');
+                $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $suffix ?: null, $relationship, $dob, $profile_image_path]);
                 } catch (PDOException $e) {
                     // If profile_image column doesn't exist, insert without it
                     if (strpos($e->getMessage(), 'profile_image') !== false) {
                         $stmt = db()->prepare('
                             INSERT INTO resident_family_additions 
-                            (resident_id, first_name, middle_initial, last_name, relationship, date_of_birth, status) 
-                            VALUES (?, ?, ?, ?, ?, ?, "pending")
-                        ');
-                        $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $relationship, $dob]);
+                            (resident_id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, "pending")
+                ');
+                        $stmt->execute([$resident_id, $first_name, $middle_initial, $last_name, $suffix ?: null, $relationship, $dob]);
                     } else {
                         throw $e;
                     }
@@ -381,6 +455,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $_SESSION['flash'] = 'Family member added! Awaiting BHW verification.';
                 $_SESSION['flash_type'] = 'success';
+
+                // Notify BHW via email
+                try {
+                    $bhwStmt = db()->prepare('SELECT email, first_name, last_name FROM users WHERE role = "bhw" AND purok_id = ? LIMIT 1');
+                    $bhwStmt->execute([$purok_id]);
+                    $bhw = $bhwStmt->fetch();
+
+                    if ($bhw && !empty($bhw['email'])) {
+                        $subject = 'New Family Member Request - ' . $full_name;
+                        $residentName = $user['first_name'] . ' ' . $user['last_name'];
+                        $html = email_template(
+                            'New Family Member Request',
+                            'A resident has requested to add a family member.',
+                            "<p><strong>Resident:</strong> {$residentName}</p>
+                             <p><strong>Family Member:</strong> {$full_name}</p>
+                             <p><strong>Relationship:</strong> {$relationship}</p>
+                             <p>Please log in to your dashboard to review this request.</p>",
+                            'Review Request',
+                            base_url('bhw/pending_family_additions.php')
+                        );
+                        send_email($bhw['email'], $bhw['first_name'] . ' ' . $bhw['last_name'], $subject, $html);
+                    }
+                } catch (Throwable $e) {
+                    error_log('Failed to send BHW notification email: ' . $e->getMessage());
+                }
+
                 redirect_to('resident/family_members.php');
             } catch (Throwable $e) {
                 $_SESSION['flash'] = 'Failed to add family member. Please try again.';
@@ -398,9 +498,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Get profile image path before deleting (if column exists)
             $member = null;
             try {
-                $getImage = db()->prepare('SELECT profile_image FROM resident_family_additions WHERE id = ? AND resident_id = ?');
-                $getImage->execute([$id, $resident_id]);
-                $member = $getImage->fetch();
+            $getImage = db()->prepare('SELECT profile_image FROM resident_family_additions WHERE id = ? AND resident_id = ?');
+            $getImage->execute([$id, $resident_id]);
+            $member = $getImage->fetch();
             } catch (PDOException $e) {
                 // If profile_image column doesn't exist, just proceed without it
                 if (strpos($e->getMessage(), 'profile_image') === false) {
@@ -506,7 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Get approved family members
 $approved_family = db()->prepare('
-    SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, created_at
+    SELECT id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth, profile_image, created_at
     FROM family_members 
     WHERE resident_id = ?
     ORDER BY last_name, first_name
@@ -517,15 +617,15 @@ $approved_members = $approved_family->fetchAll();
 // Get pending family additions (only truly pending ones, not approved or rejected)
 // Check if profile_image column exists first
 try {
-    $pending_family = db()->prepare('
-        SELECT id, first_name, middle_initial, last_name, relationship, date_of_birth, profile_image, status, 
-               rejection_reason, created_at, updated_at
-        FROM resident_family_additions 
-        WHERE resident_id = ? AND status = "pending"
-        ORDER BY created_at DESC
-    ');
-    $pending_family->execute([$resident_id]);
-    $pending_members = $pending_family->fetchAll();
+$pending_family = db()->prepare('
+    SELECT id, first_name, middle_initial, last_name, suffix, relationship, date_of_birth, profile_image, status, 
+           rejection_reason, created_at, updated_at
+    FROM resident_family_additions 
+    WHERE resident_id = ? AND status = "pending"
+    ORDER BY created_at DESC
+');
+$pending_family->execute([$resident_id]);
+$pending_members = $pending_family->fetchAll();
 } catch (PDOException $e) {
     // If profile_image column doesn't exist, select without it
     if (strpos($e->getMessage(), 'profile_image') !== false) {
@@ -757,46 +857,46 @@ function calculateAge($dob) {
         <div class="sidebar-footer">
             <div class="flex items-center mb-3">
                 <div class="flex-shrink-0">
-                    <?php if (!empty($user_data['profile_image'])): ?>
-                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                            <?php if (!empty($user_data['profile_image'])): ?>
+                                <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
                              alt="Profile" 
                              class="w-10 h-10 rounded-full object-cover border-2 border-green-500"
-                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                     onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
                         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500 hidden">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php else: ?>
+                                <?php 
+                                $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                            <?php else: ?>
                         <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-green-500">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
+                                    <?php 
+                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'R';
+                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'E';
+                                    echo strtoupper($firstInitial . $lastInitial); 
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                                </div>
                 <div class="ml-3 flex-1 min-w-0">
                     <p class="text-sm font-medium text-gray-900 truncate">
-                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
+                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Resident') . ' ' . ($user['last_name'] ?? 'User'))); ?>
                     </p>
                     <p class="text-xs text-gray-600 truncate">
-                        <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
+                                    <?php echo htmlspecialchars($user['email'] ?? 'resident@example.com'); ?>
                     </p>
-                </div>
-            </div>
+                                        </div>
+                                    </div>
             <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
+                                            </svg>
                 Logout
-            </a>
-        </div>
+                                </a>
+                            </div>
     </aside>
-
+                            
     <!-- Main Content -->
     <main class="main-content">
         <?php render_resident_header([
@@ -808,10 +908,6 @@ function calculateAge($dob) {
         
         <!-- Page Title -->
         <div class="p-4 sm:p-6 lg:p-8">
-            <div class="mb-6">
-                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 mb-1">My Family Members</h1>
-                <p class="text-gray-600">Manage your family members for medicine requests</p>
-            </div>
 
         <div class="content-body">
         <div class="flex items-center justify-between mb-6">
@@ -875,7 +971,7 @@ function calculateAge($dob) {
                                     <div class="flex items-center">
                                         <?php if (!empty($member['profile_image'])): ?>
                                             <img src="<?php echo htmlspecialchars(upload_url($member['profile_image'])); ?>" 
-                                                 alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?>" 
+                                                 alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'], $member['suffix'] ?? null)); ?>" 
                                                  class="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
                                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                             <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200" style="display:none;">
@@ -897,7 +993,7 @@ function calculateAge($dob) {
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></div>
+                                    <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'], $member['suffix'] ?? null)); ?></div>
                                 </td>
                                 <td>
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
@@ -917,7 +1013,7 @@ function calculateAge($dob) {
                                     <span class="text-gray-600 text-sm"><?php echo date('M d, Y', strtotime($member['created_at'])); ?></span>
                                 </td>
                                 <td>
-                                    <form method="POST" class="inline" onsubmit="return confirm('Are you sure you want to remove this pending family member? This action cannot be undone.');">
+                                    <form method="POST" class="inline" onsubmit="return confirmDeletePending(event, this);">
                                             <input type="hidden" name="action" value="delete_pending">
                                             <input type="hidden" name="id" value="<?php echo $member['id']; ?>">
                                         <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium transition-colors duration-150 flex items-center space-x-1">
@@ -993,7 +1089,7 @@ function calculateAge($dob) {
                                         <div class="flex items-center">
                                             <?php if (!empty($member['profile_image'])): ?>
                                                 <img src="<?php echo htmlspecialchars(upload_url($member['profile_image'])); ?>" 
-                                                     alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?>" 
+                                                     alt="<?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'], $member['suffix'] ?? null)); ?>" 
                                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
                                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200" style="display:none;">
@@ -1015,7 +1111,7 @@ function calculateAge($dob) {
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'])); ?></div>
+                                        <div class="font-medium text-gray-900"><?php echo htmlspecialchars(format_full_name($member['first_name'], $member['last_name'], $member['middle_initial'], $member['suffix'] ?? null)); ?></div>
                                     </td>
                                     <td>
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1049,7 +1145,7 @@ function calculateAge($dob) {
 
     <!-- Add Family Member Modal -->
     <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[99999] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl transform transition-all relative z-[100000] border border-gray-200">
+        <div class="bg-white rounded-2xl max-w-3xl w-full shadow-2xl transform transition-all relative z-[100000] border border-gray-200">
             <div class="p-6 border-b">
                 <div class="flex justify-between items-center">
                     <h3 class="text-xl font-semibold">Add Family Member</h3>
@@ -1085,7 +1181,8 @@ function calculateAge($dob) {
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-3 gap-3">
+                <!-- Row 1: First Name and Middle Initial -->
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                         <input type="text" name="first_name" required 
@@ -1094,15 +1191,36 @@ function calculateAge($dob) {
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">M.I.</label>
-                        <input type="text" name="middle_initial" maxlength="5"
+                        <input type="text" name="middle_initial" maxlength="1"
                                class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                placeholder="D">
                     </div>
+                </div>
+                
+                <!-- Row 2: Last Name and Suffix -->
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                         <input type="text" name="last_name" required 
                                class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                placeholder="Dela Cruz">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Suffix</label>
+                        <select name="suffix" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none" style="padding-right: 3.5rem !important;">
+                            <option value="">Suffix (optional)</option>
+                            <option value="Jr.">Jr. (Junior)</option>
+                            <option value="Sr.">Sr. (Senior)</option>
+                            <option value="II">II</option>
+                            <option value="III">III</option>
+                            <option value="IV">IV</option>
+                            <option value="V">V</option>
+                        </select>
+                        <div class="relative -mt-8 pointer-events-none flex items-center justify-end pr-3">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
                     </div>
                 </div>
                 
@@ -1441,20 +1559,133 @@ function calculateAge($dob) {
             }
         }
 
-        // Add event listeners
-        firstNameInput.addEventListener('input', function() {
+        // Real-time input filtering to prevent invalid characters
+        function filterInput(input, pattern, maxLength = null) {
+            const originalValue = input.value;
+            // Remove invalid characters based on pattern
+            let filtered = originalValue.replace(new RegExp('[^' + pattern + ']', 'g'), '');
+            
+            // Apply max length if specified
+            if (maxLength && filtered.length > maxLength) {
+                filtered = filtered.substring(0, maxLength);
+            }
+            
+            // Update value if it changed
+            if (filtered !== originalValue) {
+                const cursorPos = input.selectionStart;
+                input.value = filtered;
+                // Restore cursor position (adjust for removed characters)
+                const newPos = Math.min(cursorPos - (originalValue.length - filtered.length), filtered.length);
+                input.setSelectionRange(newPos, newPos);
+            }
+        }
+        
+        // First Name: Only letters, spaces, hyphens, apostrophes
+        firstNameInput.addEventListener('input', function(e) {
+            filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
             clearTimeout(validationTimeout);
             validationTimeout = setTimeout(checkDuplicate, 300);
         });
         
-        middleInitialInput.addEventListener('input', function() {
+        firstNameInput.addEventListener('keypress', function(e) {
+            // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+            const char = String.fromCharCode(e.which || e.keyCode);
+            if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                e.preventDefault();
+            }
+        });
+        
+        // Last Name: Only letters, spaces, hyphens, apostrophes
+        lastNameInput.addEventListener('input', function(e) {
+            filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
             clearTimeout(validationTimeout);
             validationTimeout = setTimeout(checkDuplicate, 300);
         });
         
-        lastNameInput.addEventListener('input', function() {
+        lastNameInput.addEventListener('keypress', function(e) {
+            // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+            const char = String.fromCharCode(e.which || e.keyCode);
+            if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                e.preventDefault();
+            }
+        });
+        
+        // Middle Initial: Only letters, max 1 character
+        middleInitialInput.addEventListener('input', function(e) {
+            filterInput(this, 'A-Za-zÀ-ÿ', 1);
             clearTimeout(validationTimeout);
             validationTimeout = setTimeout(checkDuplicate, 300);
+        });
+        
+        middleInitialInput.addEventListener('keypress', function(e) {
+            // Allow: letters only, backspace, delete, tab, arrow keys
+            const char = String.fromCharCode(e.which || e.keyCode);
+            if (!/[A-Za-zÀ-ÿ]/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                e.preventDefault();
+            }
+            // Prevent typing if already 1 character
+            if (this.value.length >= 1 && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                e.preventDefault();
+            }
+        });
+        
+        // Date of Birth: Prevent future dates
+        dobInput.addEventListener('change', function(e) {
+            const selectedDate = new Date(this.value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            if (selectedDate > today) {
+                alert('Date of birth cannot be in the future.');
+                this.value = '';
+                this.focus();
+            }
+        });
+        
+        // Handle paste events to filter invalid characters
+        firstNameInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+            const cursorPos = this.selectionStart;
+            const textBefore = this.value.substring(0, cursorPos);
+            const textAfter = this.value.substring(this.selectionEnd);
+            this.value = textBefore + filtered + textAfter;
+            const newPos = cursorPos + filtered.length;
+            this.setSelectionRange(newPos, newPos);
+            // Trigger input event for duplicate check
+            this.dispatchEvent(new Event('input'));
+        });
+        
+        lastNameInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+            const cursorPos = this.selectionStart;
+            const textBefore = this.value.substring(0, cursorPos);
+            const textAfter = this.value.substring(this.selectionEnd);
+            this.value = textBefore + filtered + textAfter;
+            const newPos = cursorPos + filtered.length;
+            this.setSelectionRange(newPos, newPos);
+            // Trigger input event for duplicate check
+            this.dispatchEvent(new Event('input'));
+        });
+        
+        middleInitialInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ]/g, '').substring(0, 1);
+            const cursorPos = this.selectionStart;
+            const textBefore = this.value.substring(0, cursorPos);
+            const textAfter = this.value.substring(this.selectionEnd);
+            this.value = textBefore + filtered + textAfter;
+            // Limit to 1 character total
+            if (this.value.length > 1) {
+                this.value = this.value.substring(0, 1);
+            }
+            this.setSelectionRange(1, 1);
+            // Trigger input event for duplicate check
+            this.dispatchEvent(new Event('input'));
         });
 
         // Clear validation on modal close
@@ -1692,6 +1923,36 @@ function calculateAge($dob) {
             });
         }
 
+        // Initialize night mode and profile dropdown
+        initNightMode();
+        initProfileDropdown();
+
+        function confirmDeletePending(event, form) {
+            event.preventDefault();
+            
+            Swal.fire({
+                title: 'Remove Pending Member?',
+                text: "Are you sure you want to remove this pending family member? This action cannot be undone.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, remove it',
+                cancelButtonText: 'Cancel',
+                customClass: {
+                    popup: 'rounded-2xl',
+                    confirmButton: 'px-4 py-2 rounded-lg font-medium',
+                    cancelButton: 'px-4 py-2 rounded-lg font-medium'
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+            
+            return false;
+        }
+        
         // Initialize profile dropdown when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initProfileDropdown();
@@ -1699,4 +1960,3 @@ function calculateAge($dob) {
     </script>
 </body>
 </html>
-

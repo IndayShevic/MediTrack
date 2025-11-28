@@ -33,9 +33,11 @@ if (!function_exists('render_super_admin_sidebar')) {
             ['href' => 'super_admin/allocations.php', 'icon' => 'fas fa-user-friends', 'label' => 'Allocations'],
             ['href' => 'super_admin/announcements.php', 'icon' => 'fas fa-bullhorn', 'label' => 'Announcements'],
             ['href' => 'super_admin/analytics.php', 'icon' => 'fas fa-chart-bar', 'label' => 'Analytics'],
-            ['href' => 'super_admin/reports.php', 'icon' => 'fas fa-file-alt', 'label' => 'Reports'],
+            ['href' => 'super_admin/reports_hub.php', 'icon' => 'fas fa-file-alt', 'label' => 'Reports Hub'],
             ['href' => 'super_admin/settings_brand.php', 'icon' => 'fas fa-cog', 'label' => 'Brand Settings'],
+            ['href' => 'super_admin/report_settings.php', 'icon' => 'fas fa-file-signature', 'label' => 'Report Settings'],
             ['href' => 'super_admin/locations.php', 'icon' => 'fas fa-map-marker-alt', 'label' => 'Barangays & Puroks'],
+            ['href' => 'super_admin/duty_schedules.php', 'icon' => 'fas fa-calendar-alt', 'label' => 'Duty Schedules'],
             ['href' => 'super_admin/email_logs.php', 'icon' => 'fas fa-envelope', 'label' => 'Email Logs'],
         ];
 
@@ -54,7 +56,12 @@ if (!function_exists('render_super_admin_sidebar')) {
                     <nav class="flex-1 px-2 py-4 space-y-1">
                         <?php foreach ($nav_items as $item):
                             $href = htmlspecialchars(base_url($item['href']));
-                            $is_active = ($current_page === basename($item['href']));
+                            $item_page = basename($item['href']);
+                            // Normalize both values for comparison (remove query strings, ensure lowercase)
+                            $normalized_current = strtolower(trim($current_page));
+                            $normalized_item = strtolower(trim($item_page));
+                            // Strict comparison to avoid false positives (e.g. 'locations.php' inside 'allocations.php')
+                            $is_active = ($normalized_current === $normalized_item);
                             ?>
                             <a href="<?php echo $href; ?>"
                                class="sidebar-link <?php echo $is_active ? 'active' : ''; ?> flex items-center px-4 py-3 text-gray-700 rounded-lg transition">

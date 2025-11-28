@@ -39,22 +39,47 @@ $bhw_purok_id = $user['purok_id'] ?? 0;
 require_once __DIR__ . '/includes/sidebar_counts.php';
 $notification_counts = get_bhw_notification_counts($bhw_purok_id);
 
-// Approve or reject
+// Approve or reject logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int)($_POST['id'] ?? 0);
     $action = $_POST['action'] ?? '';
     if ($id > 0) {
         if ($action === 'approve') {
-            // allocate 1 unit FEFO
-            $q = db()->prepare('SELECT medicine_id FROM requests WHERE id=? AND bhw_id=? AND status="submitted"');
+            // Get BHW full name for approval log
+            $bhwNameStmt = db()->prepare('SELECT CONCAT(IFNULL(first_name, ""), " ", IFNULL(middle_initial, ""), " ", IFNULL(last_name, "")) AS full_name FROM users WHERE id = ?');
+            $bhwNameStmt->execute([$user['id']]);
+            $bhwNameData = $bhwNameStmt->fetch();
+            $bhwFullName = $bhwNameData['full_name'] ?? ($user['first_name'] . ' ' . $user['last_name']);
+            
+            // Get request details and verify it belongs to this BHW's purok
+            $q = db()->prepare('
+                SELECT r.medicine_id, r.resident_id, res.purok_id 
+                FROM requests r 
+                JOIN residents res ON res.id = r.resident_id 
+                WHERE r.id = ? AND r.assigned_bhw_id = ? AND r.status = "submitted"
+            ');
             $q->execute([$id, $user['id']]);
             $row = $q->fetch();
-            if ($row) {
-                $allocated = fefoAllocate((int)$row['medicine_id'], 1, $id);
-                if ($allocated >= 1) {
-                    $u = db()->prepare('UPDATE requests SET status="approved" WHERE id=?');
+            
+            if ($row && $row['purok_id'] == $bhw_purok_id) {
+                $pdo = db();
+                $pdo->beginTransaction();
+                try {
+                    // Update request status to approved (ready for dispensing)
+                    $u = $pdo->prepare('UPDATE requests SET status="approved", is_ready_to_dispense=1 WHERE id=?');
                     $u->execute([$id]);
-                    // notify resident
+                    
+                    // Create approval log
+                    $approvalRemarks = trim($_POST['approval_remarks'] ?? '');
+                    $approvalStmt = $pdo->prepare('
+                        INSERT INTO request_approvals (request_id, approved_by, approval_status, approval_remarks) 
+                        VALUES (?, ?, "approved", ?)
+                    ');
+                    $approvalStmt->execute([$id, $user['id'], $approvalRemarks ?: null]);
+                    
+                    $pdo->commit();
+                    
+                    // Notify resident
                     $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name, m.name AS medicine_name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id JOIN medicines m ON m.id=rq.medicine_id WHERE rq.id=?");
                     $r->execute([$id]);
                     $rec = $r->fetch();
@@ -63,7 +88,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $success = send_medicine_request_approval_to_resident($rec['email'], $rec['name'] ?? 'Resident', $rec['medicine_name'] ?? 'Unknown Medicine');
                         log_email_notification($user['id'], 'medicine_approval', 'Medicine Request Approved', 'Medicine request approval notification sent to resident', $success);
                     }
+                    set_flash('Request approved successfully.', 'success');
+                } catch (Throwable $e) {
+                    $pdo->rollBack();
+                    error_log('Approval error: ' . $e->getMessage());
+                    set_flash('Failed to approve request: ' . $e->getMessage(), 'error');
                 }
+            } else {
+                set_flash('Request not found or you are not authorized to approve it.', 'error');
             }
             
             // Clear BHW sidebar notification cache so counts update immediately
@@ -71,26 +103,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION[$cache_key], $_SESSION[$cache_key . '_time']);
         } elseif ($action === 'reject') {
             $reason = trim($_POST['reason'] ?? '');
-            error_log('BHW Medicine Rejection: Request ID: ' . $id . ', Reason: ' . $reason);
-            file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Request ID: ' . $id . ', Reason: ' . $reason . "\n", FILE_APPEND);
+            if (empty($reason)) {
+                set_flash('Rejection reason is required.', 'error');
+                redirect_to('bhw/requests.php');
+                exit;
+            }
             
-            $u = db()->prepare('UPDATE requests SET status="rejected", rejection_reason=? WHERE id=? AND bhw_id=?');
-            $u->execute([$reason, $id, $user['id']]);
+            // Get request details and verify it belongs to this BHW's purok
+            $q = db()->prepare('
+                SELECT r.resident_id, res.purok_id 
+                FROM requests r 
+                JOIN residents res ON res.id = r.resident_id 
+                WHERE r.id = ? AND r.assigned_bhw_id = ? AND r.status = "submitted"
+            ');
+            $q->execute([$id, $user['id']]);
+            $row = $q->fetch();
             
-            // notify resident
-            $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name, m.name AS medicine_name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id JOIN medicines m ON m.id=rq.medicine_id WHERE rq.id=?");
-            $r->execute([$id]);
-            $rec = $r->fetch();
-            if ($rec && !empty($rec['email'])) {
-                error_log('BHW Medicine Rejection: Sending email to ' . $rec['email'] . ' with reason: ' . $reason);
-                file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Sending email to ' . $rec['email'] . ' with reason: ' . $reason . "\n", FILE_APPEND);
-                
-                require_once __DIR__ . '/../../config/email_notifications.php';
-                $success = send_medicine_request_rejection_to_resident($rec['email'], $rec['name'] ?? 'Resident', $rec['medicine_name'] ?? 'Unknown Medicine', $reason);
-                log_email_notification($user['id'], 'medicine_rejection', 'Medicine Request Rejected', 'Medicine request rejection notification sent to resident', $success);
-                
-                error_log('BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No'));
-                file_put_contents('bhw_debug.log', date('Y-m-d H:i:s') . ' - BHW Medicine Rejection: Email sent successfully: ' . ($success ? 'Yes' : 'No') . "\n", FILE_APPEND);
+            if ($row && $row['purok_id'] == $bhw_purok_id) {
+                $pdo = db();
+                $pdo->beginTransaction();
+                try {
+                    // Update request status to rejected
+                    $u = $pdo->prepare('UPDATE requests SET status="rejected", rejection_reason=? WHERE id=?');
+                    $u->execute([$reason, $id]);
+                    
+                    // Create approval log with rejection status
+                    $approvalStmt = $pdo->prepare('
+                        INSERT INTO request_approvals (request_id, approved_by, approval_status, rejection_reason) 
+                        VALUES (?, ?, "rejected", ?)
+                    ');
+                    $approvalStmt->execute([$id, $user['id'], $reason]);
+                    
+                    $pdo->commit();
+                    
+                    // Notify resident
+                    $r = db()->prepare("SELECT u.email, CONCAT(IFNULL(u.first_name,''), ' ', IFNULL(u.last_name,'')) AS name, m.name AS medicine_name FROM requests rq JOIN residents res ON res.id=rq.resident_id JOIN users u ON u.id=res.user_id JOIN medicines m ON m.id=rq.medicine_id WHERE rq.id=?");
+                    $r->execute([$id]);
+                    $rec = $r->fetch();
+                    if ($rec && !empty($rec['email'])) {
+                        require_once __DIR__ . '/../../config/email_notifications.php';
+                        $success = send_medicine_request_rejection_to_resident($rec['email'], $rec['name'] ?? 'Resident', $rec['medicine_name'] ?? 'Unknown Medicine', $reason);
+                        log_email_notification($user['id'], 'medicine_rejection', 'Medicine Request Rejected', 'Medicine request rejection notification sent to resident', $success);
+                    }
+                    set_flash('Request rejected successfully.', 'success');
+                } catch (Throwable $e) {
+                    $pdo->rollBack();
+                    error_log('Rejection error: ' . $e->getMessage());
+                    set_flash('Failed to reject request: ' . $e->getMessage(), 'error');
+                }
+            } else {
+                set_flash('Request not found or you are not authorized to reject it.', 'error');
             }
             
             // Clear BHW sidebar notification cache so counts update immediately
@@ -101,10 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('bhw/requests.php');
 }
 
+// Fetch all requests for the table
 $rows = db()->prepare('
     SELECT 
         r.id,
+        r.resident_id,
         m.name AS medicine,
+        m.image_path AS medicine_image_path,
         r.status,
         r.created_at,
         r.requested_for,
@@ -115,57 +180,76 @@ $rows = db()->prepare('
         r.proof_image_path,
         r.rejection_reason,
         r.updated_at,
+        r.is_ready_to_dispense,
         res.first_name,
         res.last_name,
+        res.purok_id,
         u.profile_image AS resident_profile_image,
         fm.first_name AS family_first_name,
         fm.middle_initial AS family_middle_initial,
         fm.last_name AS family_last_name,
-        fm.relationship AS family_relationship
+        fm.relationship AS family_relationship,
+        CONCAT(IFNULL(apb.first_name, ""), " ", IFNULL(apb.middle_initial, ""), " ", IFNULL(apb.last_name, "")) AS approved_by_name,
+        ra.approved_at,
+        ra.approval_remarks,
+        ra.approval_status,
+        CONCAT(IFNULL(dispb.first_name, ""), " ", IFNULL(dispb.middle_initial, ""), " ", IFNULL(dispb.last_name, "")) AS dispensed_by_name,
+        rd.dispensed_at,
+        rd.quantity_released,
+        rd.dispensing_notes,
+        mb.batch_code
     FROM requests r
     JOIN medicines m ON m.id = r.medicine_id
     JOIN residents res ON res.id = r.resident_id
     JOIN users u ON u.id = res.user_id
     LEFT JOIN family_members fm ON fm.id = r.family_member_id
-    WHERE r.bhw_id = ?
-    ORDER BY r.id DESC
+    LEFT JOIN request_approvals ra ON ra.request_id = r.id AND ra.approval_status = "approved"
+    LEFT JOIN users apb ON apb.id = ra.approved_by
+    LEFT JOIN request_dispensings rd ON rd.request_id = r.id
+    LEFT JOIN users dispb ON dispb.id = rd.dispensed_by
+    LEFT JOIN medicine_batches mb ON mb.id = rd.batch_id
+    WHERE (r.assigned_bhw_id = ? OR r.bhw_id = ?) AND res.purok_id = ?
+    ORDER BY r.created_at DESC
 ');
-$rows->execute([$user['id']]);
+$rows->execute([$user['id'], $user['id'], $bhw_purok_id]);
 $reqs = $rows->fetchAll();
+
+// Calculate Quick Stats
+$stats_pending = 0;
+$stats_approved = 0;
+$stats_rejected = 0;
+foreach ($reqs as $r) {
+    if ($r['status'] === 'submitted') $stats_pending++;
+    elseif ($r['status'] === 'approved') $stats_approved++;
+    elseif ($r['status'] === 'rejected') $stats_rejected++;
+}
 
 // Fetch pending requests for notifications
 try {
     $stmt = db()->prepare('SELECT r.id, r.status, r.created_at, m.name as medicine_name, CONCAT(IFNULL(res.first_name,"")," ",IFNULL(res.last_name,"")) as resident_name FROM requests r LEFT JOIN medicines m ON r.medicine_id = m.id LEFT JOIN residents res ON r.resident_id = res.id WHERE r.status = "submitted" AND res.purok_id = ? ORDER BY r.created_at DESC LIMIT 5');
     $stmt->execute([$bhw_purok_id]);
     $pending_requests_list = $stmt->fetchAll();
-} catch (Throwable $e) {
-    $pending_requests_list = [];
-}
+} catch (Throwable $e) { $pending_requests_list = []; }
 
-// Fetch pending registrations for notifications
 try {
     $stmt = db()->prepare('SELECT id, first_name, last_name, created_at FROM pending_residents WHERE purok_id = ? AND status = "pending" ORDER BY created_at DESC LIMIT 5');
     $stmt->execute([$bhw_purok_id]);
     $pending_registrations_list = $stmt->fetchAll();
-} catch (Throwable $e) {
-    $pending_registrations_list = [];
-}
+} catch (Throwable $e) { $pending_registrations_list = []; }
 
-// Fetch pending family additions for notifications
 try {
     $stmt = db()->prepare('SELECT rfa.id, rfa.first_name, rfa.last_name, rfa.created_at FROM resident_family_additions rfa JOIN residents res ON res.id = rfa.resident_id WHERE res.purok_id = ? AND rfa.status = "pending" ORDER BY rfa.created_at DESC LIMIT 5');
     $stmt->execute([$bhw_purok_id]);
     $pending_family_additions_list = $stmt->fetchAll();
-} catch (Throwable $e) {
-    $pending_family_additions_list = [];
-}
+} catch (Throwable $e) { $pending_family_additions_list = []; }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Requests · BHW</title>
+    <title>Medicine Requests · MediTrack</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -188,195 +272,29 @@ try {
         }
     </script>
     <style>
-        /* Sidebar styles removed - using design-system.css with bhw-theme */
-        
-        /* Content Header Styles */
-        .content-header {
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 50 !important;
-            background: white !important;
-            border-bottom: 1px solid #e5e7eb !important;
-            padding: 2rem !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-            margin-bottom: 2rem !important;
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
         }
-        
-        .dark .content-header {
-            background: #1f2937 !important;
-            border-bottom-color: #374151 !important;
-        }
-        
-        .dark .text-gray-900 {
-            color: #f9fafb !important;
-        }
-        
-        .dark .text-gray-600 {
-            color: #d1d5db !important;
-        }
-        
-        .dark .text-gray-500 {
-            color: #9ca3af !important;
-        }
-        
-        .dark .card {
-            background: #374151 !important;
-            border-color: #4b5563 !important;
-        }
-        
-        .notification-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 1.25rem;
-            height: 1.25rem;
-            padding: 0 0.375rem;
-            font-size: 0.6875rem;
-            font-weight: 600;
+        .filter-chip.active {
+            background-color: #3b82f6;
             color: white;
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            border-radius: 9999px;
-            margin-left: auto;
-            animation: pulse-badge 2s ease-in-out infinite;
+            border-color: #3b82f6;
         }
-        
-        @keyframes pulse-badge {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        .filter-chip {
+            background-color: white;
+            color: #4b5563;
+            border: 1px solid #e5e7eb;
+        }
+        .filter-chip:hover:not(.active) {
+            background-color: #f9fafb;
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-50 to-blue-50 bhw-theme">
+<body class="bg-gray-50 bhw-theme">
     <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
-            <?php else: ?>
-                <div class="h-8 w-8 bg-white/20 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                    </svg>
-                </div>
-            <?php endif; ?>
-            <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
-                </svg>
-                Dashboard
-            </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('bhw/requests.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                </svg>
-                <span style="flex: 1;">Medicine Requests</span>
-                <?php if ($notification_counts['pending_requests'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/walkin_dispensing.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Walk-in Dispensing
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                </svg>
-                Residents & Family
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/allocations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                </svg>
-                Allocations
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Registrations</span>
-                <?php if ($notification_counts['pending_registrations'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_registrations']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_family_additions.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Family Additions</span>
-                <?php if (!empty($notification_counts['pending_family_additions'])): ?>
-                    <span class="notification-badge"><?php echo (int)$notification_counts['pending_family_additions']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
-                Statistics
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/announcements.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
-                </svg>
-                Announcements
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                </svg>
-                Profile
-            </a>
-        </nav>
-        
-        <!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <div class="flex items-center mb-3">
-                <div class="flex-shrink-0">
-                    <?php if (!empty($user_data['profile_image'])): ?>
-                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                             alt="Profile" 
-                             class="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
-                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500 hidden">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div class="ml-3 flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">
-                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'Worker'))); ?>
-                    </p>
-                    <p class="text-xs text-gray-600 truncate">
-                        <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
-                    </p>
-                </div>
-            </div>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center justify-center w-full px-4 py-2 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
-                Logout
-            </a>
-        </div>
-    </aside>
+    <?php require_once __DIR__ . '/includes/sidebar.php'; ?>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -391,350 +309,321 @@ try {
         ]);
         ?>
         
-        <div class="p-6">
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">Medicine Requests</h1>
-            <p class="text-gray-600">Review and approve medicine requests from residents</p>
-        </div>
+        <div class="p-6 max-w-7xl mx-auto">
+            <!-- Header Section -->
+            <div class="mb-8 animate-fade-in-up">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Medicine Requests</h1>
+                <p class="text-gray-600">Review and manage medicine requests from residents in your purok.</p>
+            </div>
 
-        <!-- Content -->
-        <div class="content-body">
-            <?php if (!empty($reqs)): ?>
-                <!-- Search and Filter -->
-                <div class="mb-6">
-                    <div class="flex flex-col sm:flex-row gap-4">
-                        <div class="flex-1">
-                            <div class="relative">
-                                <input type="text" id="searchInput" placeholder="Search requests..." 
-                                       class="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                                <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                </svg>
-                            </div>
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in-up" style="animation-delay: 0.1s">
+                <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-l-orange-500">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Pending Review</p>
+                            <p class="text-2xl font-bold text-gray-900"><?php echo $stats_pending; ?></p>
                         </div>
-                        <div class="flex gap-2">
-                            <button class="filter-chip active px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200" data-filter="all">
-                                All
-                            </button>
-                            <button class="filter-chip px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200" data-filter="submitted">
-                                Pending
-                            </button>
-                            <button class="filter-chip px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200" data-filter="approved">
-                                Approved
-                            </button>
-                            <button class="filter-chip px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200" data-filter="rejected">
-                                Rejected
-                            </button>
+                        <div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600">
+                            <i class="fas fa-clock"></i>
                         </div>
                     </div>
                 </div>
+                <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-l-green-500">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Approved</p>
+                            <p class="text-2xl font-bold text-gray-900"><?php echo $stats_approved; ?></p>
+                        </div>
+                        <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+                            <i class="fas fa-check"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-l-red-500">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Rejected</p>
+                            <p class="text-2xl font-bold text-gray-900"><?php echo $stats_rejected; ?></p>
+                        </div>
+                        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                            <i class="fas fa-times"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Requests Table -->
-                <div class="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-200">
+            <!-- Content Body -->
+            <div class="glass-card rounded-2xl shadow-sm overflow-hidden animate-fade-in-up" style="animation-delay: 0.2s">
+                <!-- Toolbar -->
+                <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center bg-white">
+                    <div class="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                        <button class="filter-chip active px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap" data-filter="all">
+                            All Requests
+                        </button>
+                        <button class="filter-chip px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap" data-filter="submitted">
+                            Pending
+                        </button>
+                        <button class="filter-chip px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap" data-filter="approved">
+                            Approved
+                        </button>
+                        <button class="filter-chip px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap" data-filter="rejected">
+                            Rejected
+                        </button>
+                    </div>
+                    <div class="relative w-full sm:w-64">
+                        <input type="text" id="searchInput" placeholder="Search resident or medicine..." 
+                               class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50/50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Resident</th>
+                                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Medicine</th>
+                                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 bg-white" id="requestsTableBody">
+                            <?php if (empty($reqs)): ?>
                                 <tr>
-                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
-                                            </svg>
-                                            <span>Request ID</span>
+                                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                                        <div class="flex flex-col items-center justify-center">
+                                            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                                                <i class="fas fa-inbox text-2xl text-gray-300"></i>
+                                            </div>
+                                            <p class="text-lg font-medium text-gray-900">No requests found</p>
+                                            <p class="text-sm text-gray-500">New medicine requests will appear here.</p>
                                         </div>
-                                    </th>
-                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                                            </svg>
-                                            <span>Resident</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                            </svg>
-                                            <span>Medicine</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                            </svg>
-                                            <span>Date</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                            </svg>
-                                            <span>Status</span>
-                                        </div>
-                                    </th>
-                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                        <div class="flex items-center justify-center space-x-2">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
-                                            </svg>
-                                            <span>Actions</span>
-                                        </div>
-                                    </th>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200" id="requestsTableBody">
+                            <?php else: ?>
                                 <?php foreach ($reqs as $r): ?>
-                                    <tr class="request-row hover:bg-gray-50 transition-colors duration-200" 
+                                    <tr class="request-row hover:bg-gray-50 transition-colors group" 
                                         data-resident="<?php echo strtolower(htmlspecialchars($r['first_name'] . ' ' . $r['last_name'])); ?>"
                                         data-medicine="<?php echo strtolower(htmlspecialchars($r['medicine'])); ?>"
                                         data-status="<?php echo $r['status']; ?>">
                                         
-                                        <!-- Request ID -->
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="flex items-center">
-                                                <div class="w-9 h-9 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-sm">
-                                                    <span class="text-white text-xs font-semibold tracking-wide">#<?php echo (int)$r['id']; ?></span>
-                                                </div>
-                                                <div>
-                                                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Request</div>
-                                                    <div class="text-[11px] text-gray-400">
-                                                        <?php echo htmlspecialchars($r['status'] === 'submitted' ? 'Awaiting review' : ucfirst($r['status'])); ?>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        
                                         <!-- Resident -->
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center">
-                                                <?php if (!empty($r['resident_profile_image'])): ?>
-                                                    <div class="relative mr-3">
-                                                        <img src="<?php echo htmlspecialchars(upload_url($r['resident_profile_image'])); ?>"
-                                                             alt="Resident Avatar"
-                                                             class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
-                                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                                        <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold border-2 border-purple-500" style="display:none;">
-                                                            <?php 
-                                                            $firstInitial = !empty($r['first_name']) ? substr($r['first_name'], 0, 1) : 'R';
-                                                            $lastInitial = !empty($r['last_name']) ? substr($r['last_name'], 0, 1) : 'D';
-                                                            echo strtoupper($firstInitial . $lastInitial);
-                                                            ?>
-                                                        </div>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold border-2 border-purple-500 mr-3">
-                                                        <?php 
-                                                        $firstInitial = !empty($r['first_name']) ? substr($r['first_name'], 0, 1) : 'R';
-                                                        $lastInitial = !empty($r['last_name']) ? substr($r['last_name'], 0, 1) : 'D';
-                                                        echo strtoupper($firstInitial . $lastInitial);
-                                                        ?>
-                                                    </div>
-                                                <?php endif; ?>
-                                                <div>
-                                                    <div class="text-sm font-medium text-gray-900">
-                                                        <?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?>
-                                                    </div>
-                                                    <?php if (!empty($r['family_first_name'])): ?>
-                                                        <div class="text-xs text-gray-500">
-                                                            For: <?php echo htmlspecialchars(trim(($r['family_first_name'] ?? '') . ' ' . ($r['family_last_name'] ?? ''))); ?>
-                                                            <?php if (!empty($r['family_relationship'])): ?>
-                                                                <span class="text-gray-400">· <?php echo htmlspecialchars($r['family_relationship']); ?></span>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    <?php elseif (!empty($r['patient_name'])): ?>
-                                                        <div class="text-xs text-gray-500">
-                                                            For: <?php echo htmlspecialchars($r['patient_name']); ?>
-                                                            <?php if (!empty($r['relationship'])): ?>
-                                                                <span class="text-gray-400">· <?php echo htmlspecialchars($r['relationship']); ?></span>
-                                                            <?php endif; ?>
+                                                <div class="flex-shrink-0 h-10 w-10">
+                                                    <?php if (!empty($r['resident_profile_image'])): ?>
+                                                        <img class="h-10 w-10 rounded-full object-cover border border-gray-200" src="<?php echo upload_url($r['resident_profile_image']); ?>" alt="">
+                                                    <?php else: ?>
+                                                        <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center text-blue-600 font-bold border border-blue-100">
+                                                            <?php echo strtoupper(substr($r['first_name'], 0, 1) . substr($r['last_name'], 0, 1)); ?>
                                                         </div>
                                                     <?php endif; ?>
                                                 </div>
+                                                <div class="ml-4">
+                                                    <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?></div>
+                                                    <div class="text-xs text-gray-500">ID: #<?php echo $r['id']; ?></div>
+                                                </div>
                                             </div>
                                         </td>
-                                        
+
                                         <!-- Medicine -->
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm font-medium text-blue-600"><?php echo htmlspecialchars($r['medicine']); ?></div>
+                                            <div class="text-sm text-gray-900 font-medium"><?php echo htmlspecialchars($r['medicine']); ?></div>
+                                            <?php if ($r['requested_for'] === 'family'): ?>
+                                                <div class="text-xs text-gray-500 flex items-center mt-0.5">
+                                                    <i class="fas fa-users mr-1 text-[10px]"></i>
+                                                    For: <?php echo htmlspecialchars($r['patient_name']); ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="text-xs text-gray-500">For: Self</div>
+                                            <?php endif; ?>
                                         </td>
-                                        
+
                                         <!-- Date -->
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="text-sm text-gray-900"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></div>
-                                            <div class="text-xs text-gray-500"><?php echo date('g:i A', strtotime($r['created_at'])); ?></div>
+                                            <div class="text-xs text-gray-500"><?php echo date('h:i A', strtotime($r['created_at'])); ?></div>
                                         </td>
-                                        
+
                                         <!-- Status -->
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <?php if ($r['status'] === 'submitted'): ?>
-                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                                    <span class="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1.5"></span>
                                                     Pending
                                                 </span>
                                             <?php elseif ($r['status'] === 'approved'): ?>
-                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                                                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
                                                     Approved
                                                 </span>
-                                            <?php elseif ($r['status'] === 'claimed'): ?>
-                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                                    </svg>
-                                                    Dispensed
-                                                </span>
                                             <?php elseif ($r['status'] === 'rejected'): ?>
-                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                    </svg>
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
                                                     Rejected
                                                 </span>
-                                            <?php else: ?>
-                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                    </svg>
-                                                    Rejected
+                                            <?php elseif ($r['status'] === 'dispensed'): ?>
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                                    <span class="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5"></span>
+                                                    Dispensed
                                                 </span>
                                             <?php endif; ?>
                                         </td>
-                                        
+
                                         <!-- Actions -->
-                                        <td class="px-6 py-4 whitespace-nowrap text-center">
-                                            <div class="flex items-center justify-center space-x-2">
-                                                <!-- View Details Button -->
-                                                <button onclick="openViewDetailsModal(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow-md">
-                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                    </svg>
-                                                    View
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <?php if ($r['status'] === 'submitted'): ?>
+                                                <button onclick="openReviewModal(<?php echo htmlspecialchars(json_encode($r)); ?>)" 
+                                                        class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+                                                    Review
                                                 </button>
-                                                
-                                                <?php if ($r['status'] === 'submitted'): ?>
-                                                    <!-- Approve Button -->
-                                                    <button onclick="approveRequest(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-sm hover:shadow-md">
-                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                        </svg>
-                                                        Approve
-                                                    </button>
-                                                    
-                                                    <!-- Reject Button -->
-                                                    <button onclick="openRejectModal(<?php echo (int)$r['id']; ?>)" class="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white text-xs font-medium rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 shadow-sm hover:shadow-md">
-                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                        </svg>
-                                                        Reject
-                                                    </button>
-                                                <?php else: ?>
-                                                    <span class="text-gray-400 text-xs">No actions</span>
-                                                <?php endif; ?>
-                                            </div>
+                                            <?php else: ?>
+                                                <button onclick="viewDetails(<?php echo htmlspecialchars(json_encode($r)); ?>)" 
+                                                        class="text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors">
+                                                    Details
+                                                </button>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
-
-                <!-- No Results Message -->
-                <div id="noResults" class="hidden text-center py-12">
-                    <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                                                        </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">No requests found</h3>
-                    <p class="text-gray-600 mb-4">Try adjusting your search or filter criteria.</p>
-                    <button onclick="clearFilters()" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                        Clear Filters
-                    </button>
-                                                </div>
-                                            <?php else: ?>
-                <!-- Empty State -->
-                <div class="empty-state-card hover-lift animate-fade-in-up p-12 text-center rounded-2xl shadow-lg">
-                    <div class="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-4">No Requests Found</h3>
-                    <p class="text-gray-600 mb-6 text-lg">No medicine requests have been submitted by residents in your assigned area.</p>
-                    
-                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-6 max-w-2xl mx-auto">
-                        <h4 class="text-lg font-semibold text-gray-900 mb-2">What you can do:</h4>
-                        <div class="space-y-2 text-left">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <span class="text-sm text-gray-700">Check if residents are aware of the request system</span>
-                            </div>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <span class="text-sm text-gray-700">Verify your assigned area coverage</span>
-                            </div>
-                            <div class="flex items-center space-x-3">
-                                <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <span class="text-sm text-gray-700">Review resident registrations</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
+            </div>
         </div>
     </main>
 
-    <!-- Reject Modal -->
-    <div id="rejectModal" class="fixed inset-0 flex items-center justify-center z-50 p-4 hidden">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in border border-gray-200">
-            <div class="p-6">
-                <div class="flex items-center justify-between mb-6">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-900">Reject Request</h3>
-                            <p class="text-gray-600">Provide a reason for rejection</p>
-                        </div>
-                    </div>
-                    <button onclick="closeRejectModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-                
-                <form method="post" class="space-y-4">
-                    <input type="hidden" name="id" id="rejectRequestId" />
-                    <input type="hidden" name="action" value="reject" />
+    <!-- Review Modal -->
+    <!-- Review Modal -->
+    <div id="reviewModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-900 bg-opacity-50 transition-opacity backdrop-blur-sm" aria-hidden="true" onclick="closeReviewModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl w-full border border-gray-100">
+                <form action="" method="POST" id="reviewForm">
+                    <input type="hidden" name="id" id="modalRequestId">
+                    <input type="hidden" name="action" id="modalAction">
                     
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Rejection Reason</label>
-                        <textarea name="reason" rows="4" required
-                                  class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm resize-none" 
-                                  placeholder="Enter the reason for rejecting this request..."></textarea>
-                    </div>
-                    
-                    <div class="flex justify-end space-x-3">
-                        <button type="button" onclick="closeRejectModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">
-                            Cancel
+                    <!-- Modal Header -->
+                    <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 flex justify-between items-center">
+                        <h3 class="text-base font-bold text-white flex items-center" id="modal-title">
+                            <i class="fas fa-clipboard-check mr-2 text-blue-200"></i>
+                            Review Request
+                        </h3>
+                        <button type="button" onclick="closeReviewModal()" class="text-blue-100 hover:text-white transition-colors rounded-full p-1 hover:bg-white/10">
+                            <i class="fas fa-times text-base"></i>
                         </button>
-                        <button type="submit" class="inline-flex items-center px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white font-medium rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-lg hover:shadow-xl">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                            Reject Request
+                    </div>
+                    
+                    <div class="px-5 py-5">
+                        <!-- Resident Info Card -->
+                        <div class="flex items-center justify-between p-3 bg-blue-50/50 rounded-xl border border-blue-100 mb-4">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0" id="modalResidentAvatar">
+                                    <!-- Avatar injected via JS -->
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-0.5">Resident</p>
+                                    <h4 class="text-base font-bold text-gray-900 leading-tight" id="modalResidentName"></h4>
+                                    <p class="text-[11px] text-gray-500 mt-0.5" id="modalResidentId"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Requested</p>
+                                <p class="text-xs font-bold text-gray-700" id="modalRequestDate"></p>
+                                <p class="text-[10px] text-gray-500" id="modalRequestTime"></p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <!-- Medicine & Reason -->
+                            <div class="grid grid-cols-1 gap-3">
+                                <div class="bg-gray-50 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-colors">
+                                    <div class="flex items-start">
+                                        <div class="flex-shrink-0 mt-1" id="modalMedicineImage">
+                                            <!-- Medicine Image or Icon -->
+                                        </div>
+                                        <div class="ml-3">
+                                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Medicine Requested</p>
+                                            <p class="text-sm font-bold text-gray-900 mt-0.5" id="modalMedicineName"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gray-50 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-colors">
+                                    <div class="flex items-start">
+                                        <div class="flex-shrink-0 mt-1">
+                                            <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                                                <i class="fas fa-quote-left text-xs"></i>
+                                            </div>
+                                        </div>
+                                        <div class="ml-3 w-full">
+                                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Reason</p>
+                                            <p class="text-sm text-gray-700 mt-1 italic bg-white p-2 rounded-lg border border-gray-100" id="modalReason"></p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Proof Image -->
+                                <div id="modalProofSection" class="hidden bg-gray-50 p-3 rounded-xl border border-gray-100 group hover:border-blue-200 transition-colors">
+                                    <!-- Content injected via JS -->
+                                </div>
+                            </div>
+                            
+                            <!-- Action Selection -->
+                            <div id="actionSelection" class="mt-6 pt-6 border-t border-gray-100">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 text-center">Select Action</p>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <button type="button" onclick="selectAction('approve')" class="group relative flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all duration-200">
+                                        <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2 group-hover:scale-110 transition-transform shadow-sm">
+                                            <i class="fas fa-paper-plane text-lg"></i>
+                                        </div>
+                                        <span class="text-xs font-bold text-gray-700 group-hover:text-green-700">Approve & Forward</span>
+                                        <span class="text-[10px] text-gray-400 group-hover:text-green-600 mt-0.5">To On-Duty BHW</span>
+                                    </button>
+                                    
+                                    <button type="button" onclick="selectAction('reject')" class="group relative flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all duration-200">
+                                        <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 mb-2 group-hover:scale-110 transition-transform shadow-sm">
+                                            <i class="fas fa-times text-lg"></i>
+                                        </div>
+                                        <span class="text-xs font-bold text-gray-700 group-hover:text-red-700">Reject</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Approval Fields -->
+                            <div id="approvalFields" class="hidden mt-3 animate-fade-in bg-green-50 rounded-xl p-3 border border-green-100">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-bold text-green-800 flex items-center">
+                                        <i class="fas fa-check-circle mr-1.5 text-green-600"></i> Approving & Forwarding
+                                    </h4>
+                                    <button type="button" onclick="resetAction()" class="text-[10px] font-bold text-green-700 hover:text-green-900 underline uppercase">Change</button>
+                                </div>
+                                <label class="block text-[10px] font-bold text-green-800 uppercase tracking-wide mb-1">Remarks (Optional)</label>
+                                <textarea name="approval_remarks" rows="2" class="w-full border-green-200 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 text-xs bg-white" placeholder="Add any notes for the resident..."></textarea>
+                            </div>
+
+                            <!-- Rejection Fields -->
+                            <div id="rejectionFields" class="hidden mt-3 animate-fade-in bg-red-50 rounded-xl p-3 border border-red-100">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-bold text-red-800 flex items-center">
+                                        <i class="fas fa-times-circle mr-1.5 text-red-600"></i> Rejecting Request
+                                    </h4>
+                                    <button type="button" onclick="resetAction()" class="text-[10px] font-bold text-red-700 hover:text-red-900 underline uppercase">Change</button>
+                                </div>
+                                <label class="block text-[10px] font-bold text-red-800 uppercase tracking-wide mb-1">Reason for Rejection <span class="text-red-600">*</span></label>
+                                <textarea name="reason" rows="2" class="w-full border-red-200 rounded-lg shadow-sm focus:ring-red-500 focus:border-red-500 text-xs bg-white" placeholder="Please explain why this request is being rejected..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 px-5 py-3 flex flex-row-reverse gap-2" id="modalFooter">
+                        <button type="button" onclick="closeReviewModal()" class="w-full sm:w-auto inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-xs font-bold rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors uppercase tracking-wide">
+                            Close
                         </button>
                     </div>
                 </form>
@@ -742,616 +631,325 @@ try {
         </div>
     </div>
 
-    <!-- View Details Modal -->
-    <div id="viewDetailsModal" class="fixed inset-0 bg-transparent hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100" style="box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);">
-            <!-- Header with clean design -->
-            <div class="bg-white border-b border-gray-200 rounded-t-3xl p-6">
-                <div class="flex justify-between items-center">
-                        <div>
-                        <h2 class="text-2xl font-bold text-gray-900">Request Details</h2>
-                        <p class="text-gray-500 text-sm">Complete medicine request information</p>
-                        </div>
-                    <button onclick="closeViewDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg transition-colors duration-200">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Content -->
-            <div class="p-8">
-                <div id="viewDetailsContent">
-                    <!-- Content will be populated by JavaScript -->
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const searchInput = document.getElementById('searchInput');
-        const filterChips = document.querySelectorAll('.filter-chip');
-        const requestRows = document.querySelectorAll('.request-row');
-        const requestsTableBody = document.getElementById('requestsTableBody');
-        const noResults = document.getElementById('noResults');
-        const requestCount = document.getElementById('request-count');
-
-        let currentFilter = 'all';
-        let currentSearch = '';
-
-        // Search functionality
-        if (searchInput) {
-            searchInput.addEventListener('input', function() {
-                currentSearch = this.value.toLowerCase();
-                filterRequests();
-            });
-        }
-
-        // Filter functionality
-        filterChips.forEach(chip => {
-            chip.addEventListener('click', function() {
+        // Filter Logic
+        document.querySelectorAll('.filter-chip').forEach(button => {
+            button.addEventListener('click', () => {
                 // Update active state
-                filterChips.forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-                
-                currentFilter = this.dataset.filter;
-                filterRequests();
+                document.querySelectorAll('.filter-chip').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                const filter = button.getAttribute('data-filter');
+                const rows = document.querySelectorAll('.request-row');
+
+                rows.forEach(row => {
+                    if (filter === 'all' || row.getAttribute('data-status') === filter) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
             });
         });
 
-        function filterRequests() {
-            let visibleCount = 0;
-            
-            requestRows.forEach(row => {
-                const resident = row.dataset.resident;
-                const medicine = row.dataset.medicine;
-                const status = row.dataset.status;
+        // Search Logic
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('.request-row');
+
+            rows.forEach(row => {
+                const resident = row.getAttribute('data-resident');
+                const medicine = row.getAttribute('data-medicine');
                 
-                let matchesSearch = true;
-                let matchesFilter = true;
-                
-                // Check search match
-                if (currentSearch) {
-                    matchesSearch = resident.includes(currentSearch) || medicine.includes(currentSearch);
-                }
-                
-                // Check filter match
-                if (currentFilter !== 'all') {
-                    matchesFilter = status === currentFilter;
-                }
-                
-                if (matchesSearch && matchesFilter) {
-                    row.style.display = 'table-row';
-                    visibleCount++;
+                if (resident.includes(searchTerm) || medicine.includes(searchTerm)) {
+                    row.style.display = '';
                 } else {
                     row.style.display = 'none';
                 }
             });
-            
-            // Update count
-            if (requestCount) {
-                requestCount.textContent = visibleCount;
-            }
-            
-            // Show/hide no results message
-            if (visibleCount === 0) {
-                if (noResults) noResults.classList.remove('hidden');
-                if (requestsTableBody) requestsTableBody.parentElement.parentElement.classList.add('hidden');
-            } else {
-                if (noResults) noResults.classList.add('hidden');
-                if (requestsTableBody) requestsTableBody.parentElement.parentElement.classList.remove('hidden');
-            }
-        }
+        });
 
-        // Clear filters function
-        window.clearFilters = function() {
-            if (searchInput) searchInput.value = '';
-            currentSearch = '';
-            currentFilter = 'all';
+        // Modal Logic
+        function openReviewModal(data) {
+            const modal = document.getElementById('reviewModal');
             
-            filterChips.forEach(c => c.classList.remove('active'));
-            filterChips[0].classList.add('active');
+            document.getElementById('modalRequestId').value = data.id;
+            document.getElementById('modalResidentName').textContent = data.first_name + ' ' + data.last_name;
+            document.getElementById('modalResidentId').textContent = 'Resident ID: #' + data.resident_id;
+            document.getElementById('modalMedicineName').textContent = data.medicine;
+            document.getElementById('modalReason').textContent = data.reason || 'No reason provided';
             
-            filterRequests();
-        };
+            // Date and Time
+            const date = new Date(data.created_at);
+            document.getElementById('modalRequestDate').textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            document.getElementById('modalRequestTime').textContent = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-        // Reject modal functions (will be redefined below for AJAX)
-
-        // View Details modal functions
-        window.openViewDetailsModal = function(requestId) {
-            // Find the request data
-            const requestData = <?php echo json_encode($reqs); ?>;
-            const request = requestData.find(r => r.id == requestId);
-            
-            if (!request) {
-                console.error('Request not found:', requestId);
-                return;
-            }
-            
-            // Populate modal content
-            populateViewDetailsModal(request);
-            
-            // Show modal
-            document.getElementById('viewDetailsModal').classList.remove('hidden');
-            document.getElementById('viewDetailsModal').classList.add('flex');
-        };
-
-        window.closeViewDetailsModal = function() {
-            document.getElementById('viewDetailsModal').classList.add('hidden');
-            document.getElementById('viewDetailsModal').classList.remove('flex');
-        };
-
-        function populateViewDetailsModal(request) {
-            const content = document.getElementById('viewDetailsContent');
-            
-            // Determine requested for display
-            let requestedForDisplay = '';
-            let patientInfo = '';
-            
-            if (request.requested_for === 'self') {
-                requestedForDisplay = 'Self';
-                patientInfo = `${request.first_name} ${request.last_name}`;
-            } else if (request.requested_for === 'family') {
-                if (request.family_first_name) {
-                    requestedForDisplay = 'Family Member';
-                    patientInfo = `${request.family_first_name} ${request.family_middle_initial || ''} ${request.family_last_name}`;
-                } else {
-                    requestedForDisplay = 'Family Member';
-                    patientInfo = request.patient_name || 'Unknown';
+            // Helper for upload url
+            function upload_url(path) {
+                if (!path) return '';
+                const cleanPath = path.replace(/^uploads\//, ''); 
+                
+                // Profiles are in root uploads (thesis/uploads) -> Go up 2 levels
+                if (cleanPath.startsWith('profiles/')) {
+                    return '../../uploads/' + cleanPath;
+                } 
+                // Others (proofs, medicines) are in public uploads (thesis/public/uploads) -> Go up 1 level
+                else {
+                    return '../uploads/' + cleanPath;
                 }
             }
-            
-            // Status badge
-            let statusBadge = '';
-            if (request.status === 'submitted') {
-                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Pending</span>';
-            } else if (request.status === 'approved') {
-                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Approved</span>';
-            } else if (request.status === 'claimed') {
-                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Dispensed</span>';
-            } else if (request.status === 'rejected') {
-                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>Rejected</span>';
+
+            // Set Resident Avatar
+            const avatarContainer = document.getElementById('modalResidentAvatar');
+            if (data.resident_profile_image) {
+                avatarContainer.innerHTML = `<img class="h-10 w-10 rounded-full object-cover border-2 border-white shadow-sm" src="${upload_url(data.resident_profile_image)}" alt="" onerror="this.onerror=null;this.src='<?php echo base_url('assets/images/default-avatar.png'); ?>';this.parentElement.innerHTML='<div class=\'h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-400\'><i class=\'fas fa-user\'></i></div>'">`;
             } else {
-                statusBadge = '<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>Rejected</span>';
+                const initials = (data.first_name.charAt(0) + data.last_name.charAt(0)).toUpperCase();
+                avatarContainer.innerHTML = `<div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">${initials}</div>`;
             }
-            
-            // Proof image section
-            let proofImageSection = '';
-            if (request.proof_image_path && request.proof_image_path.trim() !== '') {
-                proofImageSection = `
-                    <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-gray-100 p-2 rounded-lg">
-                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Proof Image</h3>
-                                <p class="text-gray-600 text-sm">Submitted by resident</p>
-                            </div>
-                        </div>
-                        <div class="bg-white rounded-lg p-4 border border-gray-200">
-                            <img src="<?php echo base_url(''); ?>${request.proof_image_path}" alt="Proof Image" class="w-full h-auto max-h-96 object-contain rounded-lg shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                            <div style="display: none;" class="text-center py-8 text-gray-500">
-                                <svg class="w-12 h-12 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                </svg>
-                                <p>Image not available</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
+
+            // Set Medicine Image
+            const medicineImageContainer = document.getElementById('modalMedicineImage');
+            if (data.medicine_image_path) {
+                medicineImageContainer.innerHTML = `<img class="w-8 h-8 rounded-lg object-cover border border-gray-200" src="${upload_url(data.medicine_image_path)}" alt="Med">`;
             } else {
-                proofImageSection = `
-                    <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-gray-100 p-2 rounded-lg">
-                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                </svg>
+                medicineImageContainer.innerHTML = `<div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600"><i class="fas fa-pills text-xs"></i></div>`;
+            }
+
+            // Set Proof Image
+            const proofSection = document.getElementById('modalProofSection');
+            const proofImage = document.getElementById('modalProofImage');
+            
+            // Always show the section, but update content based on availability
+            proofSection.classList.remove('hidden');
+            
+            if (data.proof_image_path) {
+                proofSection.innerHTML = `
+                    <div class="flex flex-col">
+                        <div class="flex items-center mb-2">
+                            <div class="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center text-teal-600 mr-3">
+                                <i class="fas fa-image text-xs"></i>
                             </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Proof Image</h3>
-                                <p class="text-gray-600 text-sm">No image submitted</p>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Proof of Request</p>
+                        </div>
+                        <div class="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 group-hover:border-blue-200 transition-colors h-64 flex items-center justify-center">
+                            <img src="${upload_url(data.proof_image_path)}" alt="Proof" class="max-w-full max-h-full object-contain cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open(this.src, '_blank')">
+                            <div class="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm text-gray-600 text-[10px] px-3 py-2 text-center pointer-events-none border-t border-gray-100">
+                                Click image to view full size
                             </div>
                         </div>
-                        <div class="bg-white rounded-lg p-4 border border-gray-200 text-center py-8">
-                            <svg class="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                            </svg>
-                            <p class="text-gray-500 font-medium">No proof image was submitted</p>
-                            <p class="text-gray-400 text-sm mt-1">The resident did not upload any supporting documentation</p>
+                    </div>`;
+            } else {
+                proofSection.innerHTML = `
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mr-3">
+                            <i class="fas fa-image-slash text-xs"></i>
                         </div>
-                    </div>
-                `;
+                        <div>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Proof of Request</p>
+                            <p class="text-xs text-gray-400 italic mt-0.5">No proof image provided</p>
+                        </div>
+                    </div>`;
             }
             
-            // Rejection reason section
-            let rejectionSection = '';
-            if (request.status === 'rejected' && request.rejection_reason) {
-                rejectionSection = `
-                    <div class="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="bg-gray-100 p-2 rounded-lg">
-                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Rejection Reason</h3>
-                                <p class="text-gray-600 text-sm">Why this request was rejected</p>
-                            </div>
-                        </div>
-                        <div class="bg-white rounded-lg p-4 border border-gray-200">
-                            <p class="text-gray-800">${request.rejection_reason}</p>
-                        </div>
-                    </div>
-                `;
-            }
+            // Reset state
+            resetAction();
             
-            content.innerHTML = `
-                <div class="bg-white border border-gray-200 rounded-lg p-8">
-                    <!-- Header Section -->
-                    <div class="border-b border-gray-200 pb-6 mb-8">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-2xl font-bold text-gray-900">Request #${request.id}</h3>
-                                    ${statusBadge}
-                                </div>
-                        <div class="text-sm text-gray-500">
-                            Created: ${new Date(request.created_at).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}
-                            ${request.updated_at ? ` • Updated: ${new Date(request.updated_at).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}` : ''}
-                            </div>
-                        </div>
-
-                    <!-- Main Content Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <!-- Left Column -->
-                        <div class="space-y-6">
-                        <!-- Medicine Information -->
-                                <div>
-                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Medicine</h4>
-                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <p class="text-xl font-medium text-gray-900">${request.medicine}</p>
-                            </div>
-                        </div>
-
-                        <!-- Patient Information -->
-                            <div>
-                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Patient Information</h4>
-                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-                                    <div>
-                                        <span class="text-sm text-gray-500">Requested For:</span>
-                                        <p class="text-gray-900">${requestedForDisplay}</p>
-                                </div>
-                                <div>
-                                        <span class="text-sm text-gray-500">Patient Name:</span>
-                                        <p class="text-gray-900">${patientInfo}</p>
-                                </div>
-                                ${request.patient_date_of_birth ? `
-                                    <div>
-                                        <span class="text-sm text-gray-500">Date of Birth:</span>
-                                        <p class="text-gray-900">${new Date(request.patient_date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                </div>
-                                ` : ''}
-                                ${request.relationship ? `
-                                    <div>
-                                        <span class="text-sm text-gray-500">Relationship:</span>
-                                        <p class="text-gray-900">${request.relationship}</p>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Right Column -->
-                    <div class="space-y-6">
-                        <!-- Resident Information -->
-                                <div>
-                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Resident</h4>
-                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <p class="text-lg font-medium text-gray-900">${request.first_name} ${request.last_name}</p>
-                            </div>
-                        </div>
-
-                        ${request.reason ? `
-                            <!-- Reason -->
-                                <div>
-                                <h4 class="text-lg font-semibold text-gray-900 mb-3">Reason</h4>
-                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <p class="text-gray-900">${request.reason}</p>
-                            </div>
-                        </div>
-                        ` : ''}
-
-                        ${proofImageSection}
-
-                        ${rejectionSection}
-                        </div>
-                    </div>
-                </div>
-            `;
+            modal.classList.remove('hidden');
         }
 
-        // Add intersection observer for animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, observerOptions);
-
-        // Observe all animated elements
-        document.querySelectorAll('.animate-fade-in-up, .animate-fade-in, .animate-slide-in-right').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(20px)';
-            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-            observer.observe(el);
-        });
-
-        // Add hover effects to table rows
-        document.querySelectorAll('.request-row').forEach(row => {
-            row.addEventListener('mouseenter', function() {
-                this.style.backgroundColor = '#f9fafb';
-            });
+        function closeReviewModal() {
+            document.getElementById('reviewModal').classList.add('hidden');
+        }
+        
+        function selectAction(action) {
+            document.getElementById('modalAction').value = action;
+            document.getElementById('actionSelection').classList.add('hidden');
             
-            row.addEventListener('mouseleave', function() {
-                this.style.backgroundColor = '';
-            });
-        });
-
-        // Add ripple effect to buttons (excluding sidebar links)
-        document.querySelectorAll('a:not(.sidebar-nav a), button').forEach(element => {
-            element.addEventListener('click', function(e) {
-                const ripple = document.createElement('span');
-                const rect = this.getBoundingClientRect();
-                const size = Math.max(rect.width, rect.height);
-                const x = e.clientX - rect.left - size / 2;
-                const y = e.clientY - rect.top - size / 2;
-                
-                ripple.style.width = ripple.style.height = size + 'px';
-                ripple.style.left = x + 'px';
-                ripple.style.top = y + 'px';
-                ripple.classList.add('ripple');
-                
-                this.appendChild(ripple);
-                
-                setTimeout(() => {
-                    ripple.remove();
-                }, 600);
-            });
-        });
-
-        // Add keyboard navigation for search
-        if (searchInput) {
-            searchInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    this.value = '';
-                    currentSearch = '';
-                    filterRequests();
-                }
-            });
-        }
-
-        // Close modal on outside click
-        document.getElementById('rejectModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeRejectModal();
-            }
-        });
-
-        // Close view details modal on outside click
-        document.getElementById('viewDetailsModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeViewDetailsModal();
-            }
-        });
-
-        // Function to update notification badges
-        function updateNotificationBadges() {
-            fetch('<?php echo base_url('bhw/get_notification_counts.php'); ?>')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const counts = data.counts;
-                        
-                        // Update Medicine Requests badge
-                        const medicineRequestsBadge = document.querySelector('a[href*="requests.php"] .notification-badge');
-                        if (counts.pending_requests > 0) {
-                            if (medicineRequestsBadge) {
-                                medicineRequestsBadge.textContent = counts.pending_requests;
-                            } else {
-                                // Create badge if it doesn't exist
-                                const medicineRequestsLink = document.querySelector('a[href*="requests.php"]');
-                                if (medicineRequestsLink) {
-                                    const badge = document.createElement('span');
-                                    badge.className = 'notification-badge';
-                                    badge.textContent = counts.pending_requests;
-                                    medicineRequestsLink.appendChild(badge);
-                                }
-                            }
-                        } else {
-                            // Remove badge if count is 0
-                            if (medicineRequestsBadge) {
-                                medicineRequestsBadge.remove();
-                            }
-                        }
-                        
-                        // Update Pending Registrations badge
-                        const pendingRegistrationsBadge = document.querySelector('a[href*="pending_residents.php"] .notification-badge');
-                        if (counts.pending_registrations > 0) {
-                            if (pendingRegistrationsBadge) {
-                                pendingRegistrationsBadge.textContent = counts.pending_registrations;
-                            } else {
-                                // Create badge if it doesn't exist
-                                const pendingRegistrationsLink = document.querySelector('a[href*="pending_residents.php"]');
-                                if (pendingRegistrationsLink) {
-                                    const badge = document.createElement('span');
-                                    badge.className = 'notification-badge';
-                                    badge.textContent = counts.pending_registrations;
-                                    pendingRegistrationsLink.appendChild(badge);
-                                }
-                            }
-                        } else {
-                            // Remove badge if count is 0
-                            if (pendingRegistrationsBadge) {
-                                pendingRegistrationsBadge.remove();
-                            }
-                        }
-                        
-                        // Update Pending Family Additions badge
-                        const pendingFamilyBadge = document.querySelector('a[href*="pending_family_additions.php"] .notification-badge');
-                        if (counts.pending_family_additions > 0) {
-                            if (pendingFamilyBadge) {
-                                pendingFamilyBadge.textContent = counts.pending_family_additions;
-                            } else {
-                                // Create badge if it doesn't exist
-                                const pendingFamilyLink = document.querySelector('a[href*="pending_family_additions.php"]');
-                                if (pendingFamilyLink) {
-                                    const badge = document.createElement('span');
-                                    badge.className = 'notification-badge';
-                                    badge.textContent = counts.pending_family_additions;
-                                    pendingFamilyLink.appendChild(badge);
-                                }
-                            }
-                        } else {
-                            // Remove badge if count is 0
-                            if (pendingFamilyBadge) {
-                                pendingFamilyBadge.remove();
-                            }
-                        }
-                        
-                        // Add visual feedback for badge updates
-                        const updatedBadges = document.querySelectorAll('.notification-badge');
-                        updatedBadges.forEach(badge => {
-                            badge.style.transform = 'scale(1.2)';
-                            badge.style.transition = 'transform 0.3s ease';
-                            setTimeout(() => {
-                                badge.style.transform = 'scale(1)';
-                            }, 300);
-                        });
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating notification badges:', error);
-                });
-        }
-
-        // AJAX approve request function
-        function approveRequest(requestId) {
-            const formData = new FormData();
-            formData.append('id', requestId);
-            formData.append('action', 'approve');
+            const footer = document.getElementById('modalFooter');
             
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(data => {
-                // Update badges immediately
-                updateNotificationBadges();
-                
-                // Reload page to show updated status
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            })
-            .catch(error => {
-                console.error('Error approving request:', error);
-                alert('Error approving request. Please try again.');
-            });
-        }
-
-        // AJAX reject request function
-        function rejectRequest(requestId, reason) {
-            const formData = new FormData();
-            formData.append('id', requestId);
-            formData.append('action', 'reject');
-            formData.append('reason', reason);
+            // Remove existing confirm button if any
+            const existingConfirm = document.getElementById('confirmBtn');
+            if (existingConfirm) existingConfirm.remove();
             
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(data => {
-                // Update badges immediately
-                updateNotificationBadges();
-                
-                // Close reject modal
-                closeRejectModal();
-                
-                // Reload page to show updated status
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            })
-            .catch(error => {
-                console.error('Error rejecting request:', error);
-                alert('Error rejecting request. Please try again.');
-            });
-        }
-
-        // Update reject modal form submission
-        window.openRejectModal = function(requestId) {
-            document.getElementById('rejectRequestId').value = requestId;
-            document.getElementById('rejectModal').classList.remove('hidden');
-            document.getElementById('rejectModal').classList.add('flex');
-        };
-
-        window.closeRejectModal = function() {
-            document.getElementById('rejectModal').classList.add('hidden');
-            document.getElementById('rejectModal').classList.remove('flex');
-            // Reset form
-            document.querySelector('#rejectModal form').reset();
-        };
-
-        // Override reject form submission to use AJAX
-        document.addEventListener('DOMContentLoaded', function() {
-            const rejectForm = document.querySelector('#rejectModal form');
-            if (rejectForm) {
-                rejectForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    const requestId = document.getElementById('rejectRequestId').value;
-                    const reason = document.querySelector('#rejectModal textarea[name="reason"]').value;
-                    
-                    if (!reason.trim()) {
-                        alert('Please provide a rejection reason.');
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button'; // Prevent auto submit
+            confirmBtn.id = 'confirmBtn';
+            confirmBtn.className = `w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-xs font-bold rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all transform hover:scale-105 uppercase tracking-wide ${action === 'approve' ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 focus:ring-green-500' : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 focus:ring-red-500'}`;
+            confirmBtn.innerHTML = action === 'approve' ? '<i class="fas fa-paper-plane mr-1.5"></i> Confirm & Forward' : '<i class="fas fa-times mr-1.5"></i> Confirm Rejection';
+            
+            confirmBtn.onclick = function() {
+                const form = document.getElementById('reviewForm');
+                if (action === 'reject') {
+                    if (!form.querySelector('[name="reason"]').value.trim()) {
+                        Swal.fire('Error', 'Please provide a rejection reason', 'error');
                         return;
                     }
-                    
-                    rejectRequest(requestId, reason);
-                });
+                }
+                form.submit();
+            };
+            
+            footer.insertBefore(confirmBtn, footer.firstChild);
+            
+            if (action === 'approve') {
+                document.getElementById('approvalFields').classList.remove('hidden');
+                document.getElementById('rejectionFields').classList.add('hidden');
+            } else {
+                document.getElementById('approvalFields').classList.add('hidden');
+                document.getElementById('rejectionFields').classList.remove('hidden');
             }
-        });
+        }
+        
+        function resetAction() {
+            document.getElementById('modalAction').value = '';
+            document.getElementById('actionSelection').classList.remove('hidden');
+            document.getElementById('approvalFields').classList.add('hidden');
+            document.getElementById('rejectionFields').classList.add('hidden');
+            
+            const existingConfirm = document.getElementById('confirmBtn');
+            if (existingConfirm) existingConfirm.remove();
+        }
 
-        // Header Functions
-        // Old time update, night mode, and profile dropdown code removed - now handled by header include
-    });
+        function viewDetails(data) {
+            // Helper for upload url (same as in openReviewModal)
+            function upload_url(path) {
+                if (!path) return '';
+                const cleanPath = path.replace(/^uploads\//, ''); 
+                
+                // Profiles are in root uploads (thesis/uploads) -> Go up 2 levels
+                if (cleanPath.startsWith('profiles/')) {
+                    return '../../uploads/' + cleanPath;
+                } 
+                // Others (proofs, medicines) are in public uploads (thesis/public/uploads) -> Go up 1 level
+                else {
+                    return '../uploads/' + cleanPath;
+                }
+            }
+
+            // Build resident avatar
+            let residentAvatar = '';
+            if (data.resident_profile_image) {
+                residentAvatar = `<img class="h-12 w-12 rounded-full object-cover border-2 border-blue-200 shadow-sm" src="${upload_url(data.resident_profile_image)}" alt="" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-400\\'><i class=\\'fas fa-user\\'></i></div>'">`;
+            } else {
+                const initials = (data.first_name.charAt(0) + data.last_name.charAt(0)).toUpperCase();
+                residentAvatar = `<div class="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-base border-2 border-blue-200 shadow-sm">${initials}</div>`;
+            }
+
+            // Build medicine image
+            let medicineImage = '';
+            if (data.medicine_image_path) {
+                medicineImage = `<img class="h-10 w-10 rounded-lg object-cover border border-gray-200 shadow-sm" src="${upload_url(data.medicine_image_path)}" alt="${data.medicine}" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-500\\'><i class=\\'fas fa-pills\\'></i></div>'">`;
+            } else {
+                medicineImage = `<div class="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-500"><i class="fas fa-pills"></i></div>`;
+            }
+
+            // Build proof section
+            let proofSection = '';
+            if (data.proof_image_path) {
+                proofSection = `
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Proof of Request</p>
+                        <div class="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 h-48 flex items-center justify-center">
+                            <img src="${upload_url(data.proof_image_path)}" alt="Proof" class="max-w-full max-h-full object-contain cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open(this.src, '_blank')">
+                            <div class="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm text-gray-600 text-xs px-3 py-2 text-center pointer-events-none border-t border-gray-100">
+                                Click image to view full size
+                            </div>
+                        </div>
+                    </div>`;
+            } else {
+                proofSection = `
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Proof of Request</p>
+                        <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                            <i class="fas fa-image text-3xl mb-2"></i>
+                            <p class="text-sm">No proof image provided</p>
+                        </div>
+                    </div>`;
+            }
+
+            const requestDate = new Date(data.created_at);
+            const updatedDate = new Date(data.updated_at);
+
+            Swal.fire({
+                title: 'Request Details',
+                html: `
+                    <div class="text-left space-y-4">
+                        <!-- Resident Info -->
+                        <div class="flex items-center p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                            ${residentAvatar}
+                            <div class="ml-3 flex-1">
+                                <p class="text-xs font-bold text-blue-600 uppercase tracking-wider">Resident</p>
+                                <p class="text-base font-bold text-gray-900">${data.first_name} ${data.last_name}</p>
+                                <p class="text-xs text-gray-500">ID: #${data.resident_id}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Requested</p>
+                                <p class="text-xs font-bold text-gray-700">${requestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                <p class="text-xs text-gray-500">${requestDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+                            </div>
+                        </div>
+
+                        <!-- Medicine & Reason -->
+                        <div class="grid grid-cols-1 gap-3">
+                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                <div class="flex items-start">
+                                    ${medicineImage}
+                                    <div class="ml-3">
+                                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">Medicine Requested</p>
+                                        <p class="text-sm font-bold text-gray-900 mt-1">${data.medicine}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Reason</p>
+                                <p class="text-sm text-gray-700 italic bg-white p-2 rounded-lg border border-gray-100">${data.reason || 'No reason provided'}</p>
+                            </div>
+                        </div>
+
+                        <!-- Proof Image -->
+                        ${proofSection}
+
+                        <!-- Status Info -->
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p class="text-xs text-gray-500 mb-1">Status</p>
+                                    <p class="font-bold text-sm capitalize ${data.status === 'approved' ? 'text-green-600' : data.status === 'rejected' ? 'text-red-600' : 'text-orange-600'}">${data.status}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-gray-500 mb-1">Processed Date</p>
+                                    <p class="font-medium text-sm">${updatedDate.toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                            ${data.approved_by_name ? `
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <p class="text-xs text-gray-500 mb-1">Processed By</p>
+                                    <p class="font-medium text-sm">${data.approved_by_name}</p>
+                                </div>` : ''}
+                        </div>
+
+                        ${data.rejection_reason ? `
+                        <div class="bg-red-50 p-3 rounded-xl border border-red-200">
+                            <p class="text-xs text-red-600 font-bold uppercase tracking-wide mb-1">Rejection Reason</p>
+                            <p class="text-sm text-red-700">${data.rejection_reason}</p>
+                        </div>` : ''}
+                        
+                        ${data.approval_remarks ? `
+                        <div class="bg-green-50 p-3 rounded-xl border border-green-200">
+                            <p class="text-xs text-green-600 font-bold uppercase tracking-wide mb-1">Approval Remarks</p>
+                            <p class="text-sm text-green-700">${data.approval_remarks}</p>
+                        </div>` : ''}
+                    </div>
+                `,
+                confirmButtonText: 'Close',
+                width: '600px',
+                customClass: {
+                    popup: 'rounded-2xl',
+                    confirmButton: 'px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold'
+                }
+            });
+        }
     </script>
 </body>
 </html>
-
-

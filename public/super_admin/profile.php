@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/email_notifications.php';
 require_auth(['super_admin']);
+require_once __DIR__ . '/includes/sidebar.php';
 
 // Helper function to get upload URL (uploads are at project root, not in public/)
 function upload_url(string $path): string {
@@ -31,11 +32,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
     if ($action === 'update_profile') {
+        // Sanitize input data - remove banned characters and prevent HTML/script injection
+        function sanitizeInputBackend($value, $pattern = null) {
+            if (empty($value)) return '';
+            
+            // Remove script tags and HTML tags (prevent XSS)
+            $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+            $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+            
+            // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+            $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+            $sanitized = preg_replace($banned, '', $sanitized);
+            
+            // Remove control characters and emojis
+            $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+            $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+            
+            // Trim leading/trailing spaces
+            $sanitized = trim($sanitized);
+            
+            // Apply pattern if provided
+            if ($pattern && $sanitized) {
+                $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+            }
+            
+            return $sanitized;
+        }
+        
         $first_name = trim($_POST['first_name'] ?? '');
         $last_name = trim($_POST['last_name'] ?? '');
         $email = trim($_POST['email'] ?? '');
         
-        if ($first_name && $last_name && $email) {
+        $errors = [];
+        
+        // Validate first name (letters only, no digits)
+        if (empty($first_name) || strlen($first_name) < 2) {
+            $errors[] = 'First name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $first_name)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first_name)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $first_name = sanitizeInputBackend($first_name, 'A-Za-zÀ-ÿ\' -');
+        }
+        
+        // Validate last name (letters only, no digits)
+        if (empty($last_name) || strlen($last_name) < 2) {
+            $errors[] = 'Last name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $last_name)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last_name)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $last_name = sanitizeInputBackend($last_name, 'A-Za-zÀ-ÿ\' -');
+        }
+        
+        if ($first_name && $last_name && $email && empty($errors)) {
             try {
                 // Check if email is already taken by another user
                 $stmt = db()->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
@@ -58,6 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $e) {
                 set_flash('Failed to update profile. Please try again.', 'error');
             }
+        } elseif (!empty($errors)) {
+            set_flash(implode(' ', $errors), 'error');
         } else {
             set_flash('Please fill in all required fields.', 'error');
         }
@@ -162,6 +216,57 @@ if (!empty($user_data)) {
 if (!isset($user_data['profile_image'])) {
     $user_data['profile_image'] = null;
 }
+
+// Fetch notification data (similar to dashboardnew.php)
+try {
+    $pending_requests = db()->query('SELECT COUNT(*) as count FROM requests WHERE status = "submitted"')->fetch()['count'];
+} catch (Exception $e) {
+    $pending_requests = 0;
+}
+
+try {
+    $inventory_alerts = db()->query('
+        SELECT ia.id, ia.severity, ia.message, ia.created_at,
+               m.name as medicine_name,
+               DATE_FORMAT(ia.created_at, "%b %d, %Y") as formatted_date
+        FROM inventory_alerts ia
+        JOIN medicines m ON ia.medicine_id = m.id
+        WHERE ia.is_acknowledged = FALSE
+        ORDER BY 
+            CASE ia.severity
+                WHEN "critical" THEN 1
+                WHEN "high" THEN 2
+                WHEN "medium" THEN 3
+                ELSE 4
+            END,
+            ia.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+    $alerts_count = count($inventory_alerts);
+} catch (Exception $e) {
+    $inventory_alerts = [];
+    $alerts_count = 0;
+}
+
+try {
+    $recent_pending_requests = db()->query('
+        SELECT r.id, r.status, r.created_at,
+               CONCAT(IFNULL(u.first_name,"")," ",IFNULL(u.last_name,"")) as requester_name,
+               DATE_FORMAT(r.created_at, "%b %d, %Y") as formatted_date
+        FROM requests r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.status = "submitted"
+        ORDER BY r.created_at DESC
+        LIMIT 5
+    ')->fetchAll();
+} catch (Exception $e) {
+    $recent_pending_requests = [];
+}
+
+$total_notifications = $pending_requests + $alerts_count;
+
+// Get current page for active state
+$current_page = basename($_SERVER['PHP_SELF'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -175,10 +280,11 @@ if (!isset($user_data['profile_image'])) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com" onerror="console.error('Tailwind CSS failed to load')"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" onerror="console.error('Font Awesome failed to load')">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/design-system.css')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(base_url('assets/css/sweetalert-enhanced.css')); ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="<?php echo htmlspecialchars(base_url('assets/js/logout-confirmation.js')); ?>"></script>
@@ -208,8 +314,244 @@ if (!isset($user_data['profile_image'])) {
         }
     </script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .sidebar-link {
+            transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+        }
+        .sidebar-link:hover:not(.active) {
+            background: linear-gradient(135deg, #e5e7eb 0%, #e5e7eb 100%);
+            color: #4b5563;
+        }
+        .sidebar-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+        }
+        /* Sidebar styles */
+        .sidebar {
+            width: 16rem; /* w-64 */
+        }
+        
+        /* Prevent white screen - ensure content is always visible */
+        body {
+            min-height: 100vh;
+            background-color: #f9fafb !important;
+        }
+        #app {
+            min-height: 100vh;
+            display: flex !important;
+            height: auto;
+            overflow: visible;
+        }
+        
+        /* Ensure main content can scroll */
+        #main-content-area {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            height: auto;
+            min-height: calc(100vh - 4rem);
+            max-height: none;
+        }
+        
+        #dashboard-main-wrapper {
+            height: auto;
+            min-height: 100vh;
+            overflow: visible;
+        }
+        
+        /* On desktop, allow proper scrolling */
+        @media (min-width: 1025px) {
+            #app {
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            #dashboard-main-wrapper {
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            #main-content-area {
+                overflow-y: auto;
+                height: calc(100vh - 4rem);
+                max-height: calc(100vh - 4rem);
+            }
+        }
+        
+        /* On mobile and tablet, allow full page scroll */
+        @media (max-width: 1024px) {
+            #app {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+            
+            #dashboard-main-wrapper {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+            
+            #main-content-area {
+                overflow-y: visible;
+                height: auto;
+                min-height: calc(100vh - 4rem);
+                max-height: none;
+            }
+            
+            /* Ensure body can scroll on mobile */
+            body {
+                overflow-x: hidden;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* Dashboard shell layout: offset main content by sidebar width on desktop
+           without affecting other pages that use the shared design system */
+        .dashboard-shell #dashboard-main-wrapper {
+            margin-left: 0;
+            transition: margin-left 0.3s ease;
+        }
+        
+        /* Mobile sidebar overlay */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+        }
+        .sidebar-overlay.show {
+            display: block;
+        }
+        
+        /* Container max-widths for readability */
+        .container-responsive {
+            width: 100%;
+            max-width: 100%;
+        }
+        
+        /* Inner content container for max-width on desktop */
+        .content-container {
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        /* Notification and Profile Dropdowns */
+        #notificationDropdown,
+        #profileDropdown {
+            animation: fadeInDown 0.2s ease-out;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Ensure dropdowns are above other content */
+        #notificationDropdown,
+        #profileDropdown {
+            z-index: 1000;
+        }
+        
+        /* Mobile responsive dropdowns */
+        @media (max-width: 640px) {
+            #notificationDropdown {
+                right: 0;
+                left: auto;
+                width: calc(100vw - 2rem);
+                max-width: 20rem;
+            }
+            
+            #profileDropdown {
+                right: 0;
+                left: auto;
+                width: calc(100vw - 2rem);
+                max-width: 16rem;
+            }
+        }
+        
+        /* Desktop sidebar visibility - match Tailwind md: breakpoint (768px) */
+        @media (min-width: 768px) {
+            /* Sidebar - always visible on desktop */
+            #sidebar-aside.hidden {
+                display: flex !important;
+            }
+            #sidebar-aside {
+                position: relative !important;
+                left: 0 !important;
+            }
+            
+            .sidebar-overlay {
+                display: none !important;
+            }
+            
+            /* Ensure main content is offset by sidebar width */
+            .dashboard-shell #dashboard-main-wrapper {
+                margin-left: 16rem !important; /* Sidebar width (w-64 = 16rem) */
+                width: calc(100% - 16rem) !important;
+                max-width: calc(100% - 16rem) !important;
+            }
+            
+            /* Ensure header and main content are properly positioned */
+            .dashboard-shell #dashboard-main-wrapper header,
+            .dashboard-shell #dashboard-main-wrapper main {
+                width: 100% !important;
+                padding-left: 1.5rem !important;
+                padding-right: 1.5rem !important;
+            }
+            
+            /* Ensure main content area has proper spacing */
+            .dashboard-shell #main-content-area {
+                padding-left: 1.5rem !important;
+                padding-right: 1.5rem !important;
+            }
+        }
+        
+        /* Mobile sidebar */
+        @media (max-width: 767px) {
+            #sidebar-aside {
+                display: none !important;
+                position: fixed !important;
+                left: -16rem !important;
+                z-index: 50 !important;
+                transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                height: 100vh !important;
+                top: 0 !important;
+            }
+            
+            #sidebar-aside.show {
+                left: 0 !important;
+                display: flex !important;
+                visibility: visible !important;
+            }
+            
+            .dashboard-shell #dashboard-main-wrapper {
+                margin-left: 0;
+            }
         }
         .card-hover {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -519,34 +861,36 @@ if (!isset($user_data['profile_image'])) {
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.5);
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             z-index: 10000;
             opacity: 0;
-            visibility: hidden;
             transition: all 0.3s ease;
+            backdrop-filter: blur(4px);
         }
 
         .modal.show {
+            display: flex;
             opacity: 1;
-            visibility: visible;
         }
 
         .modal-content {
             background: white;
-            border-radius: 12px;
+            border-radius: 16px;
             max-width: 600px;
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-            transform: scale(0.9);
-            transition: transform 0.3s ease;
+            transform: scale(0.9) translateY(20px);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            opacity: 0;
         }
 
         .modal.show .modal-content {
-            transform: scale(1);
+            transform: scale(1) translateY(0);
+            opacity: 1;
         }
 
         .modal-header {
@@ -643,226 +987,184 @@ if (!isset($user_data['profile_image'])) {
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-50 to-blue-50">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
-            <?php else: ?>
-                <div class="h-8 w-8 bg-white/20 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                    </svg>
-                </div>
-            <?php endif; ?>
-            <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/dashboardnew.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
-                </svg>
-                Dashboard
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/medicines.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                </svg>
-                Medicines
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/categories.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                </svg>
-                Categories
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/users.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                </svg>
-                Users
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                </svg>
-                Allocations
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/announcements.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
-                </svg>
-                Announcements
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/batches.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                </svg>
-                Batches
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                </svg>
-                Inventory
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/analytics.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
-                Analytics
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/reports.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                Reports
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/email_logs.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-                Email Logs
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Settings
-            </a>
-        </nav>
+<body class="bg-gray-50">
+    <div id="app" class="flex min-h-screen dashboard-shell">
+        <!-- Mobile Sidebar Overlay -->
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
         
-        <!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
-                Logout
+    <!-- Sidebar -->
+        <?php render_super_admin_sidebar([
+            'current_page' => $current_page,
+            'user_data' => $user_data
+        ]); ?>
+
+        <!-- Main Content -->
+        <div id="dashboard-main-wrapper" class="flex flex-col flex-1 min-h-screen">
+            <!-- Top Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+                <div class="flex items-center justify-between px-3 py-3 sm:px-4 sm:py-4 md:px-6 h-16">
+                    <!-- Left Section: Menu + Logo/Title -->
+                    <div class="flex items-center flex-1 min-w-0 h-full">
+                        <button id="mobileMenuToggle" class="md:hidden text-gray-500 hover:text-gray-700 mr-2 sm:mr-3 flex-shrink-0 flex items-center justify-center w-10 h-10" aria-label="Toggle menu" type="button">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                        <!-- Mobile Logo + Title -->
+                        <div class="md:hidden flex items-center min-w-0 flex-1 h-full">
+            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
+                                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg flex-shrink-0 mr-2" alt="Logo" />
+            <?php else: ?>
+                                <i class="fas fa-heartbeat text-purple-600 text-2xl mr-2 flex-shrink-0"></i>
+                            <?php endif; ?>
+                            <h1 class="text-lg sm:text-xl font-bold text-gray-900 truncate leading-none"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></h1>
+                </div>
+                        <!-- Desktop Title (hidden on mobile) -->
+                        <div class="hidden md:flex items-center h-full">
+                            <h1 class="text-xl font-bold text-gray-900 leading-none"><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></h1>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Section: Notifications + Profile (aligned with hamburger and MediTrack) -->
+                    <div class="flex items-center space-x-2 sm:space-x-3 flex-shrink-0 h-full">
+                        <!-- Notifications Dropdown -->
+                        <div class="relative">
+                            <button id="notificationBtn" class="relative text-gray-500 hover:text-gray-700 flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Notifications" type="button">
+                            <i class="fas fa-bell text-xl"></i>
+                                <?php if ($total_notifications > 0): ?>
+                                    <span class="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-500"></span>
+                                    <span class="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full"><?php echo $total_notifications > 9 ? '9+' : $total_notifications; ?></span>
+            <?php endif; ?>
+                        </button>
+                            
+                            <!-- Notifications Dropdown Menu -->
+                            <div id="notificationDropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden">
+                                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold text-gray-900">Notifications</h3>
+                                    <?php if ($total_notifications > 0): ?>
+                                        <span class="px-2 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded-full"><?php echo $total_notifications; ?> new</span>
+                                    <?php endif; ?>
+        </div>
+                                <div class="overflow-y-auto max-h-80">
+                                    <?php if ($total_notifications === 0): ?>
+                                        <div class="p-6 text-center text-gray-500">
+                                            <i class="fas fa-bell-slash text-3xl mb-2 text-gray-300"></i>
+                                            <p>No new notifications</p>
+                                        </div>
+                                    <?php else: ?>
+                                        <?php if ($pending_requests > 0): ?>
+                                            <div class="p-3 border-b border-gray-100 bg-blue-50">
+                                                <p class="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Pending Requests</p>
+                                                <?php foreach ($recent_pending_requests as $req): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block p-2 hover:bg-blue-100 rounded transition-colors mb-1">
+                                                        <div class="flex items-start space-x-2">
+                                                            <div class="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <p class="text-sm font-medium text-gray-900 truncate">New request from <?php echo htmlspecialchars($req['requester_name'] ?: 'User'); ?></p>
+                                                                <p class="text-xs text-gray-500"><?php echo htmlspecialchars($req['formatted_date']); ?></p>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                                <?php if ($pending_requests > 5): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block p-2 text-sm text-blue-600 hover:bg-blue-100 rounded text-center font-medium">
+                                                        View all <?php echo $pending_requests; ?> requests
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($alerts_count > 0): ?>
+                                            <div class="p-3 border-b border-gray-100 bg-red-50">
+                                                <p class="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Inventory Alerts</p>
+                                                <?php foreach ($inventory_alerts as $alert): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>" class="block p-2 hover:bg-red-100 rounded transition-colors mb-1">
+                                                        <div class="flex items-start space-x-2">
+                                                            <div class="flex-shrink-0">
+                                                                <?php if ($alert['severity'] === 'critical'): ?>
+                                                                    <i class="fas fa-exclamation-circle text-red-600 mt-1"></i>
+                                                                <?php elseif ($alert['severity'] === 'high'): ?>
+                                                                    <i class="fas fa-exclamation-triangle text-orange-500 mt-1"></i>
+                                                                <?php else: ?>
+                                                                    <i class="fas fa-info-circle text-yellow-500 mt-1"></i>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($alert['medicine_name']); ?></p>
+                                                                <p class="text-xs text-gray-600 truncate"><?php echo htmlspecialchars($alert['message']); ?></p>
+                                                                <p class="text-xs text-gray-500 mt-1"><?php echo htmlspecialchars($alert['formatted_date']); ?></p>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                                <?php if ($alerts_count > 5): ?>
+                                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/inventory.php')); ?>" class="block p-2 text-sm text-red-600 hover:bg-red-100 rounded text-center font-medium">
+                                                        View all <?php echo $alerts_count; ?> alerts
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="p-3 border-t border-gray-200 bg-gray-50">
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/allocations.php')); ?>" class="block text-center text-sm text-gray-600 hover:text-gray-900 font-medium">
+                                        View All Notifications
             </a>
         </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-        <!-- Header -->
-        <div class="content-header">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Welcome back, <?php echo htmlspecialchars($user['name']); ?></h1>
-                    <p class="text-gray-600 mt-1">Here's what's happening with your medicine inventory today.</p>
                 </div>
-                <div class="flex items-center space-x-6">
-                    <!-- Current Time Display -->
-                    <div class="text-right">
-                        <div class="text-sm text-gray-500">Current Time</div>
-                        <div class="text-sm font-medium text-gray-900" id="current-time"><?php echo date('H:i:s'); ?></div>
                     </div>
                     
-                    <!-- Night Mode Toggle -->
-                    <button id="night-mode-toggle" class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200" title="Toggle Night Mode">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- Notifications -->
+                        <!-- Profile Dropdown -->
                     <div class="relative">
-                        <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative" title="Notifications">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12 7H4.828zM4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
-                            </svg>
-                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
-                        </button>
+                            <button id="profileBtn" class="flex items-center space-x-2 sm:space-x-3 h-full rounded-lg hover:bg-gray-100 transition-colors px-2" type="button">
+                                <div class="text-right hidden sm:flex items-center h-full">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-900 leading-tight"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
+                                        <p class="text-xs text-gray-500 leading-tight">Super Administrator</p>
                     </div>
-                    
-                    <!-- Profile Section -->
-                    <div class="relative" id="profile-dropdown">
-                        <button id="profile-toggle" class="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-200 cursor-pointer" type="button">
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center flex-shrink-0 cursor-pointer">
                             <?php if (!empty($user_data['profile_image'])): ?>
                                 <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                                     alt="Profile Picture" 
-                                     class="w-8 h-8 rounded-full object-cover border-2 border-purple-500"
+                                         alt="Profile" 
+                                         class="w-10 h-10 rounded-full object-cover"
                                      onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500" style="display:none;">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                                    <?php 
-                                    $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'S';
-                                    $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'A';
-                                    echo strtoupper($firstInitial . $lastInitial); 
-                                    ?>
-                                </div>
                             <?php endif; ?>
-                            <div class="text-left">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo htmlspecialchars(!empty($user['first_name']) ? $user['first_name'] : 'Super'); ?>
+                                    <i class="fas fa-user text-gray-600 text-base <?php echo !empty($user_data['profile_image']) ? 'hidden' : ''; ?>"></i>
                                 </div>
-                                <div class="text-xs text-gray-500">Super Admin</div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="profile-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
                         </button>
                         
                         <!-- Profile Dropdown Menu -->
-                        <div id="profile-menu" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden">
-                            <!-- User Info Section -->
-                            <div class="px-4 py-3 border-b border-gray-100">
-                                <div class="text-sm font-semibold text-gray-900">
-                                    <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'Super') . ' ' . ($user['last_name'] ?? 'Admin'))); ?>
+                            <div id="profileDropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                                <div class="p-4 border-b border-gray-200">
+                                    <p class="text-sm font-semibold text-gray-900"><?php echo htmlspecialchars(trim(($user_data['first_name'] ?? 'Super') . ' ' . ($user_data['last_name'] ?? 'Admin'))); ?></p>
+                                    <p class="text-xs text-gray-500"><?php echo htmlspecialchars($user_data['email'] ?? 'admin@meditrack.com'); ?></p>
                                 </div>
-                                <div class="text-sm text-gray-500">
-                                    <?php echo htmlspecialchars($user['email'] ?? 'admin@example.com'); ?>
-                                </div>
-                            </div>
-                            
-                            <!-- Menu Items -->
-                            <div class="py-1">
-                                <a href="#" onclick="showProfileSection(); return false;" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                            </svg>
-                                    Edit Profile
-                                </a>
-                                <a href="<?php echo base_url('super_admin/settings_brand.php'); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    </svg>
-                                    Account Settings
-                                </a>
-                                <a href="#" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Support
+                                <div class="py-2">
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/profile.php')); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                        <i class="fas fa-user-circle w-5 mr-3 text-gray-400"></i>
+                                        <span>My Profile</span>
+                                    </a>
+                                    <a href="<?php echo htmlspecialchars(base_url('super_admin/settings_brand.php')); ?>" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                        <i class="fas fa-cog w-5 mr-3 text-gray-400"></i>
+                                        <span>Settings</span>
+                                    </a>
+                                    <div class="border-t border-gray-200 my-2"></div>
+                                    <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                        <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+                                        <span>Logout</span>
                                 </a>
                         </div>
-                            
-                            <!-- Separator -->
-                            <div class="border-t border-gray-100 my-1"></div>
-                            
-                            <!-- Sign Out -->
-                            <div class="py-1">
-                                <a href="<?php echo base_url('logout.php'); ?>" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150">
-                                    <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                    </svg>
-                                    Sign Out
-                                </a>
                     </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <main id="main-content-area" class="flex-1 overflow-y-auto container-responsive">
+                <!-- Page Header -->
+                <div class="mb-6">
+                    <h1 class="text-2xl font-semibold text-gray-900 mb-1">Profile</h1>
+                    <p class="text-gray-600">Manage your account settings and profile information</p>
         </div>
 
         <!-- Flash Messages -->
@@ -1024,8 +1326,129 @@ if (!isset($user_data['profile_image'])) {
             </div>
         </div>
     </main>
+        </div>
+    </div>
 
-    <!-- Update Profile Modal -->
+    <script>
+        // Mobile menu toggle and sidebar functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileToggle = document.getElementById('mobileMenuToggle');
+            const sidebarAside = document.getElementById('sidebar-aside');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            function openMobileSidebar() {
+                if (sidebarAside) {
+                    sidebarAside.classList.remove('hidden');
+                    sidebarAside.classList.add('show');
+                    sidebarAside.style.left = '0';
+                    sidebarAside.style.display = 'flex';
+                }
+                if (overlay) {
+                    overlay.classList.add('show');
+                    overlay.style.display = 'block';
+                }
+            }
+
+            function closeMobileSidebar() {
+                if (sidebarAside) {
+                    sidebarAside.classList.remove('show');
+                    sidebarAside.style.left = '-16rem';
+                }
+                if (overlay) {
+                    overlay.classList.remove('show');
+                    overlay.style.display = 'none';
+                }
+            }
+
+            if (mobileToggle) {
+                mobileToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (sidebarAside && sidebarAside.classList.contains('show')) {
+                        closeMobileSidebar();
+                    } else {
+                        openMobileSidebar();
+                    }
+                });
+            }
+
+            if (overlay) {
+                overlay.addEventListener('click', function() {
+                    closeMobileSidebar();
+                });
+            }
+
+            // Notification and Profile Dropdowns
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            const profileBtn = document.getElementById('profileBtn');
+            const profileDropdown = document.getElementById('profileDropdown');
+
+            // Toggle notification dropdown
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !notificationDropdown.classList.contains('hidden');
+                    
+                    if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                    
+                    if (isOpen) {
+                        notificationDropdown.classList.add('hidden');
+                    } else {
+                        notificationDropdown.classList.remove('hidden');
+                    }
+                });
+            }
+
+            // Toggle profile dropdown
+            if (profileBtn && profileDropdown) {
+                profileBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !profileDropdown.classList.contains('hidden');
+                    
+                    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                    
+                    if (isOpen) {
+                        profileDropdown.classList.add('hidden');
+                    } else {
+                        profileDropdown.classList.remove('hidden');
+                    }
+                });
+            }
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                    if (!notificationBtn.contains(e.target) && !notificationDropdown.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                }
+                
+                if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                    if (!profileBtn.contains(e.target) && !profileDropdown.contains(e.target)) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                }
+            });
+
+            // Close dropdowns on escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                    if (profileDropdown && !profileDropdown.classList.contains('hidden')) {
+                        profileDropdown.classList.add('hidden');
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
     <div id="updateProfileModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 rounded-t-2xl flex items-center justify-between">
@@ -1198,8 +1621,65 @@ if (!isset($user_data['profile_image'])) {
                 }
             }
         }
+        
+        // Real-time input filtering to prevent invalid characters
+        function filterInput(input, pattern, maxLength = null) {
+            const originalValue = input.value;
+            // Remove invalid characters based on pattern
+            let filtered = originalValue.replace(new RegExp('[^' + pattern + ']', 'g'), '');
+            
+            // Apply max length if specified
+            if (maxLength && filtered.length > maxLength) {
+                filtered = filtered.substring(0, maxLength);
+            }
+            
+            // Update value if it changed
+            if (filtered !== originalValue) {
+                const cursorPos = input.selectionStart;
+                input.value = filtered;
+                // Restore cursor position (adjust for removed characters)
+                const newPos = Math.min(cursorPos - (originalValue.length - filtered.length), filtered.length);
+                input.setSelectionRange(newPos, newPos);
+            }
+        }
+        
+        // Setup input filtering for name fields
+        function setupNameFieldValidation(input) {
+            if (!input) return;
+            
+            // First Name & Last Name: Only letters, spaces, hyphens, apostrophes
+            input.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
+            });
+            
+            input.addEventListener('keypress', function(e) {
+                // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+                const char = String.fromCharCode(e.which || e.keyCode);
+                if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                    e.preventDefault();
+                }
+            });
+            
+            input.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Setup validation for profile form fields
+            const firstNameInput = document.querySelector('input[name="first_name"]');
+            const lastNameInput = document.querySelector('input[name="last_name"]');
+            if (firstNameInput) setupNameFieldValidation(firstNameInput);
+            if (lastNameInput) setupNameFieldValidation(lastNameInput);
+            
             // Image upload functionality
             const avatarInput = document.getElementById('avatarInput');
             
@@ -1399,6 +1879,219 @@ if (!isset($user_data['profile_image'])) {
             initProfileDropdown();
         });
     </script>
+</body>
+</html>
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title">My Profile</h2>
+                <button onclick="closeProfileModal()" class="modal-close">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Profile Picture -->
+                <div class="flex justify-center mb-6">
+                    <div class="relative">
+                        <?php if ($user_data['profile_image']): ?>
+                            <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                 alt="Profile Picture" 
+                                 class="w-32 h-32 rounded-full object-cover border-4 border-gray-200"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="w-32 h-32 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-gray-200" style="display:none;">
+                                <?php 
+                                $firstInitial = !empty($user_data['first_name']) ? substr($user_data['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user_data['last_name']) ? substr($user_data['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="w-32 h-32 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-gray-200">
+                                <?php 
+                                $firstInitial = !empty($user_data['first_name']) ? substr($user_data['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user_data['last_name']) ? substr($user_data['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Profile Information -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-sm font-medium text-gray-500">Full Name</label>
+                        <p class="text-lg font-semibold text-gray-900 mt-1">
+                            <?php echo htmlspecialchars(trim(($user_data['first_name'] ?? '') . ' ' . ($user_data['last_name'] ?? ''))); ?>
+                        </p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-500">Email</label>
+                        <p class="text-lg font-semibold text-gray-900 mt-1">
+                            <?php echo htmlspecialchars($user_data['email'] ?? 'admin@example.com'); ?>
+                        </p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-500">Role</label>
+                        <p class="text-lg font-semibold text-gray-900 mt-1">Super Administrator</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-500">Status</label>
+                        <p class="text-lg font-semibold text-green-600 mt-1">Active</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="flex-direction: column; gap: 0.75rem;">
+                <button onclick="openUpdateProfileModal()" class="btn-primary w-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                    Update Profile
+                </button>
+                <button onclick="openChangePasswordModal()" class="btn-secondary w-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                    Change Password
+                </button>
+                <button onclick="openChangeProfilePicModal()" class="btn-secondary w-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    Change Profile Picture
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Profile Modal -->
+    <div id="updateProfileModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Update Profile</h2>
+                <button onclick="closeUpdateProfileModal()" class="modal-close">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form method="POST" action="<?php echo base_url('super_admin/profile.php'); ?>" class="modal-body">
+                <input type="hidden" name="action" value="update_profile">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                        <input type="text" name="first_name" value="<?php echo htmlspecialchars($user_data['first_name'] ?? ''); ?>" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                        <input type="text" name="last_name" value="<?php echo htmlspecialchars($user_data['last_name'] ?? ''); ?>" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" name="email" value="<?php echo htmlspecialchars($user_data['email'] ?? ''); ?>" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeUpdateProfileModal()" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Update Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Change Password</h2>
+                <button onclick="closeChangePasswordModal()" class="modal-close">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form method="POST" action="<?php echo base_url('super_admin/profile.php'); ?>" class="modal-body">
+                <input type="hidden" name="action" value="change_password">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                        <input type="password" name="current_password" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                        <input type="password" name="new_password" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                        <input type="password" name="confirm_password" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeChangePasswordModal()" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Change Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Profile Picture Modal -->
+    <div id="changeProfilePicModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Change Profile Picture</h2>
+                <button onclick="closeChangeProfilePicModal()" class="modal-close">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form method="POST" action="<?php echo base_url('super_admin/profile.php'); ?>" enctype="multipart/form-data" class="modal-body">
+                <input type="hidden" name="action" value="upload_avatar">
+                <div class="space-y-4">
+                    <div class="text-center">
+                        <?php if ($user_data['profile_image']): ?>
+                            <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
+                                 alt="Current Profile Picture" 
+                                 class="w-32 h-32 rounded-full object-cover border-4 border-gray-200 mx-auto mb-4"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="w-32 h-32 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-gray-200 mx-auto mb-4" style="display:none;">
+                                <?php 
+                                $firstInitial = !empty($user_data['first_name']) ? substr($user_data['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user_data['last_name']) ? substr($user_data['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="w-32 h-32 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-gray-200 mx-auto mb-4">
+                                <?php 
+                                $firstInitial = !empty($user_data['first_name']) ? substr($user_data['first_name'], 0, 1) : 'S';
+                                $lastInitial = !empty($user_data['last_name']) ? substr($user_data['last_name'], 0, 1) : 'A';
+                                echo strtoupper($firstInitial . $lastInitial); 
+                                ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select New Profile Picture</label>
+                        <input type="file" name="avatar" accept="image/*" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        <p class="text-xs text-gray-500 mt-2">Accepted formats: JPEG, PNG, GIF, WebP (Max: 5MB)</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeChangeProfilePicModal()" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Upload Picture</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>
 

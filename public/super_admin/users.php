@@ -5,8 +5,6 @@ require_auth(['super_admin']);
 require_once __DIR__ . '/includes/sidebar.php';
 require_once __DIR__ . '/includes/ajax_helpers.php';
 
-$isAjax = setup_dashboard_ajax_capture();
-redirect_to_dashboard_shell($isAjax);
 require_once __DIR__ . '/../../config/mail.php';
 
 // Helper function to get upload URL
@@ -38,53 +36,233 @@ if (!isset($user_data['profile_image'])) {
     $user_data['profile_image'] = null;
 }
 
+// Debug: Log ALL POST requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    error_log("=== POST REQUEST RECEIVED ===");
+    error_log("POST data: " . print_r($_POST, true));
+    error_log("Current URL: " . $_SERVER['REQUEST_URI']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'add';
+    error_log("Action detected: " . $action);
     
     if ($action === 'add') {
+        // Sanitize input data - remove banned characters and prevent HTML/script injection
+        function sanitizeInputBackend($value, $pattern = null) {
+            if (empty($value)) return '';
+            
+            // Remove script tags and HTML tags (prevent XSS)
+            $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+            $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+            
+            // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+            $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+            $sanitized = preg_replace($banned, '', $sanitized);
+            
+            // Remove control characters and emojis
+            $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+            $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+            
+            // Trim leading/trailing spaces
+            $sanitized = trim($sanitized);
+            
+            // Apply pattern if provided
+            if ($pattern && $sanitized) {
+                $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+            }
+            
+            return $sanitized;
+        }
+        
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $role = $_POST['role'] ?? 'bhw';
         $first = trim($_POST['first_name'] ?? '');
         $last = trim($_POST['last_name'] ?? '');
+        $suffix = trim($_POST['suffix'] ?? '');
         $purok_id = !empty($_POST['purok_id']) ? (int)$_POST['purok_id'] : null;
         
-        if ($email !== '' && $password !== '' && in_array($role, ['super_admin','bhw'], true)) {
-            $hash = password_hash($password, PASSWORD_BCRYPT);
-            $stmt = db()->prepare('INSERT INTO users(email, password_hash, role, first_name, last_name, purok_id) VALUES(?,?,?,?,?,?)');
-            try {
-                $stmt->execute([$email, $hash, $role, $first, $last, $purok_id]);
-                // Send welcome email
-                $html = email_template(
-                    'Welcome to MediTrack',
-                    'Your account has been created successfully.',
-                    '<p>Hello <b>' . htmlspecialchars($first) . '</b>,</p><p>Your account role is <b>' . htmlspecialchars($role) . '</b>. You can now sign in to your dashboard.</p>',
-                    'Open MediTrack',
-                    base_url('index.php#login')
-                );
-                send_email($email, trim($first . ' ' . $last), 'Welcome to MediTrack', $html);
-            } catch (Throwable $e) {}
-            redirect_to('super_admin/users.php');
+        $errors = [];
+        
+        // Validate first name (letters only, no digits)
+        if (empty($first) || strlen($first) < 2) {
+            $errors[] = 'First name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $first)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $first = sanitizeInputBackend($first, 'A-Za-zÀ-ÿ\' -');
         }
+        
+        // Validate last name (letters only, no digits)
+        if (empty($last) || strlen($last) < 2) {
+            $errors[] = 'Last name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $last)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $last = sanitizeInputBackend($last, 'A-Za-zÀ-ÿ\' -');
+        }
+        
+        // Suffix validation (only allowed values)
+        if (!empty($suffix)) {
+            $allowed_suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+            if (!in_array($suffix, $allowed_suffixes)) {
+                $errors[] = 'Invalid suffix selected.';
+            }
+        }
+        
+        // Validate required fields
+        if ($email === '' || $password === '') {
+            $errors[] = 'Email and password are required.';
+        }
+        
+        if (!empty($errors)) {
+            set_flash(implode(' ', $errors), 'error');
+            redirect_to('super_admin/users.php');
+            exit;
+        }
+        
+        if (!in_array($role, ['super_admin','bhw'], true)) {
+            set_flash('Invalid role selected.', 'error');
+            redirect_to('super_admin/users.php');
+            exit;
+        }
+        
+        // If BHW role, purok is required
+        if ($role === 'bhw' && empty($purok_id)) {
+            set_flash('Please select a Barangay and Purok for BHW staff.', 'error');
+            redirect_to('super_admin/users.php');
+            exit;
+        }
+        
+        // For Super Admin, set purok_id to null
+        if ($role === 'super_admin') {
+            $purok_id = null;
+        }
+        
+        $hash = password_hash($password, PASSWORD_BCRYPT);
+        $stmt = db()->prepare('INSERT INTO users(email, password_hash, role, first_name, last_name, suffix, purok_id) VALUES(?,?,?,?,?,?,?)');
+        try {
+            $result = $stmt->execute([$email, $hash, $role, $first, $last, $suffix, $purok_id]);
+            error_log("Insert result: " . ($result ? 'success' : 'failed'));
+            
+            // Send welcome email with credentials
+            $html = email_template(
+                'Welcome to MediTrack',
+                'Your account has been created successfully.',
+                '<p>Hello <b>' . htmlspecialchars($first) . '</b>,</p>
+                 <p>Your account role is <b>' . htmlspecialchars(ucfirst(str_replace('_', ' ', $role))) . '</b>.</p>
+                 <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0 0 10px 0;">Here are your login credentials:</p>
+                    <p style="margin: 5px 0;"><b>Email:</b> ' . htmlspecialchars($email) . '</p>
+                    <p style="margin: 5px 0;"><b>Password:</b> ' . htmlspecialchars($password) . '</p>
+                 </div>
+                 <p>You can now sign in to your dashboard.</p>',
+                'Login to MediTrack',
+                base_url('index.php#login')
+            );
+            send_email($email, trim($first . ' ' . $last), 'Welcome to MediTrack - Login Credentials', $html);
+            set_flash('Staff added successfully. Credentials sent to email.', 'success');
+        } catch (Throwable $e) {
+            error_log("Error adding staff: " . $e->getMessage());
+            set_flash('Error adding staff: ' . $e->getMessage(), 'error');
+        }
+        redirect_to('super_admin/users.php');
     } elseif ($action === 'edit') {
+        // Sanitize input data - remove banned characters and prevent HTML/script injection
+        function sanitizeInputBackend($value, $pattern = null) {
+            if (empty($value)) return '';
+            
+            // Remove script tags and HTML tags (prevent XSS)
+            $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+            $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+            
+            // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+            $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+            $sanitized = preg_replace($banned, '', $sanitized);
+            
+            // Remove control characters and emojis
+            $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+            $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+            
+            // Trim leading/trailing spaces
+            $sanitized = trim($sanitized);
+            
+            // Apply pattern if provided
+            if ($pattern && $sanitized) {
+                $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+            }
+            
+            return $sanitized;
+        }
+        
         $user_id = (int)($_POST['user_id'] ?? 0);
         $first = trim($_POST['first_name'] ?? '');
         $last = trim($_POST['last_name'] ?? '');
+        $suffix = trim($_POST['suffix'] ?? '');
         $purok_id = !empty($_POST['purok_id']) ? (int)$_POST['purok_id'] : null;
         
-        if ($user_id > 0) {
-            $stmt = db()->prepare('UPDATE users SET first_name = ?, last_name = ?, purok_id = ? WHERE id = ?');
-            try {
-                $stmt->execute([$first, $last, $purok_id, $user_id]);
-            } catch (Throwable $e) {}
-            redirect_to('super_admin/users.php');
+        $errors = [];
+        
+        // Validate first name (letters only, no digits)
+        if (empty($first) || strlen($first) < 2) {
+            $errors[] = 'First name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $first)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $first)) {
+            $errors[] = 'First name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $first = sanitizeInputBackend($first, 'A-Za-zÀ-ÿ\' -');
         }
+        
+        // Validate last name (letters only, no digits)
+        if (empty($last) || strlen($last) < 2) {
+            $errors[] = 'Last name must be at least 2 characters long.';
+        } elseif (preg_match('/\d/', $last)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $last)) {
+            $errors[] = 'Last name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+        } else {
+            $last = sanitizeInputBackend($last, 'A-Za-zÀ-ÿ\' -');
+        }
+        
+        // Suffix validation (only allowed values)
+        if (!empty($suffix)) {
+            $allowed_suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
+            if (!in_array($suffix, $allowed_suffixes)) {
+                $errors[] = 'Invalid suffix selected.';
+            }
+        }
+        
+        if ($user_id > 0 && empty($errors)) {
+            $stmt = db()->prepare('UPDATE users SET first_name = ?, last_name = ?, suffix = ?, purok_id = ? WHERE id = ?');
+            try {
+                $stmt->execute([$first, $last, $suffix, $purok_id, $user_id]);
+                set_flash('User updated successfully.', 'success');
+            } catch (Throwable $e) {
+                set_flash('Error updating user.', 'error');
+            }
+        } elseif (!empty($errors)) {
+            set_flash(implode(' ', $errors), 'error');
+        }
+        redirect_to('super_admin/users.php');
     }
 }
 
+error_log("Before setup_dashboard_ajax_capture - REQUEST_METHOD: " . $_SERVER['REQUEST_METHOD']);
+$isAjax = setup_dashboard_ajax_capture();
+error_log("After setup_dashboard_ajax_capture - isAjax: " . ($isAjax ? 'true' : 'false'));
+error_log("Before redirect_to_dashboard_shell");
+redirect_to_dashboard_shell($isAjax);
+error_log("After redirect_to_dashboard_shell - this should not appear if redirected");
+
 $users = db()->query("
-    SELECT u.id, u.email, u.role, u.purok_id, 
-           CONCAT(IFNULL(u.first_name,''),' ',IFNULL(u.last_name,'')) AS name, 
+    SELECT u.id, u.email, u.role, u.purok_id, u.first_name, u.last_name, u.suffix,
+           CONCAT(IFNULL(u.first_name,''),' ',IFNULL(u.last_name,''), IF(u.suffix IS NOT NULL AND u.suffix != '', CONCAT(' ', u.suffix), '')) AS name, 
            u.created_at, p.name AS purok_name, b.name AS barangay_name,
            r.date_of_birth, r.id as resident_id
     FROM users u 
@@ -159,11 +337,13 @@ foreach ($users as &$user) {
 unset($user); // Break reference
 
 $puroks = db()->query("
-    SELECT p.id, p.name, b.name AS barangay_name 
+    SELECT p.id, p.name, p.barangay_id, b.name AS barangay_name 
     FROM puroks p 
     JOIN barangays b ON p.barangay_id = b.id 
     ORDER BY b.name, p.name
 ")->fetchAll();
+
+$barangays = db()->query("SELECT * FROM barangays ORDER BY name")->fetchAll();
 
 // Calculate user statistics
 $total_users = count($users);
@@ -309,6 +489,17 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
             }
         }
         
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
         .hover-lift {
             transition: all 0.3s ease;
         }
@@ -316,6 +507,38 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         .hover-lift:hover {
             transform: translateY(-8px) scale(1.02);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Fix for select dropdowns in modals */
+        #addUserModal select,
+        #editModal select {
+            position: relative;
+            z-index: 10;
+        }
+        
+        /* Ensure modal content doesn't clip dropdowns */
+        #addUserModal .p-8,
+        #editModal .p-8 {
+            position: relative;
+        }
+        
+        /* Custom scrollbar for modal */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
     </style>
 </head>
@@ -331,6 +554,21 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
 
         <!-- Content -->
         <div class="content-body">
+            <?php
+            list($msg, $type) = get_flash();
+            if ($msg): ?>
+                <div class="mb-6 p-4 rounded-lg <?php echo $type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'; ?> flex items-center justify-between animate-fade-in-up">
+                    <div class="flex items-center">
+                        <?php if ($type === 'success'): ?>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        <?php else: ?>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <?php endif; ?>
+                        <span><?php echo htmlspecialchars($msg); ?></span>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="text-sm font-semibold hover:underline">Dismiss</button>
+                </div>
+            <?php endif; ?>
             <!-- Statistics Dashboard -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Total Users Card -->
@@ -476,7 +714,7 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                         </svg>
-                        + Add User
+                        Add Staff
                     </button>
                 </div>
             </div>
@@ -612,35 +850,13 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                                     
                                     <!-- Actions -->
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <div class="relative inline-block text-left">
-                                            <button onclick="toggleActionMenu(<?php echo $u['id']; ?>)" class="inline-flex items-center p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg transition-colors" id="action-btn-<?php echo $u['id']; ?>">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
-                                                </svg>
-                                            </button>
-                                            
-                                            <!-- Action Menu Dropdown -->
-                                            <div id="action-menu-<?php echo $u['id']; ?>" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                                                <button onclick="openEditModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['name']); ?>', <?php echo $u['purok_id'] ?: 'null'; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
-                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                                    </svg>
-                                                    Edit
-                                                </button>
-                                                <button onclick="deactivateUser(<?php echo $u['id']; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
-                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
-                                                    </svg>
-                                                    Deactivate
-                                                </button>
-                                                <button onclick="viewUserActivity(<?php echo $u['id']; ?>); closeActionMenu(<?php echo $u['id']; ?>);" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
-                                                    <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                                                    </svg>
-                                                    View Activity
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <button onclick="openEditModal(<?php echo $u['id']; ?>, '<?php echo htmlspecialchars($u['first_name'] ?? ''); ?>', '<?php echo htmlspecialchars($u['last_name'] ?? ''); ?>', '<?php echo htmlspecialchars($u['suffix'] ?? ''); ?>', <?php echo $u['purok_id'] ?: 'null'; ?>)" 
+                                                class="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                            </svg>
+                                            Edit
+                                        </button>
                                     </td>
                                 </tr>
                                 
@@ -734,66 +950,135 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
     </main>
 
     <!-- Edit User Modal -->
-    <div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 2rem; border-radius: 1rem; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
-            <div class="p-8">
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+    <div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 transform transition-all scale-100" style="max-height: 90vh; display: flex; flex-direction: column; animation: modalSlideIn 0.3s ease-out;">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-green-600 to-emerald-700 p-6 text-white flex-shrink-0 rounded-t-2xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center shadow-inner">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-2xl font-bold text-gray-900">Edit User</h3>
-                            <p class="text-gray-600">Update user information and assignments</p>
+                            <h3 class="text-2xl font-bold text-white tracking-tight">Edit User Information</h3>
+                            <p class="text-green-100 text-sm mt-0.5">Update user details and assignments</p>
                         </div>
                     </div>
-                    <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button onclick="closeEditModal()" class="text-white/70 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-                
-                <form id="editForm" method="post" class="space-y-6">
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-8 overflow-y-auto custom-scrollbar" style="overflow-x: visible;">
+                <form id="editForm" method="post" action="<?php echo htmlspecialchars(base_url('super_admin/users.php')); ?>" class="space-y-6">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="user_id" id="edit_user_id">
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">First Name</label>
-                            <input type="text" name="first_name" id="edit_first_name" 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter first name" required />
-                    </div>
-                    
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Last Name</label>
-                            <input type="text" name="last_name" id="edit_last_name" 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter last name" required />
+                    <!-- Personal Information Section -->
+                    <div class="bg-gradient-to-br from-gray-50 to-green-50 rounded-xl p-5 border border-gray-100">
+                        <div class="flex items-center space-x-2 mb-4">
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            <h4 class="font-semibold text-gray-800">Personal Information</h4>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    First Name <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" name="first_name" id="edit_first_name" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md" 
+                                       placeholder="Enter first name" required />
+                            </div>
+                        
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Last Name <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" name="last_name" id="edit_last_name" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md" 
+                                       placeholder="Enter last name" required />
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                    </svg>
+                                    Suffix <span class="text-gray-400 font-normal text-xs">(Optional)</span>
+                                </label>
+                                <div class="relative">
+                                    <select name="suffix" id="edit_suffix" 
+                                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none" style="padding-right: 3.5rem !important;">
+                                        <option value="">Select suffix (optional)</option>
+                                        <option value="Jr.">Jr. (Junior)</option>
+                                        <option value="Sr.">Sr. (Senior)</option>
+                                        <option value="II">II</option>
+                                        <option value="III">III</option>
+                                        <option value="IV">IV</option>
+                                        <option value="V">V</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">Assigned Purok</label>
-                        <select name="purok_id" id="edit_purok_id" 
-                                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                            <option value="">Select Purok</option>
-                            <?php foreach ($puroks as $p): ?>
-                                <option value="<?php echo (int)$p['id']; ?>"><?php echo htmlspecialchars($p['barangay_name'] . ' - ' . $p['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                    <!-- Assignment Section -->
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
+                        <div class="flex items-center space-x-2 mb-4">
+                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <h4 class="font-semibold text-gray-800">Location Assignment</h4>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-700">Assigned Purok</label>
+                            <select name="purok_id" id="edit_purok_id" 
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md">
+                                <option value="">Select Purok (optional)</option>
+                                <?php foreach ($puroks as $p): ?>
+                                    <option value="<?php echo (int)$p['id']; ?>"><?php echo htmlspecialchars($p['barangay_name'] . ' - ' . $p['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1.5 flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Only required for BHW staff members
+                            </p>
+                        </div>
                     </div>
                     
-                    <div class="flex justify-end space-x-3">
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                         <button type="button" onclick="closeEditModal()" 
-                                class="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-all duration-200">
+                                class="inline-flex items-center px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
                             Cancel
                         </button>
                         <button type="submit" 
-                                class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-emerald-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
@@ -805,92 +1090,151 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         </div>
     </div>
 
-    <!-- Add User Modal -->
-    <div id="addUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 2rem; border-radius: 1rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
-            <div class="p-8">
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+    <!-- Add Staff Modal -->
+    <div id="addUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl width-full mx-4 transform transition-all scale-100" style="width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-purple-600 to-indigo-700 p-6 text-white flex-shrink-0">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center shadow-inner">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-2xl font-bold text-gray-900">Add New User</h3>
-                            <p class="text-gray-600">Create a new user account with appropriate role</p>
+                            <h3 class="text-2xl font-bold text-white tracking-tight">Add New Staff</h3>
+                            <p class="text-purple-100 text-sm">Create a new staff account with credentials</p>
                         </div>
                     </div>
-                    <button onclick="closeAddUserModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button onclick="closeAddUserModal()" class="text-white/70 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-                
-                <form method="post" class="space-y-6">
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-8 overflow-y-auto custom-scrollbar" style="overflow-x: visible;">
+                <form action="<?php echo htmlspecialchars(base_url('super_admin/users.php')); ?>" method="post" id="addStaffForm" class="space-y-6">
                     <input type="hidden" name="action" value="add" />
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Email Address</label>
-                            <input name="email" type="email" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter email address" />
+                    <!-- Account Credentials Section -->
+                    <div class="bg-purple-50 rounded-xl p-5 border border-purple-100">
+                        <div class="flex items-center space-x-2 mb-4">
+                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                            </svg>
+                            <h4 class="font-semibold text-gray-800">Account Credentials</h4>
                         </div>
-                        
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Password</label>
-                            <input name="password" type="text" required 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter password" />
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Email Address <span class="text-red-500">*</span></label>
+                                <input name="email" type="email" required 
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-white" 
+                                       placeholder="name@example.com" />
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Password <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <input name="password" type="text" required 
+                                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-white" 
+                                           placeholder="Strong password" />
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Personal Information Section -->
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 border-b pb-2">Personal Information</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">First Name <span class="text-red-500">*</span></label>
+                                <input name="first_name" required
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200" 
+                                       placeholder="First name" />
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Last Name <span class="text-red-500">*</span></label>
+                                <input name="last_name" required
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200" 
+                                       placeholder="Last name" />
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Suffix <span class="text-gray-400 font-normal text-xs">(Optional)</span></label>
+                                <select name="suffix" 
+                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 appearance-none" style="padding-right: 3.5rem !important;">
+                                    <option value="">Suffix (optional)</option>
+                                    <option value="Jr.">Jr. (Junior)</option>
+                                    <option value="Sr.">Sr. (Senior)</option>
+                                    <option value="II">II</option>
+                                    <option value="III">III</option>
+                                    <option value="IV">IV</option>
+                                    <option value="V">V</option>
+                                </select>
+                                <div class="relative -mt-10 pointer-events-none flex items-center justify-end pr-3">
+                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Role</label>
-                            <select name="role" 
-                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
+                            <label class="block text-sm font-semibold text-gray-700">Role <span class="text-red-500">*</span></label>
+                            <select name="role" id="roleSelect"
+                                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-white">
                                 <option value="bhw">Barangay Health Worker (BHW)</option>
                                 <option value="super_admin">Super Admin</option>
                             </select>
                         </div>
                         
-                        <div class="space-y-2" id="purok-group">
-                            <label class="block text-sm font-semibold text-gray-700">Assigned Purok (BHW only)</label>
-                            <select name="purok_id" 
-                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm">
-                                <option value="">Select Purok</option>
-                                <?php foreach ($puroks as $p): ?>
-                                    <option value="<?php echo (int)$p['id']; ?>"><?php echo htmlspecialchars($p['barangay_name'] . ' - ' . $p['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                        <div id="purok-group" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Barangay <span class="text-red-500">*</span></label>
+                                <select id="barangaySelect"
+                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-white">
+                                    <option value="">Select Barangay</option>
+                                    <?php foreach ($barangays as $b): ?>
+                                        <option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Purok <span class="text-red-500">*</span></label>
+                                <select name="purok_id" id="purokSelect" disabled
+                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50 cursor-not-allowed">
+                                    <option value="">Select Purok</option>
+                                    <?php foreach ($puroks as $p): ?>
+                                        <option value="<?php echo (int)$p['id']; ?>" data-barangay-id="<?php echo (int)$p['barangay_id']; ?>">
+                                            <?php echo htmlspecialchars($p['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">First Name</label>
-                            <input name="first_name" 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter first name" />
-                        </div>
-                        
-                        <div class="space-y-2">
-                            <label class="block text-sm font-semibold text-gray-700">Last Name</label>
-                            <input name="last_name" 
-                                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm" 
-                                   placeholder="Enter last name" />
-                        </div>
-                    </div>
-                    
-                    <div class="flex justify-end">
-                        <button type="submit" class="inline-flex items-center px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                    <div class="pt-4 flex justify-end space-x-3 border-t border-gray-100 mt-6">
+                        <button type="button" onclick="closeAddUserModal()" class="px-6 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-all duration-200">
+                            Cancel
+                        </button>
+                        <button type="submit" class="inline-flex items-center px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
                             </svg>
-                            Add User
+                            Add Staff Member
                         </button>
                     </div>
                 </form>
@@ -968,23 +1312,53 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 modal.style.display = 'none';
                 modal.style.visibility = 'hidden';
                 modal.style.opacity = '0';
+                // Reset form
+                document.getElementById('addStaffForm').reset();
             }
         }
-
-        function openEditModal(userId, fullName, purokId) {
-            // Close any other open modals first
-            closeAddUserModal();
+        
+        function submitAddStaffForm() {
+            const form = document.getElementById('addStaffForm');
+            const formData = new FormData(form);
             
-            // Parse the full name to get first and last name
-            const nameParts = fullName.trim().split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            // Use fetch to submit as POST
+            fetch('/thesis/public/super_admin/users.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                // Redirect to users page to see the result
+                window.location.href = '/thesis/public/super_admin/users.php';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error adding staff. Please try again.');
+            });
+        }
+
+        // Make functions globally available
+        window.openEditModal = function(userId, firstName, lastName, suffix, purokId) {
+            // Close any other open modals first
+            if (typeof closeAddUserModal === 'function') {
+                closeAddUserModal();
+            }
             
             // Set form values
-            document.getElementById('edit_user_id').value = userId;
-            document.getElementById('edit_first_name').value = firstName;
-            document.getElementById('edit_last_name').value = lastName;
-            document.getElementById('edit_purok_id').value = purokId || '';
+            const editUserId = document.getElementById('edit_user_id');
+            const editFirstName = document.getElementById('edit_first_name');
+            const editLastName = document.getElementById('edit_last_name');
+            const editSuffix = document.getElementById('edit_suffix');
+            const editPurokId = document.getElementById('edit_purok_id');
+            
+            if (editUserId) editUserId.value = userId || '';
+            if (editFirstName) editFirstName.value = firstName || '';
+            if (editLastName) editLastName.value = lastName || '';
+            if (editSuffix) editSuffix.value = suffix || '';
+            if (editPurokId) {
+                // Handle null or empty purokId
+                const purokValue = (purokId && purokId !== 'null' && purokId !== '') ? purokId : '';
+                editPurokId.value = purokValue;
+            }
             
             // Show modal
             const modal = document.getElementById('editModal');
@@ -993,16 +1367,16 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 modal.style.visibility = 'visible';
                 modal.style.opacity = '1';
             }
-        }
+        };
         
-        function closeEditModal() {
+        window.closeEditModal = function() {
             const modal = document.getElementById('editModal');
             if (modal) {
                 modal.style.display = 'none';
                 modal.style.visibility = 'hidden';
                 modal.style.opacity = '0';
             }
-        }
+        };
         
         // Toggle family members row for a user
         function toggleUserFamilyMembers(userId) {
@@ -1050,25 +1424,159 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         }
         
         
-        // Show/hide purok field based on role
-        document.querySelector('select[name="role"]').addEventListener('change', function() {
-            const purokGroup = document.getElementById('purok-group');
-            if (this.value === 'bhw') {
-                purokGroup.style.display = 'block';
-            } else {
-                purokGroup.style.display = 'none';
+        // Optimized filter puroks based on selected barangay
+        function filterPuroks() {
+            const barangaySelect = document.getElementById('barangaySelect');
+            const purokSelect = document.getElementById('purokSelect');
+            
+            if (!barangaySelect || !purokSelect) return;
+            
+            const selectedBarangayId = barangaySelect.value;
+            
+            // Reset purok selection
+            purokSelect.value = '';
+            
+            if (!selectedBarangayId) {
+                purokSelect.disabled = true;
+                purokSelect.classList.add('bg-gray-50', 'cursor-not-allowed');
+                purokSelect.classList.remove('bg-white');
+                return;
             }
-        });
+            
+            // Enable purok select immediately for better UX
+            purokSelect.disabled = false;
+            purokSelect.classList.remove('bg-gray-50', 'cursor-not-allowed');
+            purokSelect.classList.add('bg-white');
+            
+            // Filter options using hidden attribute for better performance
+            const options = purokSelect.querySelectorAll('option');
+            
+            options.forEach(option => {
+                if (option.value === '') {
+                    option.hidden = false; // Always show placeholder
+                    return;
+                }
+                
+                const optionBarangayId = option.getAttribute('data-barangay-id');
+                option.hidden = (optionBarangayId !== selectedBarangayId);
+            });
+        }
+
+        // Show/hide purok field based on role and handle required attribute
+        const roleSelect = document.querySelector('select[name="role"]');
+        if (roleSelect) {
+            roleSelect.addEventListener('change', function() {
+                const purokGroup = document.getElementById('purok-group');
+                const purokSelect = document.querySelector('select[name="purok_id"]');
+                const barangaySelect = document.getElementById('barangaySelect');
+                
+                if (!purokGroup || !purokSelect || !barangaySelect) return;
+                
+                if (this.value === 'bhw') {
+                    purokGroup.style.display = 'grid';
+                    purokSelect.setAttribute('required', 'required');
+                    barangaySelect.setAttribute('required', 'required');
+                } else {
+                    purokGroup.style.display = 'none';
+                    purokSelect.removeAttribute('required');
+                    barangaySelect.removeAttribute('required');
+                    purokSelect.value = ''; // Clear selection
+                    barangaySelect.value = ''; // Clear selection
+                    // Reset purok state
+                    purokSelect.disabled = true;
+                    purokSelect.classList.add('bg-gray-50', 'cursor-not-allowed');
+                    purokSelect.classList.remove('bg-white');
+                }
+            });
+        }
+        
+        // Add event listener to barangay select
+        const barangaySelect = document.getElementById('barangaySelect');
+        if (barangaySelect) {
+            barangaySelect.addEventListener('change', filterPuroks);
+        }
+        
+        // Real-time input filtering to prevent invalid characters
+        function filterInput(input, pattern, maxLength = null) {
+            const originalValue = input.value;
+            // Remove invalid characters based on pattern
+            let filtered = originalValue.replace(new RegExp('[^' + pattern + ']', 'g'), '');
+            
+            // Apply max length if specified
+            if (maxLength && filtered.length > maxLength) {
+                filtered = filtered.substring(0, maxLength);
+            }
+            
+            // Update value if it changed
+            if (filtered !== originalValue) {
+                const cursorPos = input.selectionStart;
+                input.value = filtered;
+                // Restore cursor position (adjust for removed characters)
+                const newPos = Math.min(cursorPos - (originalValue.length - filtered.length), filtered.length);
+                input.setSelectionRange(newPos, newPos);
+            }
+        }
+        
+        // Setup input filtering for name fields
+        function setupNameFieldValidation(input) {
+            if (!input) return;
+            
+            // First Name & Last Name: Only letters, spaces, hyphens, apostrophes
+            input.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
+            });
+            
+            input.addEventListener('keypress', function(e) {
+                // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+                const char = String.fromCharCode(e.which || e.keyCode);
+                if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                    e.preventDefault();
+                }
+            });
+            
+            input.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
         
         // Initialize purok field visibility
         document.addEventListener('DOMContentLoaded', function() {
             const roleSelect = document.querySelector('select[name="role"]');
             const purokGroup = document.getElementById('purok-group');
-            if (roleSelect.value === 'bhw') {
-                purokGroup.style.display = 'block';
-            } else {
-                purokGroup.style.display = 'none';
+            const purokSelect = document.querySelector('select[name="purok_id"]');
+            const barangaySelect = document.getElementById('barangaySelect');
+            
+            if (roleSelect && purokGroup && purokSelect && barangaySelect) {
+                if (roleSelect.value === 'bhw') {
+                    purokGroup.style.display = 'grid';
+                    purokSelect.setAttribute('required', 'required');
+                    barangaySelect.setAttribute('required', 'required');
+                } else {
+                    purokGroup.style.display = 'none';
+                    purokSelect.removeAttribute('required');
+                    barangaySelect.removeAttribute('required');
+                }
             }
+            
+            // Setup validation for add form fields
+            const addFirstName = document.querySelector('#addUserModal input[name="first_name"]');
+            const addLastName = document.querySelector('#addUserModal input[name="last_name"]');
+            if (addFirstName) setupNameFieldValidation(addFirstName);
+            if (addLastName) setupNameFieldValidation(addLastName);
+            
+            // Setup validation for edit form fields
+            const editFirstName = document.getElementById('edit_first_name');
+            const editLastName = document.getElementById('edit_last_name');
+            if (editFirstName) setupNameFieldValidation(editFirstName);
+            if (editLastName) setupNameFieldValidation(editLastName);
 
             // Animate stats on load with real data
             const stats = ['stat-total-users', 'stat-super-admins', 'stat-bhws', 'stat-assigned'];
@@ -1303,7 +1811,15 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 const title = document.getElementById('activityModalTitle');
                 const subtitle = document.getElementById('activityModalSubtitle');
                 
-                if (!modal) return;
+                if (!modal) {
+                    console.error('Activity modal not found');
+                    return;
+                }
+                
+                if (!loading || !content || !empty || !list || !title || !subtitle) {
+                    console.error('Activity modal elements not found');
+                    return;
+                }
                 
                 // Show modal and loading state
                 modal.style.display = 'flex';
@@ -1313,7 +1829,13 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 list.innerHTML = '';
                 
                 try {
-                    const response = await fetch(`get_user_activity.php?user_id=${userId}`);
+                    const activityUrl = '<?php echo base_url("super_admin/get_user_activity.php"); ?>?user_id=' + userId;
+                    const response = await fetch(activityUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    
                     const data = await response.json();
                     
                     if (data.success) {
@@ -1412,7 +1934,7 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                         closeActivityModal();
                     }
                 } catch (error) {
-                    console.error('Error:', error);
+                    console.error('Error loading user activity:', error);
                     loading.classList.add('hidden');
                     Swal.fire({
                         title: 'Error',
@@ -1420,7 +1942,11 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                         icon: 'error',
                         confirmButtonColor: '#dc2626'
                     });
-                    closeActivityModal();
+                    // Don't close modal on error, just show the error state
+                    if (empty) {
+                        empty.classList.remove('hidden');
+                        empty.innerHTML = '<p class="text-gray-500 text-center">Failed to load activity data. Please try again.</p>';
+                    }
                 }
             };
 
@@ -1428,6 +1954,8 @@ $current_page = basename($_SERVER['PHP_SELF'] ?? '');
                 const modal = document.getElementById('activityModal');
                 if (modal) {
                     modal.style.display = 'none';
+                    modal.style.visibility = 'hidden';
+                    modal.style.opacity = '0';
                 }
             };
 

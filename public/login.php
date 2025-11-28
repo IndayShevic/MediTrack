@@ -59,7 +59,7 @@ try {
     // Determine redirect URL based on role
     $redirectUrl = 'resident/dashboard.php';
     if ($user['role'] === 'super_admin') {
-        $redirectUrl = 'super_admin/dashboard.php';
+        $redirectUrl = 'super_admin/dashboardnew.php';
     } elseif ($user['role'] === 'bhw') {
         $redirectUrl = 'bhw/dashboard.php';
     }

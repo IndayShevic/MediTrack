@@ -25,7 +25,6 @@ function upload_url(string $path): string {
 }
 
 $user = $_SESSION['user'];
-$resident_id = $user['id'];
 
 // Get updated user data with profile image
 $userStmt = db()->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
@@ -74,7 +73,7 @@ try {
     $recent_requests = [];
 }
 
-// Get medicine history with detailed information
+// Get medicine history with detailed information - only approved, rejected, claimed, and ready_to_claim
 $stmt = db()->prepare('
     SELECT 
         r.*,
@@ -85,19 +84,21 @@ $stmt = db()->prepare('
         b.expiry_date,
         b.quantity_available,
         rf.quantity as fulfillment_quantity,
+        bhw.first_name AS bhw_first_name,
+        bhw.last_name AS bhw_last_name,
         CONCAT(res.first_name, \' \', COALESCE(res.middle_initial, \'\'), CASE WHEN res.middle_initial IS NOT NULL THEN \' \' ELSE \'\' END, res.last_name) AS resident_full_name,
         CASE 
             WHEN r.status = "claimed" THEN "Successfully Claimed"
-            WHEN r.status = "approved" THEN "Ready to Claim"
+            WHEN r.status = "ready_to_claim" THEN "Ready to Claim"
+            WHEN r.status = "approved" THEN "Approved"
             WHEN r.status = "rejected" THEN "Request Rejected"
-            WHEN r.status = "submitted" THEN "Under Review"
             ELSE r.status
         END as status_display,
         CASE 
             WHEN r.status = "claimed" THEN "success"
+            WHEN r.status = "ready_to_claim" THEN "info"
             WHEN r.status = "approved" THEN "info"
             WHEN r.status = "rejected" THEN "danger"
-            WHEN r.status = "submitted" THEN "warning"
             ELSE "secondary"
         END as status_type
     FROM requests r
@@ -105,15 +106,17 @@ $stmt = db()->prepare('
     LEFT JOIN request_fulfillments rf ON r.id = rf.request_id
     LEFT JOIN medicine_batches b ON rf.batch_id = b.id
     LEFT JOIN residents res ON res.id = r.resident_id
-    WHERE r.resident_id = ?
+    LEFT JOIN users bhw ON bhw.id = r.bhw_id
+    WHERE r.resident_id = ? 
+    AND r.status IN (\'approved\', \'rejected\', \'claimed\', \'ready_to_claim\')
     ORDER BY r.created_at DESC
 ');
-$stmt->execute([$resident_id]);
+$stmt->execute([$residentDbId]);
 $requests = $stmt->fetchAll();
 
 // Calculate statistics
 $total_requests = count($requests);
-$approved_requests = count(array_filter($requests, fn($r) => $r['status'] === 'approved'));
+$approved_requests = count(array_filter($requests, fn($r) => $r['status'] === 'approved' || $r['status'] === 'ready_to_claim'));
 $claimed_requests = count(array_filter($requests, fn($r) => $r['status'] === 'claimed'));
 $rejected_requests = count(array_filter($requests, fn($r) => $r['status'] === 'rejected'));
 $success_rate = $total_requests > 0 ? round((($approved_requests + $claimed_requests) / $total_requests) * 100) : 0;
@@ -125,7 +128,12 @@ $date_filter = $_GET['date'] ?? 'all';
 // Filter requests based on parameters
 $filtered_requests = $requests;
 if ($status_filter !== 'all') {
-    $filtered_requests = array_filter($filtered_requests, fn($r) => $r['status'] === $status_filter);
+    if ($status_filter === 'approved') {
+        // Show both approved and ready_to_claim as "approved"
+        $filtered_requests = array_filter($filtered_requests, fn($r) => $r['status'] === 'approved' || $r['status'] === 'ready_to_claim');
+    } else {
+        $filtered_requests = array_filter($filtered_requests, fn($r) => $r['status'] === $status_filter);
+    }
 }
 if ($date_filter !== 'all') {
     $now = new DateTime();
@@ -177,6 +185,9 @@ if ($date_filter !== 'all') {
         .main-content {
             margin-left: 280px !important;
             width: calc(100% - 280px) !important;
+            position: relative !important;
+            min-height: 100vh !important;
+            background: #FFFFFF !important;
         }
         
         /* Override mobile media queries */
@@ -270,23 +281,161 @@ if ($date_filter !== 'all') {
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
         }
         
-        /* Filter buttons */
+        /* Premium Statistics Cards */
+        .stat-card {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(229, 231, 235, 0.7);
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06),
+                        0 1px 0 rgba(255, 255, 255, 0.8) inset;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1),
+                        0 2px 0 rgba(255, 255, 255, 0.9) inset;
+            border-color: rgba(34, 197, 94, 0.4);
+        }
+        
+        /* Premium Filter Buttons */
         .filter-btn {
-            transition: all 0.2s ease;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            border-radius: 9999px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
         }
         
         .filter-btn.active {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            background: linear-gradient(135deg, #22C55E 0%, #10B981 100%);
             color: white;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.35), 
+                        0 0 0 4px rgba(34, 197, 94, 0.12),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transform: scale(1.08);
+            border: none;
         }
         
-        /* Statistics cards */
-        .stat-card {
-            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
+        .filter-btn:not(.active) {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(229, 231, 235, 0.9);
+            color: #6B7280;
+        }
+        
+        .filter-btn:not(.active):hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+            border-color: rgba(229, 231, 235, 1);
+        }
+        
+        .filter-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Premium History Cards */
+        .history-card {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(229, 231, 235, 0.7);
+            border-radius: 22px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06),
+                        0 1px 0 rgba(255, 255, 255, 0.8) inset;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .history-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #22C55E 0%, #3B82F6 50%, #8B5CF6 100%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            border-radius: 22px 22px 0 0;
+        }
+        
+        .history-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1),
+                        0 2px 0 rgba(255, 255, 255, 0.9) inset;
+            border-color: rgba(34, 197, 94, 0.4);
+        }
+        
+        .history-card:hover::before {
+            opacity: 1;
+        }
+        
+        /* Premium Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1),
+                        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        
+        .status-success {
+            background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+            color: #064E3B;
+            box-shadow: 0 3px 12px rgba(16, 185, 129, 0.25),
+                        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+        }
+        
+        .status-info {
+            background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+            color: #1E40AF;
+            box-shadow: 0 3px 12px rgba(59, 130, 246, 0.25),
+                        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+        }
+        
+        .status-danger {
+            background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+            color: #7F1D1D;
+            box-shadow: 0 3px 12px rgba(239, 68, 68, 0.2),
+                        0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+        }
+        
+        /* Page Title Gradient */
+        .page-title-gradient {
+            background: linear-gradient(135deg, #22C55E 0%, #3B82F6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .title-underline {
+            height: 3px;
+            background: linear-gradient(90deg, #22C55E 0%, #3B82F6 50%, #8B5CF6 100%);
+            border-radius: 2px;
+            margin-top: 8px;
+            animation: fadeInUp 0.6s ease-out 0.2s both;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
@@ -406,64 +555,72 @@ if ($date_filter !== 'all') {
         
         <!-- Page Title -->
         <div class="p-4 sm:p-6 lg:p-8">
-            <div class="mb-6">
-                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 mb-1">Medicine History</h1>
-                <p class="text-gray-600">Track your medicine request history and status</p>
+            <div class="mb-8 animate-fade-in-up">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm font-medium text-gray-500">MediTrack</span>
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-700">Medicine History</span>
+                </div>
+                <h1 class="text-3xl sm:text-4xl font-bold page-title-gradient mb-2">Medicine History</h1>
+                <div class="title-underline w-24"></div>
+                <p class="text-gray-600 mt-4 text-sm">Track your medicine request history and status</p>
             </div>
 
         <!-- Statistics Cards -->
         <div class="content-body">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="stat-card rounded-xl p-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 animate-fade-in-up" style="animation-delay: 0.1s">
+                <div class="stat-card p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-600">Total Requests</p>
-                            <p class="text-2xl font-bold text-gray-900"><?php echo $total_requests; ?></p>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Total Requests</p>
+                            <p class="text-3xl font-bold text-gray-900"><?php echo $total_requests; ?></p>
                         </div>
-                        <div class="p-3 bg-blue-100 rounded-full">
-                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                             </svg>
                         </div>
                     </div>
                 </div>
                 
-                <div class="stat-card rounded-xl p-6">
+                <div class="stat-card p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-600">Approved</p>
-                            <p class="text-2xl font-bold text-green-600"><?php echo $approved_requests; ?></p>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Approved</p>
+                            <p class="text-3xl font-bold text-green-600"><?php echo $approved_requests; ?></p>
                         </div>
-                        <div class="p-3 bg-green-100 rounded-full">
-                            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="p-4 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
                         </div>
                     </div>
                 </div>
                 
-                <div class="stat-card rounded-xl p-6">
+                <div class="stat-card p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-600">Claimed</p>
-                            <p class="text-2xl font-bold text-blue-600"><?php echo $claimed_requests; ?></p>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Claimed</p>
+                            <p class="text-3xl font-bold text-blue-600"><?php echo $claimed_requests; ?></p>
                         </div>
-                        <div class="p-3 bg-blue-100 rounded-full">
-                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
                             </svg>
                         </div>
                     </div>
                 </div>
                 
-                <div class="stat-card rounded-xl p-6">
+                <div class="stat-card p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-600">Rejected</p>
-                            <p class="text-2xl font-bold text-red-600"><?php echo $rejected_requests; ?></p>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Rejected</p>
+                            <p class="text-3xl font-bold text-red-600"><?php echo $rejected_requests; ?></p>
                         </div>
-                        <div class="p-3 bg-red-100 rounded-full">
-                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="p-4 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </div>
@@ -472,44 +629,48 @@ if ($date_filter !== 'all') {
             </div>
 
             <!-- Filters -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                    <div class="flex flex-wrap gap-3">
-                        <span class="text-sm font-medium text-gray-700">Filter by Status:</span>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 animate-fade-in-up" style="animation-delay: 0.2s">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-6 lg:space-y-0">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span class="text-sm font-semibold text-gray-700">Filter by Status:</span>
                         <a href="?status=all&date=<?php echo $date_filter; ?>" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $status_filter === 'all' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $status_filter === 'all' ? 'active' : ''; ?>">
                             All (<?php echo $total_requests; ?>)
                         </a>
                         <a href="?status=claimed&date=<?php echo $date_filter; ?>" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $status_filter === 'claimed' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $status_filter === 'claimed' ? 'active' : ''; ?>">
                             Claimed (<?php echo $claimed_requests; ?>)
                         </a>
                         <a href="?status=approved&date=<?php echo $date_filter; ?>" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $status_filter === 'approved' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $status_filter === 'approved' ? 'active' : ''; ?>">
                             Approved (<?php echo $approved_requests; ?>)
                         </a>
+                        <a href="?status=ready_to_claim&date=<?php echo $date_filter; ?>" 
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $status_filter === 'ready_to_claim' ? 'active' : ''; ?>">
+                            Ready to Claim
+                        </a>
                         <a href="?status=rejected&date=<?php echo $date_filter; ?>" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $status_filter === 'rejected' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $status_filter === 'rejected' ? 'active' : ''; ?>">
                             Rejected (<?php echo $rejected_requests; ?>)
                         </a>
                     </div>
                     
-                    <div class="flex flex-wrap gap-3">
-                        <span class="text-sm font-medium text-gray-700">Filter by Date:</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span class="text-sm font-semibold text-gray-700">Filter by Date:</span>
                         <a href="?status=<?php echo $status_filter; ?>&date=all" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $date_filter === 'all' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $date_filter === 'all' ? 'active' : ''; ?>">
                             All Time
                         </a>
                         <a href="?status=<?php echo $status_filter; ?>&date=year" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $date_filter === 'year' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $date_filter === 'year' ? 'active' : ''; ?>">
                             This Year
                         </a>
                         <a href="?status=<?php echo $status_filter; ?>&date=month" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $date_filter === 'month' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $date_filter === 'month' ? 'active' : ''; ?>">
                             This Month
                         </a>
                         <a href="?status=<?php echo $status_filter; ?>&date=week" 
-                           class="filter-btn px-4 py-2 rounded-lg text-sm font-medium <?php echo $date_filter === 'week' ? 'active' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
+                           class="filter-btn px-5 py-2.5 rounded-full text-sm font-semibold <?php echo $date_filter === 'week' ? 'active' : ''; ?>">
                             This Week
                         </a>
                     </div>
@@ -517,10 +678,10 @@ if ($date_filter !== 'all') {
             </div>
 
             <!-- Medicine History Timeline -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 animate-fade-in-up" style="animation-delay: 0.3s">
                 <div class="p-6 border-b border-gray-200">
-                    <h2 class="text-xl font-semibold text-gray-900">Request Timeline</h2>
-                    <p class="text-gray-600 mt-1">Showing <?php echo count($filtered_requests); ?> request(s)</p>
+                    <h2 class="text-xl font-bold text-gray-900">Request Timeline</h2>
+                    <p class="text-gray-600 mt-1 text-sm">Showing <?php echo count($filtered_requests); ?> request(s)</p>
                 </div>
                 
                 <div class="p-6">
@@ -533,9 +694,9 @@ if ($date_filter !== 'all') {
                             <p class="text-gray-600">No medicine requests match your current filters.</p>
                         </div>
                     <?php else: ?>
-                        <div class="space-y-6">
-                            <?php foreach ($filtered_requests as $request): ?>
-                                <div class="timeline-item history-card bg-gray-50 rounded-lg p-6">
+                        <div class="space-y-4">
+                            <?php foreach ($filtered_requests as $index => $request): ?>
+                                <div class="timeline-item history-card p-6" style="animation-delay: <?php echo ($index * 0.05); ?>s">
                                     <div class="timeline-dot <?php echo $request['status_type']; ?>"></div>
                                     
                                     <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between">
@@ -544,12 +705,10 @@ if ($date_filter !== 'all') {
                                                 <?php if ($request['medicine_image']): ?>
                                                     <img src="<?php echo htmlspecialchars(base_url($request['medicine_image'])); ?>" 
                                                          alt="<?php echo htmlspecialchars($request['medicine_name']); ?>" 
-                                                         class="w-16 h-16 object-cover rounded-lg border border-gray-200">
+                                                         class="w-20 h-20 object-cover rounded-2xl border-2 border-gray-200 shadow-md">
                                                 <?php else: ?>
-                                                    <div class="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
-                                                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                                        </svg>
+                                                    <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-md">
+                                                        <span class="text-white font-bold text-xl"><?php echo strtoupper(substr($request['medicine_name'], 0, 2)); ?></span>
                                                     </div>
                                                 <?php endif; ?>
                                                 
@@ -567,29 +726,54 @@ if ($date_filter !== 'all') {
                                                         <?php echo htmlspecialchars($request['medicine_description']); ?>
                                                     </p>
                                                     
-                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                                                         <div>
                                                             <span class="font-medium text-gray-700">Requested:</span>
                                                             <span class="text-gray-600"><?php echo date('M j, Y g:i A', strtotime($request['created_at'])); ?></span>
                                                         </div>
+                                                        <?php if ($request['updated_at']): ?>
+                                                            <div>
+                                                                <span class="font-medium text-gray-700">Last Updated:</span>
+                                                                <span class="text-gray-600"><?php echo date('M j, Y g:i A', strtotime($request['updated_at'])); ?></span>
+                                                            </div>
+                                                        <?php endif; ?>
                                                         <?php if ($request['batch_code']): ?>
                                                             <div>
-                                                                <span class="font-medium text-gray-700">Batch:</span>
+                                                                <span class="font-medium text-gray-700">Batch Code:</span>
                                                                 <span class="text-gray-600"><?php echo htmlspecialchars($request['batch_code']); ?></span>
                                                             </div>
                                                         <?php endif; ?>
                                                         <?php if ($request['expiry_date']): ?>
                                                             <div>
-                                                                <span class="font-medium text-gray-700">Expires:</span>
+                                                                <span class="font-medium text-gray-700">Expiry Date:</span>
                                                                 <span class="text-gray-600"><?php echo date('M j, Y', strtotime($request['expiry_date'])); ?></span>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <?php if ($request['bhw_first_name'] && $request['bhw_last_name']): ?>
+                                                            <div>
+                                                                <span class="font-medium text-gray-700">Assigned BHW:</span>
+                                                                <span class="text-gray-600"><?php echo htmlspecialchars($request['bhw_first_name'] . ' ' . $request['bhw_last_name']); ?></span>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <?php if ($request['requested_for'] === 'family' && $request['patient_name']): ?>
+                                                            <div>
+                                                                <span class="font-medium text-gray-700">Requested For:</span>
+                                                                <span class="text-gray-600"><?php echo htmlspecialchars($request['patient_name']); ?> (<?php echo htmlspecialchars($request['relationship'] ?? 'Family Member'); ?>)</span>
                                                             </div>
                                                         <?php endif; ?>
                                                     </div>
                                                     
-                                                    <?php if ($request['notes']): ?>
-                                                        <div class="mt-3 p-3 bg-blue-50 rounded-lg">
-                                                            <span class="font-medium text-blue-900">Notes:</span>
-                                                            <p class="text-blue-800 text-sm mt-1"><?php echo htmlspecialchars($request['notes']); ?></p>
+                                                    <?php if ($request['rejection_reason']): ?>
+                                                        <div class="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                                                            <span class="font-medium text-red-900">Rejection Reason:</span>
+                                                            <p class="text-red-800 text-sm mt-1"><?php echo htmlspecialchars($request['rejection_reason']); ?></p>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if ($request['reason']): ?>
+                                                        <div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                                            <span class="font-medium text-blue-900">Your Reason:</span>
+                                                            <p class="text-blue-800 text-sm mt-1"><?php echo htmlspecialchars($request['reason']); ?></p>
                                                         </div>
                                                     <?php endif; ?>
                                                 </div>

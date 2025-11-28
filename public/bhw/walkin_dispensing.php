@@ -70,6 +70,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
     if ($action === 'dispense') {
+        // Sanitize input data - remove banned characters and prevent HTML/script injection
+        function sanitizeInputBackend($value, $pattern = null) {
+            if (empty($value)) return '';
+            
+            // Remove script tags and HTML tags (prevent XSS)
+            $sanitized = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i', '', (string)$value);
+            $sanitized = preg_replace('/<[^>]+>/', '', $sanitized);
+            
+            // Remove banned characters: !@#$%^&*()={}[]:;"<>?/\|~`_
+            $banned = '/[!@#$%^&*()={}\[\]:;"<>?\/\\\|~`_]/';
+            $sanitized = preg_replace($banned, '', $sanitized);
+            
+            // Remove control characters and emojis
+            $sanitized = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $sanitized);
+            $sanitized = preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '', $sanitized);
+            
+            // Trim leading/trailing spaces
+            $sanitized = trim($sanitized);
+            
+            // Apply pattern if provided
+            if ($pattern && $sanitized) {
+                $sanitized = preg_replace('/[^' . $pattern . ']/', '', $sanitized);
+            }
+            
+            return $sanitized;
+        }
+        
         $resident_id = (int)($_POST['resident_id'] ?? 0);
         $medicine_id = (int)($_POST['medicine_id'] ?? 0);
         $quantity = (int)($_POST['quantity'] ?? 1);
@@ -80,18 +107,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // For walk-in residents without accounts
         $walkin_name = trim($_POST['walkin_name'] ?? '');
         $walkin_birthdate = trim($_POST['walkin_birthdate'] ?? '');
-        $walkin_address = trim($_POST['walkin_address'] ?? '');
+        $walkin_barangay_id = (int)($_POST['walkin_barangay_id'] ?? 0);
+        $walkin_purok_id = (int)($_POST['walkin_purok_id'] ?? 0);
+        
+        $errors = [];
+        $resident_type = $_POST['resident_type'] ?? 'registered';
+        
+        // Validate walk-in name (only letters, spaces, hyphens, apostrophes)
+        if ($resident_type === 'walkin') {
+            if (empty($walkin_name) || strlen($walkin_name) < 2) {
+                $errors[] = 'Walk-in resident name must be at least 2 characters long.';
+            } elseif (preg_match('/\d/', $walkin_name)) {
+                $errors[] = 'Walk-in name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+            } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $walkin_name)) {
+                $errors[] = 'Walk-in name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+            } else {
+                $walkin_name = sanitizeInputBackend($walkin_name, 'A-Za-zÀ-ÿ\' -');
+            }
+            
+            // Validate walk-in birthdate (cannot be in future)
+            if (!empty($walkin_birthdate)) {
+                $birthDate = new DateTime($walkin_birthdate);
+                $today = new DateTime();
+                if ($birthDate > $today) {
+                    $errors[] = 'Walk-in birth date cannot be in the future.';
+                }
+            }
+            
+            // Validate walk-in barangay and purok
+            if ($walkin_barangay_id <= 0) {
+                $errors[] = 'Please select a barangay for walk-in resident.';
+            }
+            if ($walkin_purok_id <= 0) {
+                $errors[] = 'Please select a purok for walk-in resident.';
+            }
+        }
+        
+        // Validate patient name (only letters, spaces, hyphens, apostrophes)
+        if (!empty($patient_name)) {
+            if (strlen($patient_name) < 2) {
+                $errors[] = 'Patient name must be at least 2 characters long.';
+            } elseif (preg_match('/\d/', $patient_name)) {
+                $errors[] = 'Patient name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+            } elseif (!preg_match('/^[A-Za-zÀ-ÿ\' -]+$/', $patient_name)) {
+                $errors[] = 'Patient name: Only letters, spaces, hyphens, and apostrophes are allowed.';
+            } else {
+                $patient_name = sanitizeInputBackend($patient_name, 'A-Za-zÀ-ÿ\' -');
+            }
+        }
+        
+        // Validate reason (allow letters, numbers, spaces, common punctuation)
+        if (!empty($reason)) {
+            $reason = sanitizeInputBackend($reason, 'A-Za-zÀ-ÿ0-9\s\-\'.,!?');
+        }
         
         // Validate required fields based on resident type
-        $resident_type = $_POST['resident_type'] ?? 'registered';
         $is_valid = false;
         
-        if ($resident_type === 'registered') {
-            // For registered residents, resident_id must be provided
-            $is_valid = ($resident_id > 0 && $medicine_id > 0 && $quantity > 0);
-        } else {
-            // For walk-in residents, walkin_name must be provided
-            $is_valid = (!empty($walkin_name) && $medicine_id > 0 && $quantity > 0);
+        if (empty($errors)) {
+            if ($resident_type === 'registered') {
+                // For registered residents, resident_id must be provided
+                $is_valid = ($resident_id > 0 && $medicine_id > 0 && $quantity > 0);
+            } else {
+                // For walk-in residents, walkin_name must be provided
+                $is_valid = (!empty($walkin_name) && $medicine_id > 0 && $quantity > 0);
+            }
         }
         
         if ($is_valid) {
@@ -118,11 +198,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // Use existing walk-in resident
                             $resident_id = $existing_walkin['id'];
                         } else {
-                            // Get barangay_id from purok
-                            $purok_query = db()->prepare('SELECT barangay_id FROM puroks WHERE id = ?');
-                            $purok_query->execute([$bhw_purok_id]);
-                            $purok_data = $purok_query->fetch();
-                            $barangay_id = $purok_data['barangay_id'] ?? 1;
+                            // Use selected barangay and purok for walk-in resident
+                            $barangay_id = $walkin_barangay_id > 0 ? $walkin_barangay_id : $bhw_purok_id;
+                            
+                            // If purok not selected, get default from BHW's purok
+                            if ($walkin_purok_id <= 0) {
+                                $purok_query = db()->prepare('SELECT barangay_id FROM puroks WHERE id = ?');
+                                $purok_query->execute([$bhw_purok_id]);
+                                $purok_data = $purok_query->fetch();
+                                $barangay_id = $purok_data['barangay_id'] ?? 1;
+                                $walkin_purok_id = $bhw_purok_id;
+                            }
                             
                             // Create new temporary resident record for walk-in
                             $temp_resident_stmt = db()->prepare('
@@ -134,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'Walk-in',
                                 $walkin_birthdate ?: '1900-01-01',
                                 $barangay_id,
-                                $bhw_purok_id
+                                $walkin_purok_id
                             ]);
                             $resident_id = db()->lastInsertId();
                         }
@@ -201,7 +287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flash_type'] = 'error';
             }
         } else {
-            if ($resident_type === 'registered') {
+            if (!empty($errors)) {
+                $_SESSION['flash_message'] = implode(' ', $errors);
+            } elseif ($resident_type === 'registered') {
                 $_SESSION['flash_message'] = 'Please select a registered resident and fill in all required fields!';
             } else {
                 $_SESSION['flash_message'] = 'Please provide walk-in resident name and fill in all required fields!';
@@ -252,6 +340,15 @@ try {
     }
 } catch (Exception $e) {
     $residents = [];
+}
+
+// Fetch barangays and puroks for dropdowns
+try {
+    $barangays = db()->query('SELECT id, name FROM barangays ORDER BY name')->fetchAll();
+    $puroks = db()->query('SELECT id, name, barangay_id FROM puroks ORDER BY barangay_id, name')->fetchAll();
+} catch (Exception $e) {
+    $barangays = [];
+    $puroks = [];
 }
 ?>
 <!DOCTYPE html>
@@ -442,135 +539,8 @@ try {
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-blue-50 bhw-theme">
     <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <?php $logo = get_setting('brand_logo_path'); $brand = get_setting('brand_name','MediTrack'); if ($logo): ?>
-                <img src="<?php echo htmlspecialchars(base_url($logo)); ?>" class="h-8 w-8 rounded-lg" alt="Logo" />
-            <?php else: ?>
-                <div class="h-8 w-8 bg-white/20 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                    </svg>
-                </div>
-            <?php endif; ?>
-            <span><?php echo htmlspecialchars($brand ?: 'MediTrack'); ?></span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="<?php echo htmlspecialchars(base_url('bhw/dashboard.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
-                </svg>
-                Dashboard
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/requests.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                </svg>
-                <span style="flex: 1;">Medicine Requests</span>
-                <?php if ($notification_counts['pending_requests'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_requests']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a class="active" href="<?php echo htmlspecialchars(base_url('bhw/walkin_dispensing.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                Walk-in Dispensing
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                </svg>
-                Residents & Family
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/allocations.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                </svg>
-                Allocations
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_residents.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Registrations</span>
-                <?php if ($notification_counts['pending_registrations'] > 0): ?>
-                    <span class="notification-badge"><?php echo $notification_counts['pending_registrations']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/pending_family_additions.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                <span style="flex: 1;">Pending Family Additions</span>
-                <?php if (!empty($notification_counts['pending_family_additions'])): ?>
-                    <span class="notification-badge"><?php echo (int)$notification_counts['pending_family_additions']; ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/stats.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 01-2 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
-                Statistics
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/announcements.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
-                </svg>
-                Announcements
-            </a>
-            <a href="<?php echo htmlspecialchars(base_url('bhw/profile.php')); ?>">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                </svg>
-                Profile
-            </a>
-        </nav>
-        
-        <!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <div class="flex items-center mb-3">
-                <div class="flex-shrink-0">
-                    <?php if (!empty($user_data['profile_image'])): ?>
-                        <img src="<?php echo htmlspecialchars(upload_url($user_data['profile_image'])); ?>" 
-                             alt="Profile" 
-                             class="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
-                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500 hidden">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-purple-500">
-                            <?php 
-                            $firstInitial = !empty($user['first_name']) ? substr($user['first_name'], 0, 1) : 'B';
-                            $lastInitial = !empty($user['last_name']) ? substr($user['last_name'], 0, 1) : 'H';
-                            echo strtoupper($firstInitial . $lastInitial); 
-                            ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div class="ml-3 flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">
-                        <?php echo htmlspecialchars(trim(($user['first_name'] ?? 'BHW') . ' ' . ($user['last_name'] ?? 'Worker'))); ?>
-                    </p>
-                    <p class="text-xs text-gray-600 truncate">
-                        <?php echo htmlspecialchars($user['email'] ?? 'bhw@example.com'); ?>
-                    </p>
-                </div>
-            </div>
-            <a href="<?php echo htmlspecialchars(base_url('logout.php')); ?>" class="flex items-center justify-center w-full px-4 py-2 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                </svg>
-                Logout
-            </a>
-        </div>
-    </aside>
+    <!-- Sidebar -->
+    <?php require_once __DIR__ . '/includes/sidebar.php'; ?>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -681,9 +651,31 @@ try {
                                 <input type="date" id="walkin_birthdate" name="walkin_birthdate" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
                             </div>
                             
-                            <div class="md:col-span-2">
-                                <label for="walkin_address" class="block text-sm font-semibold text-gray-700 mb-3">Address</label>
-                                <input type="text" id="walkin_address" name="walkin_address" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400" placeholder="Enter address">
+                            <div>
+                                <label for="walkin_barangay_id" class="block text-sm font-semibold text-gray-700 mb-3">Barangay <span class="text-red-500">*</span></label>
+                                <select id="walkin_barangay_id" name="walkin_barangay_id" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 appearance-none" style="padding-right: 3.5rem !important;">
+                                    <option value="">Select Barangay</option>
+                                    <?php foreach ($barangays as $barangay): ?>
+                                        <option value="<?php echo (int)$barangay['id']; ?>"><?php echo htmlspecialchars($barangay['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="relative -mt-8 pointer-events-none flex items-center justify-end pr-3">
+                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label for="walkin_purok_id" class="block text-sm font-semibold text-gray-700 mb-3">Purok <span class="text-red-500">*</span></label>
+                                <select id="walkin_purok_id" name="walkin_purok_id" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 appearance-none" style="padding-right: 3.5rem !important;" disabled>
+                                    <option value="">Select Barangay first</option>
+                                </select>
+                                <div class="relative -mt-8 pointer-events-none flex items-center justify-end pr-3">
+                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                         
@@ -798,7 +790,10 @@ try {
                 // Clear walk-in fields when switching to registered
                 walkinName.value = '';
                 document.getElementById('walkin_birthdate').value = '';
-                document.getElementById('walkin_address').value = '';
+                document.getElementById('walkin_barangay_id').value = '';
+                document.getElementById('walkin_purok_id').value = '';
+                document.getElementById('walkin_purok_id').innerHTML = '<option value="">Select Barangay first</option>';
+                document.getElementById('walkin_purok_id').disabled = true;
             } else {
                 registeredSection.classList.add('hidden');
                 walkinSection.classList.remove('hidden');
@@ -834,7 +829,10 @@ try {
             document.getElementById('resident_id').value = '';
             document.getElementById('walkin_name').value = '';
             document.getElementById('walkin_birthdate').value = '';
-            document.getElementById('walkin_address').value = '';
+            document.getElementById('walkin_barangay_id').value = '';
+            document.getElementById('walkin_purok_id').value = '';
+            document.getElementById('walkin_purok_id').innerHTML = '<option value="">Select Barangay first</option>';
+            document.getElementById('walkin_purok_id').disabled = true;
             document.getElementById('medicine_id').value = '';
             document.getElementById('quantity').value = '1';
             document.getElementById('patient_name').value = '';
@@ -848,6 +846,163 @@ try {
         }
         
         // Old time update, night mode, and profile dropdown code removed - now handled by header include
+        
+        // Real-time input filtering to prevent invalid characters
+        function filterInput(input, pattern, maxLength = null) {
+            const originalValue = input.value;
+            // Remove invalid characters based on pattern
+            let filtered = originalValue.replace(new RegExp('[^' + pattern + ']', 'g'), '');
+            
+            // Apply max length if specified
+            if (maxLength && filtered.length > maxLength) {
+                filtered = filtered.substring(0, maxLength);
+            }
+            
+            // Update value if it changed
+            if (filtered !== originalValue) {
+                const cursorPos = input.selectionStart;
+                input.value = filtered;
+                // Restore cursor position (adjust for removed characters)
+                const newPos = Math.min(cursorPos - (originalValue.length - filtered.length), filtered.length);
+                input.setSelectionRange(newPos, newPos);
+            }
+        }
+        
+        // Walk-in Name: Only letters, spaces, hyphens, apostrophes
+        const walkinNameInput = document.getElementById('walkin_name');
+        if (walkinNameInput) {
+            walkinNameInput.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
+            });
+            
+            walkinNameInput.addEventListener('keypress', function(e) {
+                // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+                const char = String.fromCharCode(e.which || e.keyCode);
+                if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                    e.preventDefault();
+                }
+            });
+            
+            walkinNameInput.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
+        
+        // Patient Name: Only letters, spaces, hyphens, apostrophes
+        const patientNameInput = document.getElementById('patient_name');
+        if (patientNameInput) {
+            patientNameInput.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ\\s\\-\'');
+            });
+            
+            patientNameInput.addEventListener('keypress', function(e) {
+                // Allow: letters, space, hyphen, apostrophe, backspace, delete, tab, arrow keys
+                const char = String.fromCharCode(e.which || e.keyCode);
+                if (!/[A-Za-zÀ-ÿ\s\-\']/.test(char) && !/[8|46|9|27|13|37|38|39|40]/.test(e.keyCode)) {
+                    e.preventDefault();
+                }
+            });
+            
+            patientNameInput.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ\s\-\']/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
+        
+        // Walk-in Birthdate: Prevent future dates
+        const walkinBirthdateInput = document.getElementById('walkin_birthdate');
+        if (walkinBirthdateInput) {
+            walkinBirthdateInput.addEventListener('change', function(e) {
+                const selectedDate = new Date(this.value);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (selectedDate > today) {
+                    alert('Birth date cannot be in the future.');
+                    this.value = '';
+                    this.focus();
+                }
+            });
+        }
+        
+        // Barangay-Purok relationship data
+        const puroksData = <?php echo json_encode($puroks); ?>;
+        
+        // Update purok options based on selected barangay
+        function updateWalkinPurokOptions(barangayId) {
+            const purokSelect = document.getElementById('walkin_purok_id');
+            if (!purokSelect) return;
+            
+            // Clear existing options
+            purokSelect.innerHTML = '<option value="">Select Purok</option>';
+            
+            if (!barangayId) {
+                purokSelect.disabled = true;
+                purokSelect.innerHTML = '<option value="">Select Barangay first</option>';
+                return;
+            }
+            
+            // Filter puroks by selected barangay
+            const filteredPuroks = puroksData.filter(purok => purok.barangay_id == barangayId);
+            
+            if (filteredPuroks.length === 0) {
+                purokSelect.disabled = true;
+                purokSelect.innerHTML = '<option value="">No puroks available</option>';
+                return;
+            }
+            
+            // Enable and populate purok select
+            purokSelect.disabled = false;
+            filteredPuroks.forEach(purok => {
+                const option = document.createElement('option');
+                option.value = purok.id;
+                option.textContent = purok.name;
+                purokSelect.appendChild(option);
+            });
+        }
+        
+        // Initialize barangay-purok relationship for walk-in
+        const walkinBarangaySelect = document.getElementById('walkin_barangay_id');
+        if (walkinBarangaySelect) {
+            walkinBarangaySelect.addEventListener('change', function() {
+                updateWalkinPurokOptions(this.value);
+            });
+        }
+        
+        // Reason: Allow letters, numbers, spaces, common punctuation
+        const reasonInput = document.getElementById('reason');
+        if (reasonInput) {
+            reasonInput.addEventListener('input', function(e) {
+                filterInput(this, 'A-Za-zÀ-ÿ0-9\\s\\-\'.,!?');
+            });
+            
+            reasonInput.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const filtered = pastedText.replace(/[^A-Za-zÀ-ÿ0-9\s\-\'.,!?]/g, '');
+                const cursorPos = this.selectionStart;
+                const textBefore = this.value.substring(0, cursorPos);
+                const textAfter = this.value.substring(this.selectionEnd);
+                this.value = textBefore + filtered + textAfter;
+                const newPos = cursorPos + filtered.length;
+                this.setSelectionRange(newPos, newPos);
+            });
+        }
         
         // Form validation before submission
         document.querySelector('form').addEventListener('submit', function(e) {
@@ -882,7 +1037,27 @@ try {
                 if (!walkinName.value.trim()) {
                     isValid = false;
                     errorMessage = 'Please enter the walk-in resident name.';
+                } else if (walkinName.value.trim().length < 2) {
+                    isValid = false;
+                    errorMessage = 'Walk-in resident name must be at least 2 characters long.';
                 }
+                
+                const walkinBarangay = document.getElementById('walkin_barangay_id');
+                const walkinPurok = document.getElementById('walkin_purok_id');
+                if (!walkinBarangay || !walkinBarangay.value) {
+                    isValid = false;
+                    errorMessage = 'Please select a barangay for walk-in resident.';
+                } else if (!walkinPurok || !walkinPurok.value) {
+                    isValid = false;
+                    errorMessage = 'Please select a purok for walk-in resident.';
+                }
+            }
+            
+            // Validate patient name if provided
+            const patientName = document.getElementById('patient_name');
+            if (patientName && patientName.value.trim() && patientName.value.trim().length < 2) {
+                isValid = false;
+                errorMessage = 'Patient name must be at least 2 characters long.';
             }
             
             if (!isValid) {
